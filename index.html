@@ -1128,12 +1128,20 @@ function navegarHistorico(id) {
     estado.ofertas = ev.ofertas || [];
     estado.totalFatura = ev.totalFatura || null;
     estado.descricaoEvento = ev.descricao || '';
+    amigos = ev.amigos ? JSON.parse(JSON.stringify(ev.amigos)) : [];
+    menu = ev.menu ? JSON.parse(JSON.stringify(ev.menu)) : {};
     document.getElementById('descricao-evento').value = estado.descricaoEvento;
     document.getElementById('total-fatura').value = estado.totalFatura || '';
     if (estado.totalFatura) atualizarAjuste();
     else { document.getElementById('ajuste-info').style.display = 'none'; }
     salvarNoLocalStorage();
     atualizarReadOnly();
+    renderConfigAmigos();
+    renderConfigMenu();
+    renderDropdownItens();
+    renderAmigosBotoes();
+    renderOfertaDropdowns();
+    renderOfertaAmigos();
     atualizarUI();
     renderHistoricoDropdown();
     mostrarMensagem('✓ Evento carregado: ' + (ev.descricao || 'Sem nome'), true);
@@ -1155,8 +1163,20 @@ function novoEvento() {
     document.getElementById('ajuste-info').style.display = 'none';
     estado.amigosSelecionados.clear();
     estado.ofertaAmigos.clear();
+    // Clonar amigos/menu do evento anterior, se houver
+    if (historico.length > 0) {
+        const ultimo = historico[historico.length - 1];
+        amigos = ultimo.amigos ? JSON.parse(JSON.stringify(ultimo.amigos)) : amigos;
+        menu = ultimo.menu ? JSON.parse(JSON.stringify(ultimo.menu)) : menu;
+    }
     salvarNoLocalStorage();
     atualizarReadOnly();
+    renderConfigAmigos();
+    renderConfigMenu();
+    renderDropdownItens();
+    renderAmigosBotoes();
+    renderOfertaDropdowns();
+    renderOfertaAmigos();
     atualizarUI();
     mostrarMensagem('✓ Novo evento criado', true);
 }
@@ -1168,7 +1188,9 @@ function snaphotEstado() {
         data: new Date().toLocaleDateString('pt-PT', {day:'2-digit', month:'2-digit', year:'numeric'}),
         ordens: JSON.parse(JSON.stringify(estado.ordens)),
         ofertas: JSON.parse(JSON.stringify(estado.ofertas)),
-        totalFatura: estado.totalFatura
+        totalFatura: estado.totalFatura,
+        amigos: JSON.parse(JSON.stringify(amigos)),
+        menu: JSON.parse(JSON.stringify(menu))
     };
 }
 
@@ -1228,8 +1250,20 @@ function importarJSON() {
             const data = JSON.parse(e.target.result);
             if (!Array.isArray(data)) { mostrarMensagem('❌ Ficheiro inválido', false); return; }
             historico = data;
+            // Carregar amigos/menu do último evento importado
+            if (historico.length > 0) {
+                const ultimo = historico[historico.length - 1];
+                amigos = ultimo.amigos ? JSON.parse(JSON.stringify(ultimo.amigos)) : amigos;
+                menu = ultimo.menu ? JSON.parse(JSON.stringify(ultimo.menu)) : menu;
+            }
             salvarHistoricoLocal();
             renderHistoricoDropdown();
+            renderConfigAmigos();
+            renderConfigMenu();
+            renderDropdownItens();
+            renderAmigosBotoes();
+            renderOfertaDropdowns();
+            renderOfertaAmigos();
             mostrarMensagem('✓ Histórico importado: ' + historico.length + ' eventos', true);
         } catch(err) {
             mostrarMensagem('❌ Erro ao importar JSON', false);
@@ -1472,7 +1506,6 @@ function exportarPDFDivisao() {
     abrirJanelaPDF(html, 'divisao_contas.pdf');
 }
 
-
 function atualizarAjuste() {
     const fatura = parseFloat(document.getElementById('total-fatura').value);
     const totalMesa = estado.ordens.reduce((sum, o) => sum + o.precoTotal, 0);
@@ -1483,7 +1516,7 @@ function atualizarAjuste() {
     const faturaAnterior = estado.totalFatura;
     estado.totalFatura = (fatura && fatura > 0) ? fatura : null;
     salvarNoLocalStorage();
-
+    // Auto lock/unlock based on fatura
     if (estado.totalFatura && !faturaAnterior) {
         modoReadOnly = true;
         atualizarUI();
@@ -1491,57 +1524,53 @@ function atualizarAjuste() {
         modoReadOnly = false;
         atualizarUI();
     }
-
     if (!fatura || fatura <= 0 || totalMesa === 0) {
         infoDiv.style.display = 'none';
         return;
     }
 
     infoDiv.style.display = 'block';
-
     const racio = fatura / totalMesa;
     const diff = fatura - totalMesa;
     const pct = ((racio - 1) * 100).toFixed(1);
     const sinal = diff >= 0 ? '+' : '';
     const cor = diff >= 0 ? '#e74c3c' : '#27ae60';
+    racioDiv.innerHTML = `Fatura: <strong>€${fatura.toFixed(2)}</strong> · Calculado: <strong>€${totalMesa.toFixed(2)}</strong> · Ajuste: <strong style=\"color:${cor}\">${sinal}${pct}%</strong>`;
 
-    racioDiv.innerHTML = `Fatura: <strong>€${fatura.toFixed(2)}</strong> · Calculado: <strong>€${totalMesa.toFixed(2)}</strong> · Ajuste: <strong style="color:${cor}">${sinal}${pct}%</strong>`;
-
+    // Consumo bruto (antes de ofertas)
     const setPessoas = new Set();
     estado.ordens.forEach(o => o.amigos.forEach(a => setPessoas.add(a)));
-    estado.ofertas.forEach(o => {
-        setPessoas.add(o.quem);
-        o.para.forEach(p => setPessoas.add(p));
-    });
-
-    const contaPorPessoa = {};
-    setPessoas.forEach(p => contaPorPessoa[p] = 0);
-
+    const consumoBruto = {};
+    setPessoas.forEach(p => consumoBruto[p] = 0);
     estado.ordens.forEach(ordem => {
         const share = ordem.precoTotal / ordem.amigos.length;
-        ordem.amigos.forEach(a => contaPorPessoa[a] += share);
+        ordem.amigos.forEach(a => consumoBruto[a] += share);
     });
 
+    // Consumo líquido (após ofertas)
     const saldoOfertas = calcularSaldoOfertas();
+    const consumoLiquido = {};
+    setPessoas.forEach(p => consumoLiquido[p] = consumoBruto[p] + (saldoOfertas[p] || 0));
 
+    // Ajuste: se excedente, repartir pelo consumo bruto; se desconto, repartir pelo consumo líquido
+    let base = consumoBruto;
+    if (diff < 0) base = consumoLiquido;
+    const totalBase = Object.values(base).reduce((a, b) => a + b, 0);
     const pessoas = Array.from(setPessoas).sort();
-
     ajusteDiv.innerHTML = pessoas.map(p => {
-        const base = contaPorPessoa[p] || 0;
-        const delta = saldoOfertas[p] || 0;
-        const total = base + delta;
-        const ajustado = total * racio;
-
+        const original = consumoLiquido[p];
+        const part = totalBase > 0 ? (base[p] / totalBase) : 0;
+        const ajuste = part * diff;
+        const ajustado = original + ajuste;
         return `
-        <div class="pessoa-ajuste">
-            <span class="pessoa-nome">${p}</span>
-            <span class="valor-original">€${total.toFixed(2)}</span>
-            <span class="valor-ajustado">€${ajustado.toFixed(2)}</span>
+        <div class=\"pessoa-ajuste\">
+            <span class=\"pessoa-nome\">${p}</span>
+            <span class=\"valor-original\">€${original.toFixed(2)}</span>
+            <span class=\"valor-ajustado\">€${ajustado.toFixed(2)}</span>
         </div>
         `;
     }).join('');
 }
-
 
 
 
