@@ -1,0 +1,1939 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Conta da Refeição</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 10px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+
+        .section {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .section h2 {
+            font-size: 16px;
+            color: #2c3e50;
+            margin-bottom: 12px;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 8px;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        input, select {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            min-width: 80px;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 5px rgba(52, 152, 219, 0.3);
+        }
+
+        button {
+            padding: 10px 15px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #2980b9;
+        }
+
+        button.secondary {
+            background: #95a5a6;
+        }
+
+        button.secondary:hover {
+            background: #7f8c8d;
+        }
+
+        button.danger {
+            background: #e74c3c;
+        }
+
+        button.danger:hover {
+            background: #c0392b;
+        }
+
+        .amigos-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+
+        .amigo-btn {
+            padding: 8px 6px;
+            border: 2px solid #ddd;
+            background: white;
+            color: #555;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .amigo-btn.selected {
+            background: #2ecc71;
+            color: white;
+            border-color: #27ae60;
+        }
+
+        .ordem {
+            background: #ecf0f1;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+        }
+
+        .ordem-info {
+            flex: 1;
+        }
+
+        .ordem-item {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .ordem-hora {
+            font-size: 10px;
+            color: #b2bec3;
+            margin-top: 2px;
+        }
+
+        .ordem-amigos {
+            font-size: 12px;
+            color: #7f8c8d;
+            margin-top: 4px;
+        }
+
+        .ordem-preco {
+            font-weight: 700;
+            color: #27ae60;
+            min-width: 50px;
+            text-align: right;
+            margin-right: 10px;
+        }
+
+        .ordem-delete {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 0;
+        }
+
+        .resumo {
+            background: #ecf0f1;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 12px;
+        }
+
+        .resumo-linha {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .resumo-linha.total {
+            border-top: 2px solid #95a5a6;
+            padding-top: 8px;
+            font-weight: 700;
+            font-size: 16px;
+            color: #27ae60;
+        }
+
+        .resumo-linha.total:first-child {
+            border-top: none;
+        }
+
+        .pessoa-ajuste {
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+            border-left: 3px solid #f39c12;
+        }
+        .pessoa-ajuste .pessoa-nome { font-weight: 600; flex: 1; }
+        .pessoa-ajuste .valor-original { color: #aaa; text-decoration: line-through; font-size: 12px; margin-right: 10px; }
+        .pessoa-ajuste .valor-ajustado { font-weight: 700; color: #f39c12; }
+
+
+        .oferta {
+            background: #fef9f0;
+            border-left: 3px solid #f39c12;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+        }
+        .oferta-info { flex: 1; }
+        .oferta-desc { font-weight: 600; color: #2c3e50; }
+        .oferta-detalhe { font-size: 12px; color: #7f8c8d; margin-top: 3px; }
+        .oferta-valor { font-weight: 700; color: #f39c12; min-width: 55px; text-align: right; margin-right: 10px; }
+
+        .pessoa-conta-final {
+            background: white;
+            padding: 10px 12px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            font-size: 14px;
+            border: 1px solid #eee;
+        }
+        .pessoa-conta-final .linha-principal {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .pessoa-conta-final .pessoa-nome { font-weight: 600; }
+        .pessoa-conta-final .pessoa-valor-final { font-weight: 800; color: #27ae60; font-size: 15px; }
+        .pessoa-conta-final .detalhe-oferta {
+            font-size: 11px;
+            color: #f39c12;
+            margin-top: 3px;
+            padding-left: 2px;
+        }
+
+        .pessoa-conta {
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+        }
+
+        .pessoa-nome {
+            font-weight: 600;
+        }
+
+        .pessoa-valor {
+            color: #27ae60;
+            font-weight: 700;
+        }
+
+        .botoes-grupo {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .botoes-grupo button {
+            flex: 1;
+            min-width: 100px;
+        }
+
+        .aviso {
+            background: #fff3cd;
+            color: #856404;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-top: 10px;
+            border: 1px solid #ffeaa7;
+        }
+
+        .sucesso {
+            background: #d4edda;
+            color: #155724;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-top: 10px;
+            border: 1px solid #c3e6cb;
+        }
+
+        #mensagem {
+            margin-top: 10px;
+            min-height: 0;
+        }
+        #descricao-evento::placeholder { color: rgba(255,255,255,0.5); }
+        #readonly-banner {
+            display: none;
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            color: #856404;
+            padding: 10px 14px;
+            border-radius: 6px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        #readonly-banner button {
+            background: #ffc107;
+            color: #333;
+            border: none;
+            padding: 6px 12px;
+            font-size: 12px;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+        #readonly-banner button:hover { background: #e0a800; }
+        .readonly-overlay { pointer-events: none; opacity: 0.5; }
+        .header-nav {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-top: 10px;
+        }
+        .header-nav select {
+            flex: 1;
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            border-radius: 4px;
+            padding: 8px 10px;
+            font-size: 13px;
+            min-width: 0;
+        }
+        .header-nav select option { background: #2c3e50; color: white; }
+        .header-nav button {
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            padding: 8px 12px;
+            font-size: 13px;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+        .header-nav button:hover { background: rgba(255,255,255,0.3); }
+        .botoes-dados {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .botoes-dados button { margin: 0; }
+
+
+        /* Inline edit panel */
+        .ordem-edit-panel {
+            background: #eaf4fb;
+            border-top: 1px solid #aed6f1;
+            padding: 10px;
+            margin-top: 8px;
+            border-radius: 0 0 4px 4px;
+        }
+        .ordem-edit-panel select, .ordem-edit-panel input {
+            font-size: 13px;
+            padding: 7px;
+            margin-bottom: 6px;
+        }
+        .ordem-edit-panel .amigos-grid { margin-bottom: 8px; }
+        .ordem-edit-actions { display: flex; gap: 6px; }
+        .ordem-edit-actions button { flex: 1; font-size: 12px; padding: 7px; }
+
+        /* Consumo detail in resumo */
+        .detalhe-consumo {
+            font-size: 11px;
+            color: #95a5a6;
+            margin-top: 4px;
+            padding-left: 2px;
+            line-height: 1.5;
+        }
+
+        /* Settings section */
+        .config-toggle {
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .config-toggle h2 { border-bottom: none; margin-bottom: 0; }
+        .config-body { margin-top: 14px; }
+        .config-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .config-item span {
+            flex: 1;
+            font-size: 14px;
+        }
+        .config-item .preco-tag {
+            font-size: 12px;
+            color: #27ae60;
+            font-weight: 600;
+            min-width: 45px;
+            text-align: right;
+        }
+        .config-item button {
+            padding: 4px 8px;
+            font-size: 12px;
+        }
+        .config-add-row {
+            display: flex;
+            gap: 6px;
+            margin-top: 10px;
+        }
+        .config-add-row input { font-size: 13px; padding: 8px; }
+        .config-add-row button { white-space: nowrap; }
+        .config-edit-row {
+            display: flex;
+            gap: 6px;
+            margin-top: 4px;
+            align-items: center;
+        }
+        .config-edit-row input { font-size: 13px; padding: 6px; }
+        .config-edit-row button { font-size: 12px; padding: 6px 10px; }
+        .config-section-label {
+            font-size: 12px;
+            font-weight: 700;
+            color: #7f8c8d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 14px 0 6px;
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 8px;
+            }
+
+            .section {
+                padding: 12px;
+            }
+
+            .header h1 {
+                font-size: 20px;
+            }
+
+            .amigos-grid {
+                grid-template-columns: repeat(4, 1fr);
+                gap: 5px;
+            }
+
+            .amigo-btn {
+                padding: 6px 4px;
+                font-size: 11px;
+            }
+
+            button {
+                padding: 8px 12px;
+                font-size: 13px;
+            }
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+
+<div class="header">
+    <h1>Divisão de Contas <span style="font-size:1.2em;">🍽️⚽💰</span></h1>
+    <input type="text" id="descricao-evento" placeholder="Descrição do evento (ex: Almoço Sá 19 Abril)" maxlength="80"
+        style="margin-top:10px;width:100%;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;border-radius:4px;padding:8px 10px;font-size:13px;text-align:center;"
+        oninput="estado.descricaoEvento=this.value;salvarNoLocalStorage()"
+        onfocus="this.style.background='rgba(255,255,255,0.25)'"
+        onblur="this.style.background='rgba(255,255,255,0.15)'">
+    <div class="header-nav">
+        <select id="historico-select" onchange="navegarHistorico(this.value)">
+            <option value="">📚 Histórico de eventos</option>
+        </select>
+        <button onclick="novoEvento()">＋ Novo</button>
+    </div>
+</div>
+
+<div id="readonly-banner">
+    <span>👁️ Evento fechado — modo leitura</span>
+    <button onclick="desbloquearEvento()">🔓 Desbloquear para editar</button>
+</div>
+
+<!-- ADICIONAR ORDEM -->
+<div class="section" id="section-adicionar">
+    <h2>1. Adiciona uma Ordem</h2>
+
+    <div class="form-row">
+        <select id="item" style="flex: 2;">
+            <option value="">-- Seleciona um item --</option>
+        </select>
+        <select id="quantidade" style="flex: 1; max-width: 80px;"><option value="1" selected>1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>
+    </div>
+
+    <div>
+        <label style="font-size: 13px; color: #7f8c8d; margin-bottom: 8px; display: block;">Quem comeu/bebeu?</label>
+        <div class="amigos-grid" id="amigos-grid"></div>
+    </div>
+
+    <button onclick="adicionarOrdem()" style="width: 100%;">✓ Adicionar Ordem</button>
+    <div id="mensagem"></div>
+</div>
+
+<!-- ORDENS REGISTADAS -->
+<div class="section">
+    <h2>2. Ordens Registadas</h2>
+    <div id="lista-ordens"></div>
+    <p style="color: #7f8c8d; font-size: 12px; margin-top: 10px;">Total de ordens: <strong id="total-ordens">0</strong></p>
+</div>
+
+
+<!-- OFERTAS -->
+<div class="section" id="section-ofertas">
+    <h2>2b. 🎁 Ofertas</h2>
+
+    <div class="form-row" style="flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+        <select id="oferta-quem" style="flex:1; min-width:100px;">
+            <option value="">Amigo</option>
+        </select>
+        <select id="oferta-item" style="flex:2; min-width:120px;">
+            <option value="">-- Item --</option>
+        </select>
+        <select id="oferta-qtd" style="flex:0 0 70px;">
+            <option value="1" selected>1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option>
+        </select>
+    </div>
+
+    <div>
+        <label style="font-size: 13px; color: #7f8c8d; margin-bottom: 8px; display: block;">Oferece a quem?</label>
+        <div class="amigos-grid" id="oferta-amigos-grid"></div>
+    </div>
+
+    <button onclick="adicionarOferta()" style="width:100%; background:#f39c12;">🎁 Adicionar Oferta</button>
+    <div id="mensagem-oferta" style="margin-top:8px;"></div>
+
+    <div id="lista-ofertas" style="margin-top:12px;"></div>
+</div>
+
+<!-- RESUMO DA CONTA -->
+<div class="section">
+    <h2>3. Resumo da Conta</h2>
+
+    <div class="resumo">
+        <div class="resumo-linha">
+            <span>Total da mesa:</span>
+            <span id="total-mesa" style="color: #27ae60; font-weight: 700;">€0.00</span>
+        </div>
+        <div class="resumo-linha">
+            <span>Número de pessoas:</span>
+            <span id="num-pessoas">0</span>
+        </div>
+    </div>
+
+    <div>
+        <label style="font-size: 13px; color: #7f8c8d; margin-bottom: 8px; display: block;">💸 Conta por pessoa:</label>
+        <div id="conta-pessoas"></div>
+    </div>
+
+    <div style="margin-top: 16px;">
+        <label style="font-size: 13px; color: #7f8c8d; margin-bottom: 8px; display: block;">🧾 Total por item:</label>
+        <div id="total-itens"></div>
+    </div>
+
+    <div style="margin-top: 16px; background: #fff8e1; border: 1px solid #ffe082; border-radius: 6px; padding: 12px;">
+        <label style="font-size: 13px; color: #7f8c8d; margin-bottom: 8px; display: block;">🧾 Ajuste pela fatura do restaurante:</label>
+        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px;">
+            <input type="number" id="total-fatura" placeholder="Total da fatura (€)" min="0" step="0.01"
+                style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;"
+                oninput="atualizarAjuste()">
+            <button class="secondary" onclick="document.getElementById('total-fatura').value=''; atualizarAjuste();" style="padding: 10px 12px; font-size: 12px;">✕</button>
+        </div>
+        <div id="ajuste-info" style="display:none;">
+            <div id="ajuste-racio" style="font-size: 13px; color: #555; margin-bottom: 8px;"></div>
+            <div id="conta-pessoas-ajustada"></div>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- CONFIGURAÇÕES -->
+<div class="section" id="section-config">
+    <div class="config-toggle" onclick="toggleConfig()">
+        <h2 style="border-bottom:none;margin-bottom:0;">⚙️ Configurações</h2>
+        <span id="config-arrow" style="font-size:18px;color:#95a5a6;">▼</span>
+    </div>
+    <div class="config-body" id="config-body" style="display:none;">
+        <div class="config-section-label">👥 Amigos</div>
+        <div id="config-amigos-lista"></div>
+        <div class="config-add-row">
+            <input type="text" id="novo-amigo" placeholder="Nome do amigo">
+            <button onclick="adicionarAmigo()">+ Adicionar</button>
+        </div>
+
+        <div class="config-section-label" style="margin-top:18px;">🍽️ Menu</div>
+        <div id="config-menu-lista"></div>
+        <div class="config-add-row">
+            <input type="text" id="novo-item-nome" placeholder="Nome do item" style="flex:2;">
+            <input type="number" id="novo-item-preco" placeholder="€" min="0" step="0.10" style="flex:1;min-width:60px;">
+            <button onclick="adicionarItemMenu()">+ Add</button>
+        </div>
+
+        <div class="config-add-row" style="margin-top:14px;">
+            <button onclick="document.getElementById('input-xlsx').click()" style="flex:1;">📥 Importar Excel</button>
+            <button class="danger" onclick="limparConfigs()" style="flex:1;">🗑️ Limpar tudo</button>
+        </div>
+        <input type="file" id="input-xlsx" accept=".xlsx" style="display:none;" onchange="importarExcel()">
+    </div>
+</div>
+
+<!-- AJUDA -->
+<div class="section" id="section-ajuda">
+    <div class="config-toggle" onclick="toggleAjuda()">
+        <h2 style="border-bottom:none;margin-bottom:0;">❓ Como usar</h2>
+        <span id="ajuda-arrow" style="font-size:18px;color:#95a5a6;">▼</span>
+    </div>
+    <div id="ajuda-body" style="display:none;margin-top:14px;font-size:13px;color:#555;line-height:1.7;">
+        <p><strong>⚙️ Configurações</strong> — Começa por importar o ficheiro Excel com os amigos e o menu do restaurante. Fica guardado para a próxima vez.</p>
+        <p style="margin-top:8px;"><strong>1. Adicionar Ordem</strong> — Seleciona o item, a quantidade e quem comeu/bebeu. Carrega em "Adicionar Ordem".</p>
+        <p style="margin-top:8px;"><strong>2. Ordens Registadas</strong> — Lista de tudo o que foi pedido. O botão ✏️ permite editar uma ordem sem perder a posição. O × apaga.</p>
+        <p style="margin-top:8px;"><strong>2b. Ofertas</strong> — Quando alguém quer pagar uma rodada a outros. O custo sobe na conta de quem oferece e desce na de quem recebe.</p>
+        <p style="margin-top:8px;"><strong>3. Resumo</strong> — Total por pessoa com detalhe do consumo. Introduz o total da fatura do restaurante para ajuste proporcional — ao introduzir a fatura, o evento fica bloqueado.</p>
+        <p style="margin-top:8px;"><strong>💾 Guardar</strong> — Grava no histórico e descarrega o JSON de backup.<br>
+        <strong>✅ Guardar e Fechar</strong> — Mesmo, e limpa para um novo evento.<br>
+        <strong>📤 Importar JSON</strong> — Restaura o histórico de eventos a partir do ficheiro de backup.<br>
+        <strong>🗑️ Limpar Tudo</strong> — Descarta o evento atual sem gravar.</p>
+        <p style="margin-top:8px;"><strong>📚 Histórico</strong> — Navega entre eventos anteriores. Ficam em modo leitura; usa "🔓 Desbloquear" para editar.</p>
+    </div>
+</div>
+
+<!-- GUARDAR / EXPORTAR -->
+<div class="section">
+    <h2>4. Guardar / Exportar</h2>
+    <div class="botoes-dados">
+        <button onclick="exportarPDFConta()">📋 PDF Conta</button>
+        <button onclick="exportarPDFDivisao()">💸 PDF Divisão</button>
+        <button onclick="guardarEvento()">💾 Guardar</button>
+        <button onclick="guardarEFechar()" style="background:#27ae60;">✅ Guardar e Fechar</button>
+        <button class="secondary" onclick="document.getElementById('input-json').click()">📤 Importar JSON</button>
+        <button class="danger" onclick="limparTudo()">🗑️ Limpar Tudo</button>
+    </div>
+    <input type="file" id="input-json" accept=".json" style="display:none;" onchange="importarJSON()">
+</div>
+
+<script>
+let amigos = [];
+
+let menu = {};
+
+let historico = [];
+let eventoAtualId = null;
+let modoReadOnly = false;
+
+let estado = {
+    ordens: [],
+    ofertas: [],
+    totalFatura: null,
+    descricaoEvento: '',
+    amigosSelecionados: new Set(),
+    ofertaAmigos: new Set()
+};
+
+// Inicializar
+function init() {
+    carregarConfigs();
+    carregarHistoricoLocal();
+    carregarDoLocalStorage();
+
+    // Smart load: if localStorage empty, load latest history event
+    if (estado.ordens.length === 0 && historico.length > 0) {
+        const ultimo = historico[historico.length - 1];
+        eventoAtualId = ultimo.id;
+        estado.ordens = ultimo.ordens || [];
+        estado.ofertas = ultimo.ofertas || [];
+        estado.totalFatura = ultimo.totalFatura || null;
+        estado.descricaoEvento = ultimo.descricao || '';
+        modoReadOnly = true;
+    } else {
+        // Lock if fatura is set
+        if (estado.totalFatura) modoReadOnly = true;
+    }
+
+    if (estado.descricaoEvento) document.getElementById('descricao-evento').value = estado.descricaoEvento;
+    if (estado.totalFatura) {
+        document.getElementById('total-fatura').value = estado.totalFatura;
+        atualizarAjuste();
+    }
+    renderHistoricoDropdown();
+    renderDropdownItens();
+    renderAmigosBotoes();
+    renderOfertaDropdowns();
+    renderOfertaAmigos();
+    renderConfigAmigos();
+    renderConfigMenu();
+    atualizarUI();
+
+    document.getElementById('item').addEventListener('change', atualizarPreco);
+    document.getElementById('quantidade').addEventListener('change', atualizarPreco);
+}
+
+function renderDropdownItens() {
+    const select = document.getElementById('item');
+    select.innerHTML = '<option value="">-- Seleciona um item --</option>';
+    
+    Object.keys(menu).sort().forEach(item => {
+        const option = document.createElement('option');
+        option.value = item;
+        option.textContent = `${item} (€${menu[item].toFixed(2)})`;
+        select.appendChild(option);
+    });
+}
+
+function atualizarPreco() {
+    const item = document.getElementById('item').value;
+    const quantidade = parseInt(document.getElementById('quantidade').value || 1);
+    
+    if (item && menu[item]) {
+        const precoUnitario = menu[item];
+        const precoTotal = precoUnitario * quantidade;
+        // Apenas para lógica interna, não exibe
+    } else {
+        // Item não selecionado
+    }
+}
+
+function renderAmigosBotoes() {
+    const grid = document.getElementById('amigos-grid');
+    grid.innerHTML = '';
+    amigos.forEach(amigo => {
+        const btn = document.createElement('button');
+        btn.className = 'amigo-btn';
+        btn.textContent = amigo;
+        btn.type = 'button';
+        btn.onclick = (e) => {
+            e.preventDefault();
+            btn.classList.toggle('selected');
+            if (btn.classList.contains('selected')) {
+                estado.amigosSelecionados.add(amigo);
+            } else {
+                estado.amigosSelecionados.delete(amigo);
+            }
+        };
+        grid.appendChild(btn);
+    });
+}
+
+function adicionarOrdem() {
+    const item = document.getElementById('item').value.trim();
+    const quantidade = parseInt(document.getElementById('quantidade').value || 1);
+
+    if (!item) {
+        mostrarMensagem('⚠️ Seleciona um item', false);
+        return;
+    }
+
+    if (quantidade <= 0) {
+        mostrarMensagem('⚠️ Quantidade tem que ser maior que 0', false);
+        return;
+    }
+
+    if (estado.amigosSelecionados.size === 0) {
+        mostrarMensagem('⚠️ Seleciona pelo menos um amigo', false);
+        return;
+    }
+
+    const precoUnitario = menu[item];
+    const precoTotal = precoUnitario * quantidade;
+
+    const ordem = {
+        id: Date.now(),
+        item: item,
+        quantidade: quantidade,
+        precoUnitario: precoUnitario,
+        precoTotal: precoTotal,
+        amigos: Array.from(estado.amigosSelecionados),
+        hora: new Date().toLocaleString('pt-PT', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'})
+    };
+
+    estado.ordens.push(ordem);
+    salvarNoLocalStorage();
+    atualizarUI();
+
+    // Limpar formulário
+    document.getElementById('item').value = '';
+    document.getElementById('quantidade').value = '1';
+    document.querySelectorAll('.amigo-btn').forEach(btn => btn.classList.remove('selected'));
+    estado.amigosSelecionados.clear();
+    atualizarPreco();
+
+    mostrarMensagem('✓ Ordem adicionada!', true);
+}
+
+function removerOrdem(id) {
+    estado.ordens = estado.ordens.filter(o => o.id !== id);
+    salvarNoLocalStorage();
+    atualizarUI();
+    mostrarMensagem('✓ Ordem removida', true);
+}
+
+function atualizarUI() { _atualizarUIInner(); if(typeof atualizarReadOnly==='function') atualizarReadOnly(); }
+function _atualizarUIInner() {
+    // Lista de ordens
+    const lista = document.getElementById('lista-ordens');
+    if (estado.ordens.length === 0) {
+        lista.innerHTML = '<p style="color: #95a5a6; font-size: 13px; text-align: center;">Nenhuma ordem registada ainda</p>';
+    } else {
+        lista.innerHTML = estado.ordens.map(ordem => `
+            <div class="ordem" id="ordem-${ordem.id}" style="flex-wrap:wrap;">
+                <div class="ordem-info">
+                    <div class="ordem-item">${ordem.item} (${ordem.quantidade}x €${ordem.precoUnitario.toFixed(2)})</div>
+                    <div class="ordem-amigos">${ordem.amigos.join(', ')}</div>
+                    <div class="ordem-hora">${ordem.hora || ''}</div>
+                </div>
+                <div class="ordem-preco">€${ordem.precoTotal.toFixed(2)}</div>
+                ${modoReadOnly ? '' : `<button class="secondary" style="width:28px;height:28px;padding:0;font-size:14px;border-radius:50%;margin-right:4px;" onclick="toggleEditOrdem(${ordem.id})">✏️</button><button class="ordem-delete" onclick="removerOrdem(${ordem.id})">×</button>`}
+            </div>
+        `).join('');
+    }
+
+    // Cálculos
+    const totalMesa = estado.ordens.reduce((sum, o) => sum + o.precoTotal, 0);
+    document.getElementById('total-mesa').textContent = '€' + totalMesa.toFixed(2);
+
+    // Contar pessoas
+    const setPessoas = new Set();
+    estado.ordens.forEach(ordem => {
+        ordem.amigos.forEach(amigo => setPessoas.add(amigo));
+    });
+
+    document.getElementById('num-pessoas').textContent = setPessoas.size;
+    document.getElementById('total-ordens').textContent = estado.ordens.length;
+
+    // Conta por pessoa
+    const contaPorPessoa = {};
+    setPessoas.forEach(pessoa => contaPorPessoa[pessoa] = 0);
+
+    estado.ordens.forEach(ordem => {
+        const precoParaCadaUm = ordem.precoTotal / ordem.amigos.length;
+        ordem.amigos.forEach(amigo => {
+            contaPorPessoa[amigo] += precoParaCadaUm;
+        });
+    });
+
+    // Render lista ofertas
+    const listaOfertas = document.getElementById('lista-ofertas');
+    if (estado.ofertas.length === 0) {
+        listaOfertas.innerHTML = '<p style="color:#95a5a6;font-size:13px;text-align:center;">Nenhuma oferta ainda</p>';
+    } else {
+        listaOfertas.innerHTML = estado.ofertas.map(o => `
+            <div class="oferta">
+                <div class="oferta-info">
+                    <div class="oferta-desc">🎁 ${o.quem} oferece ${o.quantidade}x ${o.item}</div>
+                    <div class="oferta-detalhe">A: ${o.para.join(', ')} · ${o.hora || ''}</div>
+                </div>
+                <div class="oferta-valor">€${o.precoTotal.toFixed(2)}</div>
+                <button class="ordem-delete" onclick="removerOferta(${o.id})">×</button>
+            </div>
+        `).join('');
+    }
+
+    // Conta por pessoa com saldo ofertas
+    const saldoOfertas = calcularSaldoOfertas();
+    // Merge all people from ordens + ofertas
+    const todasPessoas = new Set([...setPessoas]);
+    estado.ofertas.forEach(o => {
+        todasPessoas.add(o.quem);
+        o.para.forEach(p => todasPessoas.add(p));
+    });
+
+    const contaDiv = document.getElementById('conta-pessoas');
+    if (todasPessoas.size === 0) {
+        contaDiv.innerHTML = '<p style="color: #95a5a6; font-size: 13px; text-align: center;">Sem dados ainda</p>';
+    } else {
+        const pessoas = Array.from(todasPessoas).sort();
+        contaDiv.innerHTML = pessoas.map(pessoa => {
+            const base = contaPorPessoa[pessoa] || 0;
+            const delta = saldoOfertas[pessoa] || 0;
+            const total = base + delta;
+            const deltaStr = delta !== 0
+                ? `<div class="detalhe-oferta">${delta > 0 ? '🎁 oferece' : '🎁 recebe'} ${delta > 0 ? '+' : ''}€${delta.toFixed(2)}</div>`
+                : '';
+
+            // Build consumo detail
+            const consumos = {};
+            estado.ordens.forEach(o => {
+                if (o.amigos.includes(pessoa)) {
+                    const share = o.quantidade / o.amigos.length;
+                    consumos[o.item] = (consumos[o.item] || 0) + share;
+                }
+            });
+            const consumoStr = Object.keys(consumos).sort().map(item => {
+                const qtd = consumos[item];
+                const qtdStr = Number.isInteger(qtd) ? qtd : qtd.toFixed(1);
+                return `${qtdStr}× ${item}`;
+            }).join(', ');
+
+            return `
+            <div class="pessoa-conta-final">
+                <div class="linha-principal">
+                    <span class="pessoa-nome">${pessoa}</span>
+                    <span class="pessoa-valor-final">€${total.toFixed(2)}</span>
+                </div>
+                ${consumoStr ? `<div class="detalhe-consumo">${consumoStr}</div>` : ''}
+                ${deltaStr}
+            </div>`;
+        }).join('');
+    }
+
+    // Total por item
+    const totalPorItem = {};
+    const qtdPorItem = {};
+    estado.ordens.forEach(ordem => {
+        if (!totalPorItem[ordem.item]) { totalPorItem[ordem.item] = 0; qtdPorItem[ordem.item] = 0; }
+        totalPorItem[ordem.item] += ordem.precoTotal;
+        qtdPorItem[ordem.item] += ordem.quantidade;
+    });
+    const itensDiv = document.getElementById('total-itens');
+    if (estado.ordens.length === 0) {
+        itensDiv.innerHTML = '<p style="color: #95a5a6; font-size: 13px; text-align: center;">Sem dados ainda</p>';
+    } else {
+        const itens = Object.keys(totalPorItem).sort();
+        itensDiv.innerHTML = itens.map(item => `
+            <div class="pessoa-conta">
+                <span class="pessoa-nome">${item} <span style="font-weight:400;color:#95a5a6;font-size:12px;">(${qtdPorItem[item]}x)</span></span>
+                <span class="pessoa-valor">€${totalPorItem[item].toFixed(2)}</span>
+            </div>
+        `).join('');
+    }
+}
+
+
+function renderOfertaDropdowns() {
+    const selQuem = document.getElementById('oferta-quem');
+    selQuem.innerHTML = '<option value="">Amigo</option>';
+    amigos.forEach(a => {
+        const opt = document.createElement('option');
+        opt.value = a; opt.textContent = a;
+        selQuem.appendChild(opt);
+    });
+
+    const selItem = document.getElementById('oferta-item');
+    selItem.innerHTML = '<option value="">-- Item --</option>';
+    Object.keys(menu).sort().forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item;
+        opt.textContent = `${item} (€${menu[item].toFixed(2)})`;
+        selItem.appendChild(opt);
+    });
+}
+
+function renderOfertaAmigos() {
+    const grid = document.getElementById('oferta-amigos-grid');
+    grid.innerHTML = '';
+    amigos.forEach(amigo => {
+        const btn = document.createElement('button');
+        btn.className = 'amigo-btn';
+        btn.textContent = amigo;
+        btn.type = 'button';
+        btn.onclick = (e) => {
+            e.preventDefault();
+            btn.classList.toggle('selected');
+            if (btn.classList.contains('selected')) {
+                estado.ofertaAmigos.add(amigo);
+            } else {
+                estado.ofertaAmigos.delete(amigo);
+            }
+        };
+        grid.appendChild(btn);
+    });
+}
+
+function adicionarOferta() {
+    const quem = document.getElementById('oferta-quem').value;
+    const item = document.getElementById('oferta-item').value;
+    const qtd = parseInt(document.getElementById('oferta-qtd').value || 1);
+
+    if (!quem) { mostrarMsgOferta('⚠️ Seleciona quem oferece', false); return; }
+    if (!item) { mostrarMsgOferta('⚠️ Seleciona o item', false); return; }
+    if (estado.ofertaAmigos.size === 0) { mostrarMsgOferta('⚠️ Seleciona a quem é oferecido', false); return; }
+    if (estado.ofertaAmigos.has(quem)) { mostrarMsgOferta('⚠️ Quem oferece não pode estar na lista de quem recebe', false); return; }
+
+    const precoTotal = menu[item] * qtd;
+
+    estado.ofertas.push({
+        id: Date.now(),
+        quem,
+        item,
+        quantidade: qtd,
+        precoUnitario: menu[item],
+        precoTotal,
+        para: Array.from(estado.ofertaAmigos),
+        hora: new Date().toLocaleString('pt-PT', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'})
+    });
+
+    salvarNoLocalStorage();
+    atualizarUI();
+
+    // reset
+    document.getElementById('oferta-quem').value = '';
+    document.getElementById('oferta-item').value = '';
+    document.getElementById('oferta-qtd').value = '1';
+    document.querySelectorAll('#oferta-amigos-grid .amigo-btn').forEach(b => b.classList.remove('selected'));
+    estado.ofertaAmigos.clear();
+    mostrarMsgOferta('🎁 Oferta adicionada!', true);
+}
+
+function removerOferta(id) {
+    estado.ofertas = estado.ofertas.filter(o => o.id !== id);
+    salvarNoLocalStorage();
+    atualizarUI();
+}
+
+function mostrarMsgOferta(msg, ok) {
+    const div = document.getElementById('mensagem-oferta');
+    div.className = ok ? 'sucesso' : 'aviso';
+    div.textContent = msg;
+    setTimeout(() => { div.textContent = ''; div.className = ''; }, 3000);
+}
+
+function calcularSaldoOfertas() {
+    // Returns { pessoa: delta } — positive = pays more (offered), negative = pays less (received)
+    const saldo = {};
+    estado.ofertas.forEach(oferta => {
+        if (!saldo[oferta.quem]) saldo[oferta.quem] = 0;
+        saldo[oferta.quem] += oferta.precoTotal; // quem oferece paga mais
+
+        const share = oferta.precoTotal / oferta.para.length;
+        oferta.para.forEach(p => {
+            if (!saldo[p]) saldo[p] = 0;
+            saldo[p] -= share; // quem recebe paga menos
+        });
+    });
+    return saldo;
+}
+
+function salvarNoLocalStorage() {
+    localStorage.setItem('conta_refeicao', JSON.stringify({ordens: estado.ordens, ofertas: estado.ofertas, totalFatura: estado.totalFatura, descricaoEvento: estado.descricaoEvento, eventoAtualId}));
+}
+
+function carregarDoLocalStorage() {
+    const dados = localStorage.getItem('conta_refeicao');
+    if (dados) {
+        try {
+            const parsed = JSON.parse(dados);
+            if (Array.isArray(parsed)) {
+                estado.ordens = parsed; // backwards compat
+            } else {
+                estado.ordens = parsed.ordens || [];
+                estado.ofertas = parsed.ofertas || [];
+                estado.totalFatura = parsed.totalFatura || null;
+                estado.descricaoEvento = parsed.descricaoEvento || '';
+                eventoAtualId = parsed.eventoAtualId || null;
+            }
+        } catch (e) {
+            console.error('Erro ao carregar dados:', e);
+        }
+    }
+}
+
+
+function carregarHistoricoLocal() {
+    const saved = localStorage.getItem('historico_eventos');
+    if (saved) {
+        try { historico = JSON.parse(saved); } catch(e) { historico = []; }
+    }
+}
+
+function salvarHistoricoLocal() {
+    localStorage.setItem('historico_eventos', JSON.stringify(historico));
+}
+
+function renderHistoricoDropdown() {
+    const sel = document.getElementById('historico-select');
+    sel.innerHTML = '<option value="">📚 Histórico (' + historico.length + ' eventos)</option>';
+    [...historico].reverse().forEach(ev => {
+        const opt = document.createElement('option');
+        opt.value = ev.id;
+        const marker = ev.id === eventoAtualId ? ' ✓' : '';
+        opt.textContent = (ev.descricao || 'Sem nome') + ' — ' + ev.data + marker;
+        sel.appendChild(opt);
+    });
+}
+
+function navegarHistorico(id) {
+    if (!id) return;
+    const ev = historico.find(e => e.id == id);
+    if (!ev) return;
+    if (!confirm('Carregar "' + (ev.descricao || 'Sem nome') + '"? Os dados actuais não guardados serão perdidos.')) {
+        document.getElementById('historico-select').value = '';
+        return;
+    }
+    eventoAtualId = ev.id;
+    modoReadOnly = true;
+    estado.ordens = ev.ordens || [];
+    estado.ofertas = ev.ofertas || [];
+    estado.totalFatura = ev.totalFatura || null;
+    estado.descricaoEvento = ev.descricao || '';
+    document.getElementById('descricao-evento').value = estado.descricaoEvento;
+    document.getElementById('total-fatura').value = estado.totalFatura || '';
+    if (estado.totalFatura) atualizarAjuste();
+    else { document.getElementById('ajuste-info').style.display = 'none'; }
+    salvarNoLocalStorage();
+    atualizarReadOnly();
+    atualizarUI();
+    renderHistoricoDropdown();
+    mostrarMensagem('✓ Evento carregado: ' + (ev.descricao || 'Sem nome'), true);
+}
+
+function novoEvento() {
+    if (estado.ordens.length > 0) {
+        if (!confirm('Criar novo evento? Os dados actuais não guardados serão perdidos.')) return;
+    }
+    eventoAtualId = null;
+    modoReadOnly = false;
+    estado.ordens = [];
+    estado.ofertas = [];
+    estado.totalFatura = null;
+    estado.descricaoEvento = '';
+    document.getElementById('descricao-evento').value = '';
+    document.getElementById('total-fatura').value = '';
+    document.getElementById('historico-select').value = '';
+    document.getElementById('ajuste-info').style.display = 'none';
+    estado.amigosSelecionados.clear();
+    estado.ofertaAmigos.clear();
+    salvarNoLocalStorage();
+    atualizarReadOnly();
+    atualizarUI();
+    mostrarMensagem('✓ Novo evento criado', true);
+}
+
+function snaphotEstado() {
+    return {
+        id: eventoAtualId || Date.now(),
+        descricao: estado.descricaoEvento || 'Sem nome',
+        data: new Date().toLocaleDateString('pt-PT', {day:'2-digit', month:'2-digit', year:'numeric'}),
+        ordens: JSON.parse(JSON.stringify(estado.ordens)),
+        ofertas: JSON.parse(JSON.stringify(estado.ofertas)),
+        totalFatura: estado.totalFatura
+    };
+}
+
+function guardarEvento() {
+    if (estado.ordens.length === 0) { mostrarMensagem('⚠️ Sem ordens para guardar', false); return; }
+    const snap = snaphotEstado();
+    eventoAtualId = snap.id;
+    const idx = historico.findIndex(e => e.id === snap.id);
+    if (idx >= 0) historico[idx] = snap;
+    else historico.push(snap);
+    salvarHistoricoLocal();
+    salvarNoLocalStorage();
+    renderHistoricoDropdown();
+    exportarJSON();
+    mostrarMensagem('✓ Evento guardado', true);
+}
+
+function guardarEFechar() {
+    if (estado.ordens.length === 0) { mostrarMensagem('⚠️ Sem ordens para guardar', false); return; }
+    guardarEvento();
+    setTimeout(() => {
+        eventoAtualId = null;
+        modoReadOnly = false;
+        estado.ordens = [];
+        estado.ofertas = [];
+        estado.totalFatura = null;
+        estado.descricaoEvento = '';
+        document.getElementById('descricao-evento').value = '';
+        document.getElementById('total-fatura').value = '';
+        document.getElementById('ajuste-info').style.display = 'none';
+        estado.amigosSelecionados.clear();
+        estado.ofertaAmigos.clear();
+        salvarNoLocalStorage();
+        atualizarReadOnly();
+        atualizarUI();
+        renderHistoricoDropdown();
+        mostrarMensagem('✓ Guardado e pronto para novo evento', true);
+    }, 400);
+}
+
+function exportarJSON() {
+    const blob = new Blob([JSON.stringify(historico, null, 2)], {type: 'application/json;charset=utf-8'});
+    const link = document.createElement('a');
+    const ts = new Date().toISOString().slice(0,10);
+    link.href = URL.createObjectURL(blob);
+    link.download = 'DivisaoContasSa_historico_' + ts + '.json';
+    link.click();
+}
+
+function importarJSON() {
+    const input = document.getElementById('input-json');
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const data = JSON.parse(e.target.result);
+            if (!Array.isArray(data)) { mostrarMensagem('❌ Ficheiro inválido', false); return; }
+            historico = data;
+            salvarHistoricoLocal();
+            renderHistoricoDropdown();
+            mostrarMensagem('✓ Histórico importado: ' + historico.length + ' eventos', true);
+        } catch(err) {
+            mostrarMensagem('❌ Erro ao importar JSON', false);
+        }
+    };
+    reader.readAsText(file);
+    input.value = '';
+}
+
+
+function limparTudo() {
+    if (confirm('Tem certeza que quer limpar TUDO? Isto não pode ser desfeito!')) {
+        eventoAtualId = null;
+        modoReadOnly = false;
+        estado.ordens = [];
+        estado.ofertas = [];
+        estado.totalFatura = null;
+        estado.descricaoEvento = '';
+        document.getElementById('descricao-evento').value = '';
+        document.getElementById('total-fatura').value = '';
+        document.getElementById('ajuste-info').style.display = 'none';
+        estado.amigosSelecionados.clear();
+        estado.ofertaAmigos.clear();
+        salvarNoLocalStorage();
+        atualizarReadOnly();
+        atualizarUI();
+        mostrarMensagem('✓ Tudo limpo', true);
+    }
+}
+
+function mostrarMensagem(msg, sucesso) {
+    const div = document.getElementById('mensagem');
+    div.className = sucesso ? 'sucesso' : 'aviso';
+    div.textContent = msg;
+    setTimeout(() => { div.textContent = ''; div.className = ''; }, 3000);
+}
+
+function pdfCabecalho(totalMesa, fatura, racio, diff, pct, sinal, corAjuste) {
+    return `<div style="background:#2c3e50;color:white;padding:22px 28px;border-radius:10px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;">
+        <div>
+            <div style="font-size:22px;font-weight:700;">🍽️ Divisão de Contas</div>
+            ${estado.descricaoEvento ? `<div style="font-size:15px;font-weight:600;margin-top:6px;opacity:0.9;">${estado.descricaoEvento}</div>` : ''}
+            <div style="font-size:13px;opacity:0.6;margin-top:4px;">${new Date().toLocaleDateString('pt-PT', {day:'2-digit',month:'long',year:'numeric'})}</div>
+        </div>
+        <div style="text-align:right;">
+            <div style="font-size:11px;opacity:0.6;margin-bottom:2px;">Total calculado</div>
+            <div style="font-size:24px;font-weight:800;color:#2ecc71;">€${totalMesa.toFixed(2)}</div>
+            ${racio ? `<div style="font-size:11px;opacity:0.6;margin-top:8px;margin-bottom:2px;">Restaurante</div>
+            <div style="font-size:20px;font-weight:800;color:#f39c12;">€${fatura.toFixed(2)}</div>
+            <div style="font-size:14px;font-weight:700;color:${corAjuste};margin-top:3px;">${sinal}€${Math.abs(diff).toFixed(2)} (${sinal}${pct}%)</div>` : ''}
+        </div>
+    </div>`;
+}
+
+function abrirJanelaPDF(html, titulo) {
+    const win = window.open('', '', 'width=750,height=900');
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${titulo}</title>
+        <style>
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            @media print { body { margin: 0; } }
+            body { margin: 0; background: white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+            tr { page-break-inside: avoid; }
+            table { border-collapse: collapse; }
+        </style>
+    </head><body>${html}</body></html>`);
+    win.document.close();
+}
+
+// PDF Conta — ordens + total por item
+function exportarPDFConta() {
+    const totalMesa = estado.ordens.reduce((sum, o) => sum + o.precoTotal, 0);
+    const fatura = estado.totalFatura;
+    const racio = fatura ? fatura / totalMesa : null;
+    const diff = fatura ? fatura - totalMesa : null;
+    const pct = racio ? ((racio - 1) * 100).toFixed(1) : null;
+    const sinal = (diff >= 0) ? '+' : '';
+    const corAjuste = (diff >= 0) ? '#e74c3c' : '#27ae60';
+
+    const totalPorItem = {};
+    const qtdPorItem = {};
+    estado.ordens.forEach(o => {
+        if (!totalPorItem[o.item]) { totalPorItem[o.item] = 0; qtdPorItem[o.item] = 0; }
+        totalPorItem[o.item] += o.precoTotal;
+        qtdPorItem[o.item] += o.quantidade;
+    });
+    const itens = Object.keys(totalPorItem).sort();
+
+    const linhasOrdens = estado.ordens.length === 0
+        ? '<tr><td colspan="5" style="text-align:center;color:#999;padding:20px;">Nenhuma ordem registada.</td></tr>'
+        : estado.ordens.map((o, i) => `
+            <tr style="background:${i % 2 === 0 ? '#fff' : '#f9f9f9'}">
+                <td style="padding:8px 10px;font-size:12px;color:#777;">${o.hora ? o.hora.replace(', ', ' ') : '—'}</td>
+                <td style="padding:8px 10px;font-weight:600;">${o.item}</td>
+                <td style="padding:8px 10px;text-align:center;">${o.quantidade}x</td>
+                <td style="padding:8px 10px;font-size:12px;color:#555;">${o.amigos.join(', ')}</td>
+                <td style="padding:8px 10px;text-align:right;font-weight:700;color:#27ae60;">€${o.precoTotal.toFixed(2)}</td>
+            </tr>`).join('');
+
+    const linhasItens = itens.map((item, i) => `
+        <tr style="background:${i % 2 === 0 ? '#fff' : '#f9f9f9'}">
+            <td style="padding:9px 14px;font-weight:600;">${item}</td>
+            <td style="padding:9px 14px;text-align:center;color:#555;">${qtdPorItem[item]}x</td>
+            <td style="padding:9px 14px;text-align:right;font-weight:700;color:#27ae60;">€${totalPorItem[item].toFixed(2)}</td>
+        </tr>`).join('');
+
+    const html = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:680px;margin:0 auto;padding:30px;">
+        ${pdfCabecalho(totalMesa, fatura, racio, diff, pct, sinal, corAjuste)}
+        <div style="font-size:12px;font-weight:700;color:#2c3e50;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">📋 Ordens</div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);margin-bottom:24px;">
+            <thead><tr style="background:#3498db;color:white;">
+                <th style="padding:9px 10px;text-align:left;">Hora</th>
+                <th style="padding:9px 10px;text-align:left;">Item</th>
+                <th style="padding:9px 10px;text-align:center;">Qtd</th>
+                <th style="padding:9px 10px;text-align:left;">Quem</th>
+                <th style="padding:9px 10px;text-align:right;">Total</th>
+            </tr></thead>
+            <tbody>${linhasOrdens}</tbody>
+            <tfoot>
+                <tr style="background:#ecf0f1;">
+                    <td colspan="4" style="padding:10px;font-weight:700;">Total calculado</td>
+                    <td style="padding:10px;text-align:right;font-weight:800;color:#27ae60;">€${totalMesa.toFixed(2)}</td>
+                </tr>
+                ${fatura ? `
+                <tr style="background:#fff8e1;">
+                    <td colspan="4" style="padding:10px;font-weight:700;">Total restaurante</td>
+                    <td style="padding:10px;text-align:right;font-weight:800;color:#f39c12;">€${fatura.toFixed(2)}</td>
+                </tr>
+                <tr style="background:${diff >= 0 ? '#fdecea' : '#eafaf1'};">
+                    <td colspan="4" style="padding:10px;font-weight:700;">Diferença</td>
+                    <td style="padding:10px;text-align:right;font-weight:800;color:${diff >= 0 ? '#e74c3c' : '#27ae60'};">${diff >= 0 ? '+' : ''}€${diff.toFixed(2)}</td>
+                </tr>` : ''}
+            </tfoot>
+        </table>
+        <div style="font-size:12px;font-weight:700;color:#2c3e50;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">🧾 Total por item</div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+            <thead><tr style="background:#2c3e50;color:white;">
+                <th style="padding:9px 14px;text-align:left;">Item</th>
+                <th style="padding:9px 14px;text-align:center;">Qtd</th>
+                <th style="padding:9px 14px;text-align:right;">Total</th>
+            </tr></thead>
+            <tbody>${linhasItens}</tbody>
+        </table>
+    </div>`;
+
+    abrirJanelaPDF(html, 'conta_restaurante.pdf');
+}
+
+// PDF Divisão — conta por pessoa com consumo e ofertas
+function exportarPDFDivisao() {
+    const totalMesa = estado.ordens.reduce((sum, o) => sum + o.precoTotal, 0);
+    const fatura = estado.totalFatura;
+    const racio = fatura ? fatura / totalMesa : null;
+    const diff = fatura ? fatura - totalMesa : null;
+    const pct = racio ? ((racio - 1) * 100).toFixed(1) : null;
+    const sinal = (diff >= 0) ? '+' : '';
+    const corAjuste = (diff >= 0) ? '#e74c3c' : '#27ae60';
+
+    const setPessoas = new Set();
+    estado.ordens.forEach(o => o.amigos.forEach(a => setPessoas.add(a)));
+    const contaPorPessoa = {};
+    setPessoas.forEach(p => contaPorPessoa[p] = 0);
+    estado.ordens.forEach(o => {
+        const share = o.precoTotal / o.amigos.length;
+        o.amigos.forEach(a => contaPorPessoa[a] += share);
+    });
+
+    const saldoOfertas = calcularSaldoOfertas();
+    const todasPessoas = new Set([...setPessoas]);
+    estado.ofertas.forEach(o => { todasPessoas.add(o.quem); o.para.forEach(p => todasPessoas.add(p)); });
+    const pessoasFinais = Array.from(todasPessoas).sort();
+    const hasOfertas = estado.ofertas.length > 0;
+
+    const linhasOfertas = estado.ofertas.length === 0 ? '' :
+        estado.ofertas.map((o, i) => `
+            <tr style="background:${i % 2 === 0 ? '#fff' : '#f9f9f9'}">
+                <td style="padding:8px 10px;font-size:12px;color:#777;">${o.hora || '—'}</td>
+                <td style="padding:8px 10px;font-weight:600;color:#f39c12;">🎁 ${o.quem}</td>
+                <td style="padding:8px 10px;">${o.quantidade}x ${o.item} → ${o.para.join(', ')}</td>
+                <td style="padding:8px 10px;text-align:right;font-weight:700;color:#f39c12;">€${o.precoTotal.toFixed(2)}</td>
+            </tr>`).join('');
+
+    const cols = racio ? 4 : (hasOfertas ? 3 : 2);
+    const cabPessoas = `<tr style="background:#2c3e50;color:white;">
+        <th style="padding:10px 14px;text-align:left;">Pessoa</th>
+        <th style="padding:10px 14px;text-align:right;">Ordens</th>
+        ${hasOfertas ? '<th style="padding:10px 14px;text-align:right;">Ofertas</th>' : ''}
+        ${racio ? '<th style="padding:10px 14px;text-align:right;">Total final</th>' : ''}
+    </tr>`;
+
+    const linhasPessoas = pessoasFinais.length === 0
+        ? `<tr><td colspan="${cols}" style="text-align:center;color:#999;padding:20px;">Sem dados.</td></tr>`
+        : pessoasFinais.map((p, i) => {
+            const base = contaPorPessoa[p] || 0;
+            const delta = saldoOfertas[p] || 0;
+            const total = base + delta;
+            const ajustado = racio ? total * racio : null;
+            const deltaStr = delta !== 0 ? `<span style="color:#f39c12;font-size:12px;">${delta>0?'+':''}€${delta.toFixed(2)}</span>` : '<span style="color:#ccc;">—</span>';
+            const consumos = {};
+            estado.ordens.forEach(o => {
+                if (o.amigos.includes(p)) {
+                    const share = o.quantidade / o.amigos.length;
+                    consumos[o.item] = (consumos[o.item] || 0) + share;
+                }
+            });
+            const consumoStr = Object.keys(consumos).sort().map(item => {
+                const qtd = consumos[item];
+                return `${Number.isInteger(qtd) ? qtd : qtd.toFixed(1)}× ${item}`;
+            }).join(', ');
+            return `<tr style="background:${i % 2 === 0 ? '#fff' : '#f9f9f9'}">
+                <td style="padding:10px 14px;">
+                    <div style="font-weight:600;font-size:14px;">${p}</div>
+                    ${consumoStr ? `<div style="font-size:11px;color:#666;margin-top:3px;">${consumoStr}</div>` : ''}
+                </td>
+                <td style="padding:10px 14px;text-align:right;vertical-align:top;${(hasOfertas||racio)?'color:#aaa;font-size:13px;':'font-weight:800;color:#27ae60;font-size:15px;'}">€${base.toFixed(2)}</td>
+                ${hasOfertas ? `<td style="padding:10px 14px;text-align:right;vertical-align:top;">${deltaStr}</td>` : ''}
+                ${racio ? `<td style="padding:10px 14px;text-align:right;vertical-align:top;font-weight:800;font-size:15px;color:#f39c12;">€${ajustado.toFixed(2)}</td>` : (hasOfertas ? `<td style="padding:10px 14px;text-align:right;vertical-align:top;font-weight:800;color:#27ae60;font-size:15px;">€${total.toFixed(2)}</td>` : '')}
+            </tr>`;
+        }).join('');
+
+    const html = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:680px;margin:0 auto;padding:30px;">
+        ${pdfCabecalho(totalMesa, fatura, racio, diff, pct, sinal, corAjuste)}
+        ${estado.ofertas.length > 0 ? `
+        <div style="font-size:12px;font-weight:700;color:#2c3e50;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">🎁 Ofertas</div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);margin-bottom:24px;">
+            <thead><tr style="background:#f39c12;color:white;">
+                <th style="padding:9px 10px;text-align:left;">Hora</th>
+                <th style="padding:9px 10px;text-align:left;">Quem</th>
+                <th style="padding:9px 10px;text-align:left;">Oferta</th>
+                <th style="padding:9px 10px;text-align:right;">Valor</th>
+            </tr></thead>
+            <tbody>${linhasOfertas}</tbody>
+        </table>` : ''}
+        <div style="font-size:12px;font-weight:700;color:#2c3e50;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">💸 Conta por pessoa</div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+            <thead>${cabPessoas}</thead>
+            <tbody>${linhasPessoas}</tbody>
+        </table>
+    </div>`;
+
+    abrirJanelaPDF(html, 'divisao_contas.pdf');
+}
+
+
+function atualizarAjuste() {
+    const fatura = parseFloat(document.getElementById('total-fatura').value);
+    const totalMesa = estado.ordens.reduce((sum, o) => sum + o.precoTotal, 0);
+    const infoDiv = document.getElementById('ajuste-info');
+    const racioDiv = document.getElementById('ajuste-racio');
+    const ajusteDiv = document.getElementById('conta-pessoas-ajustada');
+
+    const faturaAnterior = estado.totalFatura;
+    estado.totalFatura = (fatura && fatura > 0) ? fatura : null;
+    salvarNoLocalStorage();
+
+    if (estado.totalFatura && !faturaAnterior) {
+        modoReadOnly = true;
+        atualizarUI();
+    } else if (!estado.totalFatura && faturaAnterior) {
+        modoReadOnly = false;
+        atualizarUI();
+    }
+
+    if (!fatura || fatura <= 0 || totalMesa === 0) {
+        infoDiv.style.display = 'none';
+        return;
+    }
+
+    infoDiv.style.display = 'block';
+
+    const racio = fatura / totalMesa;
+    const diff = fatura - totalMesa;
+    const pct = ((racio - 1) * 100).toFixed(1);
+    const sinal = diff >= 0 ? '+' : '';
+    const cor = diff >= 0 ? '#e74c3c' : '#27ae60';
+
+    racioDiv.innerHTML = `Fatura: <strong>€${fatura.toFixed(2)}</strong> · Calculado: <strong>€${totalMesa.toFixed(2)}</strong> · Ajuste: <strong style="color:${cor}">${sinal}${pct}%</strong>`;
+
+    const setPessoas = new Set();
+    estado.ordens.forEach(o => o.amigos.forEach(a => setPessoas.add(a)));
+    estado.ofertas.forEach(o => {
+        setPessoas.add(o.quem);
+        o.para.forEach(p => setPessoas.add(p));
+    });
+
+    const contaPorPessoa = {};
+    setPessoas.forEach(p => contaPorPessoa[p] = 0);
+
+    estado.ordens.forEach(ordem => {
+        const share = ordem.precoTotal / ordem.amigos.length;
+        ordem.amigos.forEach(a => contaPorPessoa[a] += share);
+    });
+
+    const saldoOfertas = calcularSaldoOfertas();
+
+    const pessoas = Array.from(setPessoas).sort();
+
+    ajusteDiv.innerHTML = pessoas.map(p => {
+        const base = contaPorPessoa[p] || 0;
+        const delta = saldoOfertas[p] || 0;
+        const total = base + delta;
+        const ajustado = total * racio;
+
+        return `
+        <div class="pessoa-ajuste">
+            <span class="pessoa-nome">${p}</span>
+            <span class="valor-original">€${total.toFixed(2)}</span>
+            <span class="valor-ajustado">€${ajustado.toFixed(2)}</span>
+        </div>
+        `;
+    }).join('');
+}
+
+
+
+
+function atualizarReadOnly() {
+    const banner = document.getElementById('readonly-banner');
+    const sections = ['section-adicionar', 'section-ofertas', 'section-config'];
+
+    if (modoReadOnly) {
+        banner.style.display = 'flex';
+        sections.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('readonly-overlay');
+        });
+        // Disable inputs and buttons in those sections
+        sections.forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.querySelectorAll('button, input, select').forEach(el => el.disabled = true);
+        });
+        // Also disable descricao and fatura inputs
+        document.getElementById('descricao-evento').disabled = true;
+        document.getElementById('total-fatura').disabled = true;
+    } else {
+        banner.style.display = 'none';
+        sections.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.classList.remove('readonly-overlay');
+                el.querySelectorAll('button, input, select').forEach(el => el.disabled = false);
+            }
+        });
+        document.getElementById('descricao-evento').disabled = false;
+        document.getElementById('total-fatura').disabled = false;
+    }
+}
+
+function desbloquearEvento() {
+    if (!confirm('Desbloquear este evento para edição? Alterações serão gravadas no histórico ao guardar.')) return;
+    modoReadOnly = false;
+    atualizarUI();
+    mostrarMensagem('🔓 Evento desbloqueado para edição', true);
+}
+
+// ── EDIT ORDEM INLINE ──────────────────────────────────────────────────────
+function toggleEditOrdem(id) {
+    const ordemDiv = document.getElementById('ordem-' + id);
+    const existing = ordemDiv.querySelector('.ordem-edit-panel');
+    if (existing) { existing.remove(); return; }
+
+    const ordem = estado.ordens.find(o => o.id === id);
+    if (!ordem) return;
+
+    const panel = document.createElement('div');
+    panel.className = 'ordem-edit-panel';
+    panel.style.width = '100%';
+
+    // Item select
+    const selItem = document.createElement('select');
+    selItem.style.width = '100%';
+    selItem.innerHTML = Object.keys(menu).sort().map(k =>
+        `<option value="${k}" ${k === ordem.item ? 'selected' : ''}>${k} (€${menu[k].toFixed(2)})</option>`
+    ).join('');
+    panel.appendChild(selItem);
+
+    // Qtd select
+    const selQtd = document.createElement('select');
+    selQtd.style.width = '80px';
+    for (let i = 1; i <= 10; i++) {
+        const opt = document.createElement('option');
+        opt.value = i; opt.textContent = i;
+        if (i === ordem.quantidade) opt.selected = true;
+        selQtd.appendChild(opt);
+    }
+    panel.appendChild(selQtd);
+
+    // Amigos grid
+    const label = document.createElement('div');
+    label.textContent = 'Quem comeu/bebeu?';
+    label.style.cssText = 'font-size:12px;color:#7f8c8d;margin:8px 0 4px;';
+    panel.appendChild(label);
+
+    const grid = document.createElement('div');
+    grid.className = 'amigos-grid';
+    const selAmigos = new Set(ordem.amigos);
+    amigos.forEach(a => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'amigo-btn' + (selAmigos.has(a) ? ' selected' : '');
+        btn.textContent = a;
+        btn.onclick = (e) => {
+            e.preventDefault();
+            btn.classList.toggle('selected');
+            selAmigos.has(a) ? selAmigos.delete(a) : selAmigos.add(a);
+        };
+        grid.appendChild(btn);
+    });
+    panel.appendChild(grid);
+
+    // Action buttons
+    const actions = document.createElement('div');
+    actions.className = 'ordem-edit-actions';
+
+    const btnGuardar = document.createElement('button');
+    btnGuardar.textContent = '✓ Guardar';
+    btnGuardar.onclick = () => {
+        if (selAmigos.size === 0) { alert('Seleciona pelo menos um amigo'); return; }
+        const idx = estado.ordens.findIndex(o => o.id === id);
+        const novoItem = selItem.value;
+        const novaQtd = parseInt(selQtd.value);
+        estado.ordens[idx] = {
+            ...estado.ordens[idx],
+            item: novoItem,
+            quantidade: novaQtd,
+            precoUnitario: menu[novoItem],
+            precoTotal: menu[novoItem] * novaQtd,
+            amigos: Array.from(selAmigos)
+        };
+        salvarNoLocalStorage();
+        atualizarUI();
+        mostrarMensagem('✓ Ordem atualizada!', true);
+    };
+
+    const btnCancelar = document.createElement('button');
+    btnCancelar.textContent = '✕ Cancelar';
+    btnCancelar.className = 'secondary';
+    btnCancelar.onclick = () => panel.remove();
+
+    actions.appendChild(btnGuardar);
+    actions.appendChild(btnCancelar);
+    panel.appendChild(actions);
+
+    ordemDiv.appendChild(panel);
+}
+
+// ── CONFIGS ────────────────────────────────────────────────────────────────
+function toggleConfig() {
+    const body = document.getElementById('config-body');
+    const arrow = document.getElementById('config-arrow');
+    const visible = body.style.display !== 'none';
+    body.style.display = visible ? 'none' : 'block';
+    arrow.textContent = visible ? '▼' : '▲';
+}
+
+function carregarConfigs() {
+    const savedAmigos = localStorage.getItem('config_amigos');
+    const savedMenu = localStorage.getItem('config_menu');
+    if (savedAmigos) amigos = JSON.parse(savedAmigos);
+    if (savedMenu) menu = JSON.parse(savedMenu);
+}
+
+function guardarConfigs() {
+    localStorage.setItem('config_amigos', JSON.stringify(amigos));
+    localStorage.setItem('config_menu', JSON.stringify(menu));
+}
+
+function limparConfigs() {
+    if (!confirm('Limpar todos os amigos e itens do menu?')) return;
+    amigos = [];
+    menu = {};
+    guardarConfigs();
+    renderConfigAmigos();
+    renderConfigMenu();
+    renderDropdownItens();
+    renderAmigosBotoes();
+    renderOfertaDropdowns();
+    renderOfertaAmigos();
+    mostrarMensagem('✓ Configurações limpas', true);
+}
+
+function renderConfigAmigos() {
+    const div = document.getElementById('config-amigos-lista');
+    const emUso = new Set();
+    estado.ordens.forEach(o => o.amigos.forEach(a => emUso.add(a)));
+    estado.ofertas.forEach(o => { emUso.add(o.quem); o.para.forEach(a => emUso.add(a)); });
+
+    div.innerHTML = amigos.map((a, i) => {
+        const usado = emUso.has(a);
+        const editId = `edit-amigo-${i}`;
+        return `
+        <div class="config-item" id="cfg-amigo-${i}">
+            <span>${a}</span>
+            <button class="secondary" style="padding:4px 8px;font-size:12px;" onclick="toggleEditAmigo(${i})">✏️</button>
+            ${usado ? '' : `<button class="danger" style="padding:4px 8px;font-size:12px;" onclick="removerAmigo(${i})">×</button>`}
+        </div>
+        <div class="config-edit-row" id="${editId}" style="display:none;">
+            <input type="text" id="edit-amigo-val-${i}" value="${a}" style="flex:1;">
+            <button onclick="guardarEdicaoAmigo(${i})">✓</button>
+            <button class="secondary" onclick="toggleEditAmigo(${i})">✕</button>
+        </div>`;
+    }).join('');
+}
+
+function toggleEditAmigo(i) {
+    const row = document.getElementById(`edit-amigo-${i}`);
+    row.style.display = row.style.display === 'none' ? 'flex' : 'none';
+}
+
+function guardarEdicaoAmigo(i) {
+    const novoNome = document.getElementById(`edit-amigo-val-${i}`).value.trim();
+    if (!novoNome) return;
+    const nomeAntigo = amigos[i];
+    if (novoNome === nomeAntigo) { toggleEditAmigo(i); return; }
+    if (amigos.includes(novoNome)) { alert('Já existe um amigo com esse nome'); return; }
+    // Cascade update ordens e ofertas
+    estado.ordens.forEach(o => {
+        o.amigos = o.amigos.map(a => a === nomeAntigo ? novoNome : a);
+    });
+    estado.ofertas.forEach(o => {
+        if (o.quem === nomeAntigo) o.quem = novoNome;
+        o.para = o.para.map(a => a === nomeAntigo ? novoNome : a);
+    });
+    amigos[i] = novoNome;
+    guardarConfigs();
+    salvarNoLocalStorage();
+    renderConfigAmigos();
+    renderAmigosBotoes();
+    renderOfertaDropdowns();
+    renderOfertaAmigos();
+    atualizarUI();
+    mostrarMensagem(`✓ "${nomeAntigo}" renomeado para "${novoNome}"`, true);
+}
+
+function adicionarAmigo() {
+    const input = document.getElementById('novo-amigo');
+    const nome = input.value.trim();
+    if (!nome) return;
+    if (amigos.includes(nome)) { alert('Amigo já existe'); return; }
+    amigos.push(nome);
+    guardarConfigs();
+    renderConfigAmigos();
+    renderAmigosBotoes();
+    renderOfertaDropdowns();
+    renderOfertaAmigos();
+    input.value = '';
+}
+
+function removerAmigo(idx) {
+    if (!confirm(`Remover "${amigos[idx]}"?`)) return;
+    amigos.splice(idx, 1);
+    guardarConfigs();
+    renderConfigAmigos();
+    renderAmigosBotoes();
+    renderOfertaDropdowns();
+    renderOfertaAmigos();
+}
+
+function renderConfigMenu() {
+    const div = document.getElementById('config-menu-lista');
+    const itensEmUso = new Set(estado.ordens.map(o => o.item));
+
+    div.innerHTML = Object.keys(menu).sort().map((item, i) => {
+        const usado = itensEmUso.has(item);
+        const safeVal = item.replace(/"/g, '&quot;');
+        return `
+        <div class="config-item" id="cfg-menu-${i}">
+            <span>${item}</span>
+            <span class="preco-tag">€${menu[item].toFixed(2)}</span>
+            <button class="secondary" style="padding:4px 8px;font-size:12px;" onclick="toggleEditMenu(${i})">✏️</button>
+            ${usado ? '' : `<button class="danger" style="padding:4px 8px;font-size:12px;" onclick="removerItemMenu(${i})">×</button>`}
+        </div>
+        <div class="config-edit-row" id="edit-menu-${i}" style="display:none;">
+            <input type="text" id="edit-menu-nome-${i}" value="${safeVal}" style="flex:2;">
+            <input type="number" id="edit-menu-preco-${i}" value="${menu[item].toFixed(2)}" min="0" step="0.10" style="flex:1;min-width:55px;">
+            <button onclick="guardarEdicaoMenu(${i})">✓</button>
+            <button class="secondary" onclick="toggleEditMenu(${i})">✕</button>
+        </div>`;
+    }).join('');
+}
+
+function toggleEditMenu(i) {
+    const row = document.getElementById('edit-menu-' + i);
+    row.style.display = row.style.display === 'none' ? 'flex' : 'none';
+}
+
+function guardarEdicaoMenu(i) {
+    const nomeAntigo = Object.keys(menu).sort()[i];
+    const novoNome = document.getElementById('edit-menu-nome-' + i).value.trim();
+    const novoPreco = parseFloat(document.getElementById('edit-menu-preco-' + i).value);
+    if (!novoNome) { alert('Nome não pode estar vazio'); return; }
+    if (isNaN(novoPreco) || novoPreco <= 0) { alert('Preço inválido'); return; }
+    estado.ordens.forEach(o => {
+        if (o.item === nomeAntigo) {
+            o.item = novoNome;
+            o.precoUnitario = novoPreco;
+            o.precoTotal = novoPreco * o.quantidade;
+        }
+    });
+    estado.ofertas.forEach(o => {
+        if (o.item === nomeAntigo) {
+            o.item = novoNome;
+            o.precoUnitario = novoPreco;
+            o.precoTotal = novoPreco * o.quantidade;
+        }
+    });
+    delete menu[nomeAntigo];
+    menu[novoNome] = novoPreco;
+    guardarConfigs();
+    salvarNoLocalStorage();
+    renderConfigMenu();
+    renderDropdownItens();
+    renderOfertaDropdowns();
+    atualizarUI();
+    mostrarMensagem('✓ Menu atualizado', true);
+}
+
+function removerItemMenu(i) {
+    const nome = Object.keys(menu).sort()[i];
+    if (!confirm('Remover "' + nome + '" do menu?')) return;
+    delete menu[nome];
+    guardarConfigs();
+    renderConfigMenu();
+    renderDropdownItens();
+    renderOfertaDropdowns();
+}
+
+function adicionarItemMenu() {
+    const nome = document.getElementById('novo-item-nome').value.trim();
+    const preco = parseFloat(document.getElementById('novo-item-preco').value);
+    if (!nome) { alert('Insere o nome do item'); return; }
+    if (isNaN(preco) || preco <= 0) { alert('Insere um preço válido'); return; }
+    menu[nome] = preco;
+    guardarConfigs();
+    renderConfigMenu();
+    renderDropdownItens();
+    renderOfertaDropdowns();
+    document.getElementById('novo-item-nome').value = '';
+    document.getElementById('novo-item-preco').value = '';
+}
+
+
+
+
+function importarExcel() {
+    const input = document.getElementById('input-xlsx');
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const wb = XLSX.read(e.target.result, {type: 'array'});
+
+            // Sheet "Amigos" — column A
+            const wsAmigos = wb.Sheets['Amigos'];
+            if (wsAmigos) {
+                const rows = XLSX.utils.sheet_to_json(wsAmigos, {header:1});
+                amigos = rows.slice(1).map(r => r[0]).filter(v => v && String(v).trim());
+            }
+
+            // Sheet "Menu" — column A nome, column B preço
+            const wsMenu = wb.Sheets['Menu'];
+            if (wsMenu) {
+                const rows = XLSX.utils.sheet_to_json(wsMenu, {header:1});
+                menu = {};
+                rows.slice(1).forEach(r => {
+                    const nome = r[0] ? String(r[0]).trim() : null;
+                    const preco = parseFloat(r[1]);
+                    if (nome && !isNaN(preco) && preco > 0) menu[nome] = preco;
+                });
+            }
+
+            guardarConfigs();
+            renderConfigAmigos();
+            renderConfigMenu();
+            renderDropdownItens();
+            renderAmigosBotoes();
+            renderOfertaDropdowns();
+            renderOfertaAmigos();
+            mostrarMensagem('✓ ' + amigos.length + ' amigos e ' + Object.keys(menu).length + ' itens importados', true);
+        } catch(err) {
+            mostrarMensagem('❌ Erro ao importar Excel', false);
+            console.error(err);
+        }
+    };
+    reader.readAsArrayBuffer(file);
+    input.value = '';
+}
+
+function toggleAjuda() {
+    const body = document.getElementById('ajuda-body');
+    const arrow = document.getElementById('ajuda-arrow');
+    const visible = body.style.display !== 'none';
+    body.style.display = visible ? 'none' : 'block';
+    arrow.textContent = visible ? '▼' : '▲';
+}
+
+// Iniciar na página (compatível com todos os browsers)
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+</script>
+
+</body>
+</html>
