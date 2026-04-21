@@ -1453,7 +1453,7 @@ function exportarPDFDivisao() {
         <th style="padding:10px 14px;text-align:left;">Pessoa</th>
         <th style="padding:10px 14px;text-align:right;">Ordens</th>
         ${hasOfertas ? '<th style="padding:10px 14px;text-align:right;">Ofertas</th>' : ''}
-        ${racio ? '<th style="padding:10px 14px;text-align:right;">Total final</th>' : ''}
+        ${racio ? '<th style="padding:10px 14px;text-align:right;">Total final</th>' : (hasOfertas ? '<th style="padding:10px 14px;text-align:right;">Total após ofertas</th>' : '')}
     </tr>`;
 
     const linhasPessoas = pessoasFinais.length === 0
@@ -1516,17 +1516,7 @@ function atualizarAjuste() {
     const racioDiv = document.getElementById('ajuste-racio');
     const ajusteDiv = document.getElementById('conta-pessoas-ajustada');
 
-    const faturaAnterior = estado.totalFatura;
-    estado.totalFatura = (fatura && fatura > 0) ? fatura : null;
-    salvarNoLocalStorage();
-    // Auto lock/unlock based on fatura
-    if (estado.totalFatura && !faturaAnterior) {
-        modoReadOnly = true;
-        atualizarUI();
-    } else if (!estado.totalFatura && faturaAnterior) {
-        modoReadOnly = false;
-        atualizarUI();
-    }
+    // Não bloquear o campo automaticamente!
     if (!fatura || fatura <= 0 || totalMesa === 0) {
         infoDiv.style.display = 'none';
         return;
@@ -1599,11 +1589,15 @@ function atualizarReadOnly() {
         sections.forEach(id => {
             const el = document.getElementById(id);
             if (!el) return;
-            el.querySelectorAll('button, input, select').forEach(el => el.disabled = true);
+            el.querySelectorAll('button, input, select').forEach(el => {
+                // Não bloquear o campo da fatura
+                if (el.id !== 'total-fatura') el.disabled = true;
+            });
         });
-        // Also disable descricao and fatura inputs
+        // Also disable descricao input
         document.getElementById('descricao-evento').disabled = true;
-        document.getElementById('total-fatura').disabled = true;
+        // NÃO bloquear o campo da fatura
+        // document.getElementById('total-fatura').disabled = true;
     } else {
         banner.style.display = 'none';
         sections.forEach(id => {
@@ -1758,13 +1752,14 @@ function renderConfigAmigos() {
     estado.ofertas.forEach(o => { emUso.add(o.quem); o.para.forEach(a => emUso.add(a)); });
 
     div.innerHTML = amigos.map((a, i) => {
+        // Corrigir: só mostrar botão eliminar se NÃO estiver em uso
         const usado = emUso.has(a);
         const editId = `edit-amigo-${i}`;
         return `
         <div class="config-item" id="cfg-amigo-${i}">
             <span>${a}</span>
             <button class="secondary" style="padding:4px 8px;font-size:12px;" onclick="toggleEditAmigo(${i})">✏️</button>
-            ${usado ? '' : `<button class="danger" style="padding:4px 8px;font-size:12px;" onclick="removerAmigo(${i})">×</button>`}
+            ${!usado ? `<button class="danger" style="padding:4px 8px;font-size:12px;" onclick="removerAmigo(${i})">×</button>` : ''}
         </div>
         <div class="config-edit-row" id="${editId}" style="display:none;">
             <input type="text" id="edit-amigo-val-${i}" value="${a}" style="flex:1;">
@@ -1833,6 +1828,7 @@ function renderConfigMenu() {
     const itensEmUso = new Set(estado.ordens.map(o => o.item));
 
     div.innerHTML = Object.keys(menu).sort().map((item, i) => {
+        // Corrigir: só mostrar botão eliminar se NÃO estiver em uso
         const usado = itensEmUso.has(item);
         const safeVal = item.replace(/"/g, '&quot;');
         return `
@@ -1840,7 +1836,7 @@ function renderConfigMenu() {
             <span>${item}</span>
             <span class="preco-tag">€${menu[item].toFixed(2)}</span>
             <button class="secondary" style="padding:4px 8px;font-size:12px;" onclick="toggleEditMenu(${i})">✏️</button>
-            ${usado ? '' : `<button class="danger" style="padding:4px 8px;font-size:12px;" onclick="removerItemMenu(${i})">×</button>`}
+            ${!usado ? `<button class="danger" style="padding:4px 8px;font-size:12px;" onclick="removerItemMenu(${i})">×</button>` : ''}
         </div>
         <div class="config-edit-row" id="edit-menu-${i}" style="display:none;">
             <input type="text" id="edit-menu-nome-${i}" value="${safeVal}" style="flex:2;">
@@ -1975,5 +1971,37 @@ if (document.readyState === 'loading') {
 }
 </script>
 
+</body>
+<script>
+// Apagar evento selecionado
+function apagarEventoAtual() {
+    if (!eventoAtualId) { mostrarMensagem('Nenhum evento selecionado.', false); return; }
+    if (!confirm('Eliminar este evento do histórico?')) return;
+    historico = historico.filter(ev => ev.id !== eventoAtualId);
+    salvarHistoricoLocal();
+    renderHistoricoDropdown();
+    // Selecionar evento mais recente aberto, ou último fechado
+    if (historico.length > 0) {
+        const ultimo = historico[historico.length - 1];
+        navegarHistorico(ultimo.id);
+    } else {
+        novoEvento();
+    }
+    mostrarMensagem('Evento eliminado!', true);
+}
+// Adiciona botão de apagar evento na interface principal
+setTimeout(() => {
+    const botoesDiv = document.querySelector('.botoes-dados');
+    if (botoesDiv && !document.getElementById('btn-apagar-evento')) {
+        const btn = document.createElement('button');
+        btn.id = 'btn-apagar-evento';
+        btn.textContent = '🗑️ Apagar Evento';
+        btn.className = 'danger';
+        btn.style.marginLeft = '8px';
+        btn.onclick = apagarEventoAtual;
+        botoesDiv.appendChild(btn);
+    }
+}, 0);
+</script>
 </body>
 </html>
