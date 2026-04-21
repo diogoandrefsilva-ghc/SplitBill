@@ -668,9 +668,9 @@
         <button onclick="exportarPDFConta()">📋 PDF Conta</button>
         <button onclick="exportarPDFDivisao()">💸 PDF Divisão</button>
         <button onclick="guardarEvento()">💾 Guardar</button>
-        <button onclick="guardarEFechar()" style="background:#27ae60;">✅ Guardar e Fechar</button>
         <button class="secondary" onclick="document.getElementById('input-json').click()">📤 Importar JSON</button>
-        <button class="danger" onclick="limparTudo()">🗑️ Limpar Tudo</button>
+        <button id="btn-apagar-evento" class="danger" onclick="apagarEventoAtual()">🗑️ Apagar Evento</button>
+        <button class="danger" style="grid-column:1/-1;" onclick="limparTudo()">🗑️ Limpar Tudo</button>
     </div>
     <input type="file" id="input-json" accept=".json" style="display:none;" onchange="importarJSON()">
 </div>
@@ -1990,18 +1990,7 @@ function apagarEventoAtual() {
     mostrarMensagem('Evento eliminado!', true);
 }
 // Adiciona botão de apagar evento na interface principal
-setTimeout(() => {
-    const botoesDiv = document.querySelector('.botoes-dados');
-    if (botoesDiv && !document.getElementById('btn-apagar-evento')) {
-        const btn = document.createElement('button');
-        btn.id = 'btn-apagar-evento';
-        btn.textContent = '🗑️ Apagar Evento';
-        btn.className = 'danger';
-        btn.style.marginLeft = '8px';
-        btn.onclick = apagarEventoAtual;
-        botoesDiv.appendChild(btn);
-    }
-}, 0);
+    // Botão de apagar evento já está no HTML, não precisa ser criado dinamicamente
 </script>
 </body>
 </html>
