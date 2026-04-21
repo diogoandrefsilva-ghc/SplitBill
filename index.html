@@ -1290,6 +1290,9 @@ function limparTudo() {
         salvarNoLocalStorage();
         atualizarReadOnly();
         atualizarUI();
+        // Forçar reset dos botões de editar/eliminar nas configs
+        renderConfigAmigos();
+        renderConfigMenu();
         mostrarMensagem('✓ Tudo limpo', true);
     }
 }
@@ -1557,14 +1560,22 @@ function atualizarAjuste() {
     if (diff < 0) base = consumoLiquido;
     const totalBase = Object.values(base).reduce((a, b) => a + b, 0);
     const pessoas = Array.from(setPessoas).sort();
+    // Usar nomes atuais dos amigos se possível
+    const nomeAtual = (nomeAntigo => {
+        // Se o nomeAntigo existir em amigos, retorna ele mesmo, senão tenta mapear pelo índice
+        if (amigos.includes(nomeAntigo)) return nomeAntigo;
+        // fallback: retorna o nome original
+        return nomeAntigo;
+    });
     ajusteDiv.innerHTML = pessoas.map(p => {
+        const nome = nomeAtual(p);
         const original = consumoLiquido[p];
         const part = totalBase > 0 ? (base[p] / totalBase) : 0;
         const ajuste = part * diff;
         const ajustado = original + ajuste;
         return `
         <div class=\"pessoa-ajuste\">
-            <span class=\"pessoa-nome\">${p}</span>
+            <span class=\"pessoa-nome\">${nome}</span>
             <span class=\"valor-original\">€${original.toFixed(2)}</span>
             <span class=\"valor-ajustado\">€${ajustado.toFixed(2)}</span>
         </div>
