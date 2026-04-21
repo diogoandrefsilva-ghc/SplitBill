@@ -1500,7 +1500,7 @@ function atualizarReadOnly() {
 function desbloquearEvento() {
     if (!confirm('Desbloquear este evento para edição? Alterações serão gravadas no histórico ao guardar.')) return;
     modoReadOnly = false;
-    atualizarReadOnly();
+    atualizarUI();
     mostrarMensagem('🔓 Evento desbloqueado para edição', true);
 }
 
