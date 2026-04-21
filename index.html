@@ -598,9 +598,9 @@
         <label style="font-size: 13px; color: #7f8c8d; margin-bottom: 8px; display: block;">🧾 Ajuste pela fatura do restaurante:</label>
         <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px;">
             <input type="number" id="total-fatura" placeholder="Total da fatura (€)" min="0" step="0.01"
-                style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;"
-                oninput="atualizarAjuste()">
-            <button class="secondary" onclick="document.getElementById('total-fatura').value=''; atualizarAjuste();" style="padding: 10px 12px; font-size: 12px;">✕</button>
+                style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+            <button onclick="confirmarFatura()" style="padding: 10px 14px; font-size: 16px; background:#27ae60;">✓</button>
+            <button class="secondary" onclick="limparFatura()" style="padding: 10px 12px; font-size: 12px;">✕</button>
         </div>
         <div id="ajuste-info" style="display:none;">
             <div id="ajuste-racio" style="font-size: 13px; color: #555; margin-bottom: 8px;"></div>
@@ -630,7 +630,7 @@
         <div class="config-add-row">
             <input type="text" id="novo-item-nome" placeholder="Nome do item" style="flex:2;">
             <input type="number" id="novo-item-preco" placeholder="€" min="0" step="0.10" style="flex:1;min-width:60px;">
-            <button onclick="adicionarItemMenu()">+ Add</button>
+            <button onclick="adicionarItemMenu()">+ Adicionar</button>
         </div>
 
         <div class="config-add-row" style="margin-top:14px;">
@@ -667,10 +667,10 @@
     <div class="botoes-dados">
         <button onclick="exportarPDFConta()">📋 PDF Conta</button>
         <button onclick="exportarPDFDivisao()">💸 PDF Divisão</button>
+        <button class="secondary" onclick="document.getElementById('input-json').click()">📤 Importar</button>
         <button onclick="guardarEvento()">💾 Guardar</button>
-        <button class="secondary" onclick="document.getElementById('input-json').click()">📤 Importar JSON</button>
         <button id="btn-apagar-evento" class="danger" onclick="apagarEventoAtual()">🗑️ Apagar Evento</button>
-        <button class="danger" style="grid-column:1/-1;" onclick="limparTudo()">🗑️ Limpar Tudo</button>
+        <button class="danger" onclick="limparTudo()">🗑️ Limpar Tudo</button>
     </div>
     <input type="file" id="input-json" accept=".json" style="display:none;" onchange="importarJSON()">
 </div>
@@ -1181,11 +1181,33 @@ function novoEvento() {
     mostrarMensagem('✓ Novo evento criado', true);
 }
 
+function dataDoEvento() {
+    // Use hora da primeira ordem, senão now
+    if (estado.ordens.length > 0 && estado.ordens[0].hora) {
+        // hora format: "dd/mm hh:mi" — parse to Date
+        const h = estado.ordens[0].hora;
+        const match = h.match(/(\d{2})\/(\d{2})(?:,?\s*(\d{2}):(\d{2}))?/);
+        if (match) {
+            const year = new Date().getFullYear();
+            const d = new Date(year, parseInt(match[2])-1, parseInt(match[1]),
+                               parseInt(match[3]||0), parseInt(match[4]||0));
+            return d;
+        }
+    }
+    return new Date();
+}
+
 function snaphotEstado() {
+    const now = new Date();
+    const dataEvento = dataDoEvento();
+    const dataStr = dataEvento.toLocaleDateString('pt-PT', {day:'2-digit', month:'2-digit', year:'numeric'});
+    const horaStr = now.toLocaleTimeString('pt-PT', {hour:'2-digit', minute:'2-digit'});
+    const descricaoFinal = estado.descricaoEvento.trim() ||
+        ('Sem Descrição · ' + dataStr + ' ' + horaStr);
     return {
         id: eventoAtualId || Date.now(),
-        descricao: estado.descricaoEvento || 'Sem nome',
-        data: new Date().toLocaleDateString('pt-PT', {day:'2-digit', month:'2-digit', year:'numeric'}),
+        descricao: descricaoFinal,
+        data: dataStr,
         ordens: JSON.parse(JSON.stringify(estado.ordens)),
         ofertas: JSON.parse(JSON.stringify(estado.ofertas)),
         totalFatura: estado.totalFatura,
@@ -1309,7 +1331,7 @@ function pdfCabecalho(totalMesa, fatura, racio, diff, pct, sinal, corAjuste) {
         <div>
             <div style="font-size:22px;font-weight:700;">🍽️ Divisão de Contas</div>
             ${estado.descricaoEvento ? `<div style="font-size:15px;font-weight:600;margin-top:6px;opacity:0.9;">${estado.descricaoEvento}</div>` : ''}
-            <div style="font-size:13px;opacity:0.6;margin-top:4px;">${new Date().toLocaleDateString('pt-PT', {day:'2-digit',month:'long',year:'numeric'})}</div>
+            <div style="font-size:13px;opacity:0.6;margin-top:4px;">${dataDoEvento().toLocaleDateString('pt-PT', {day:'2-digit',month:'long',year:'numeric'})}</div>
         </div>
         <div style="text-align:right;">
             <div style="font-size:11px;opacity:0.6;margin-bottom:2px;">Total calculado</div>
@@ -1507,6 +1529,19 @@ function exportarPDFDivisao() {
     </div>`;
 
     abrirJanelaPDF(html, 'divisao_contas.pdf');
+}
+
+function confirmarFatura() {
+    atualizarAjuste();
+    if (estado.totalFatura) {
+        guardarEvento();
+        mostrarMensagem('✓ Fatura guardada', true);
+    }
+}
+
+function limparFatura() {
+    document.getElementById('total-fatura').value = '';
+    atualizarAjuste();
 }
 
 function atualizarAjuste() {
