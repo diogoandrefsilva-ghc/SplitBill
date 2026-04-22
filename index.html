@@ -530,7 +530,7 @@
         <select id="item" style="flex: 2;">
             <option value="">-- Seleciona um item --</option>
         </select>
-        <input type="number" id="quantidade" min="0" max="20" value="0" style="flex:1;max-width:80px;text-align:center;" oninput="atualizarBotaoOrdem()">
+        <select id="quantidade" style="flex:1;max-width:80px;" onchange="atualizarBotaoOrdem()"><option value="0" selected>0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>
     </div>
 
     <div>
@@ -561,7 +561,7 @@
         <select id="oferta-item" style="flex:2; min-width:120px;">
             <option value="">-- Item --</option>
         </select>
-        <input type="number" id="oferta-qtd" min="0" max="20" value="0" style="flex:0 0 70px;text-align:center;" oninput="atualizarBotaoOferta()">
+        <select id="oferta-qtd" style="flex:0 0 70px;" onchange="atualizarBotaoOferta()"><option value="0" selected>0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>
     </div>
 
     <div>
@@ -737,7 +737,7 @@ function init() {
     atualizarUI();
 
     document.getElementById('item').addEventListener('change', atualizarPreco);
-    document.getElementById('quantidade').addEventListener('input', atualizarPreco);
+    document.getElementById('quantidade').addEventListener('change', atualizarPreco);
 }
 
 function renderDropdownItens() {
@@ -987,6 +987,9 @@ function _atualizarUIInner() {
             </div>
         `).join('');
     }
+    // Re-render configs so delete buttons always reflect current orders
+    renderConfigAmigos();
+    renderConfigMenu();
 }
 
 
