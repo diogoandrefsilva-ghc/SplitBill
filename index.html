@@ -92,6 +92,14 @@
             background: #2980b9;
         }
 
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        button:disabled:hover {
+            background: #3498db;
+        }
+
         button.secondary {
             background: #95a5a6;
         }
@@ -522,7 +530,7 @@
         <select id="item" style="flex: 2;">
             <option value="">-- Seleciona um item --</option>
         </select>
-        <select id="quantidade" style="flex: 1; max-width: 80px;"><option value="1" selected>1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>
+        <input type="number" id="quantidade" min="0" max="20" value="0" style="flex:1;max-width:80px;text-align:center;" oninput="atualizarBotaoOrdem()">
     </div>
 
     <div>
@@ -530,7 +538,7 @@
         <div class="amigos-grid" id="amigos-grid"></div>
     </div>
 
-    <button onclick="adicionarOrdem()" style="width: 100%;">✓ Adicionar Ordem</button>
+    <button id="btn-adicionar-ordem" onclick="adicionarOrdem()" style="width: 100%;" disabled>✓ Adicionar Ordem</button>
     <div id="mensagem"></div>
 </div>
 
@@ -553,9 +561,7 @@
         <select id="oferta-item" style="flex:2; min-width:120px;">
             <option value="">-- Item --</option>
         </select>
-        <select id="oferta-qtd" style="flex:0 0 70px;">
-            <option value="1" selected>1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option>
-        </select>
+        <input type="number" id="oferta-qtd" min="0" max="20" value="0" style="flex:0 0 70px;text-align:center;" oninput="atualizarBotaoOferta()">
     </div>
 
     <div>
@@ -563,7 +569,7 @@
         <div class="amigos-grid" id="oferta-amigos-grid"></div>
     </div>
 
-    <button onclick="adicionarOferta()" style="width:100%; background:#f39c12;">🎁 Adicionar Oferta</button>
+    <button id="btn-adicionar-oferta" onclick="adicionarOferta()" style="width:100%; background:#f39c12;" disabled>🎁 Adicionar Oferta</button>
     <div id="mensagem-oferta" style="margin-top:8px;"></div>
 
     <div id="lista-ofertas" style="margin-top:12px;"></div>
@@ -731,7 +737,7 @@ function init() {
     atualizarUI();
 
     document.getElementById('item').addEventListener('change', atualizarPreco);
-    document.getElementById('quantidade').addEventListener('change', atualizarPreco);
+    document.getElementById('quantidade').addEventListener('input', atualizarPreco);
 }
 
 function renderDropdownItens() {
@@ -775,9 +781,28 @@ function renderAmigosBotoes() {
             } else {
                 estado.amigosSelecionados.delete(amigo);
             }
+            // Auto-update quantidade to match number of selected friends
+            const sel = document.getElementById('quantidade');
+            const n = estado.amigosSelecionados.size;
+            sel.value = Math.min(n, 20);
+            atualizarBotaoOrdem();
         };
         grid.appendChild(btn);
     });
+}
+
+function atualizarBotaoOrdem() {
+    const qtd = parseInt(document.getElementById('quantidade').value || 0);
+    const temAmigos = estado.amigosSelecionados.size > 0;
+    const btn = document.getElementById('btn-adicionar-ordem');
+    btn.disabled = qtd <= 0 || !temAmigos;
+}
+
+function atualizarBotaoOferta() {
+    const qtd = parseInt(document.getElementById('oferta-qtd').value || 0);
+    const temAmigos = estado.ofertaAmigos.size > 0;
+    const btn = document.getElementById('btn-adicionar-oferta');
+    btn.disabled = qtd <= 0 || !temAmigos;
 }
 
 function adicionarOrdem() {
@@ -818,7 +843,7 @@ function adicionarOrdem() {
 
     // Limpar formulário
     document.getElementById('item').value = '';
-    document.getElementById('quantidade').value = '1';
+    document.getElementById('quantidade').value = '0'; atualizarBotaoOrdem();
     document.querySelectorAll('.amigo-btn').forEach(btn => btn.classList.remove('selected'));
     estado.amigosSelecionados.clear();
     atualizarPreco();
@@ -1000,6 +1025,11 @@ function renderOfertaAmigos() {
             } else {
                 estado.ofertaAmigos.delete(amigo);
             }
+            // Auto-update quantidade to match number of selected friends
+            const sel = document.getElementById('oferta-qtd');
+            const n = estado.ofertaAmigos.size;
+            sel.value = Math.min(n, 20);
+            atualizarBotaoOferta();
         };
         grid.appendChild(btn);
     });
@@ -1034,7 +1064,7 @@ function adicionarOferta() {
     // reset
     document.getElementById('oferta-quem').value = '';
     document.getElementById('oferta-item').value = '';
-    document.getElementById('oferta-qtd').value = '1';
+    document.getElementById('oferta-qtd').value = '0'; atualizarBotaoOferta();
     document.querySelectorAll('#oferta-amigos-grid .amigo-btn').forEach(b => b.classList.remove('selected'));
     estado.ofertaAmigos.clear();
     mostrarMsgOferta('🎁 Oferta adicionada!', true);
