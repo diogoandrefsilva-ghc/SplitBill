@@ -481,6 +481,20 @@
             flex-shrink: 0;
             margin-left: 10px;
         }
+        .historico-card-del {
+            background: transparent;
+            border: none;
+            color: rgba(255,255,255,0.5);
+            font-size: 14px;
+            cursor: pointer;
+            padding: 4px 6px;
+            margin-left: 8px;
+            flex-shrink: 0;
+            border-radius: 6px;
+            line-height: 1;
+            transition: background 0.15s, color 0.15s;
+        }
+        .historico-card-del:active { background: rgba(231,76,60,0.25); color: #e74c3c; }
         .historico-empty {
             text-align: center;
             color: rgba(255,255,255,0.4);
@@ -1941,6 +1955,7 @@ function renderHistoricoDropdown() {
             <div class="historico-card${isAtual ? ' ativo' : ''}" onclick="${isAtual ? '' : 'navegarHistorico(' + ev.id + ')'}">
                 <div class="historico-card-nome">${ev.descricao || 'Sem nome'}${indicador}</div>
                 <span class="historico-card-data">${ev.data || '—'}</span>
+                <button class="historico-card-del" onclick="apagarEvento(${ev.id}, event)" title="Apagar evento">🗑️</button>
             </div>`;
     }).join('');
 }
@@ -2011,6 +2026,68 @@ async function navegarHistorico(id) {
     if (panel) { panel.classList.remove('open'); }
     if (arrow) { arrow.style.transform = ''; }
     mostrarMensagem('✓ Evento carregado: ' + (ev.descricao || 'Sem nome'), true);
+}
+
+async function apagarEvento(id, ev_) {
+    if (ev_ && ev_.stopPropagation) ev_.stopPropagation();
+    const ev = historico.find(e => e.id == id);
+    if (!ev) return;
+
+    const ok = await mostrarModal({
+        icon: '🗑️',
+        title: 'Apagar evento?',
+        msg: 'Vais apagar <strong>' + (ev.descricao || 'Sem nome') + '</strong> (' + (ev.data || '—') + ').<br><br>Esta ação não pode ser anulada e remove também os pagamentos associados a este evento.',
+        confirmText: 'Apagar',
+        cancelText: 'Cancelar',
+        danger: true
+    });
+    if (!ok) return;
+
+    // Remover o evento do histórico
+    historico = historico.filter(e => e.id != id);
+
+    // Remover pagamentos ligados a este evento
+    const antesPg = pagamentos.length;
+    pagamentos = pagamentos.filter(p => !(p.tipo === 'evento' && p.eventoId == id));
+
+    salvarHistoricoLocal();
+    if (pagamentos.length !== antesPg) salvarPagamentos();
+
+    // Se apaguei o evento que estava aberto, carregar outro ou limpar o estado
+    if (eventoAtualId == id) {
+        if (historico.length > 0) {
+            carregarEvento(historico[historico.length - 1]);
+        } else {
+            eventoAtualId = null;
+            estado.ordens = [];
+            estado.ofertas = [];
+            estado.totalFatura = null;
+            estado.descricaoEvento = '';
+            estado.pagador = '';
+            estado.dividas = {};
+            estado.amigosSelecionados.clear();
+            estado.ofertaAmigos.clear();
+            amigos = [];
+            menu = {};
+            modoReadOnly = false;
+            document.getElementById('descricao-evento').value = '';
+            document.getElementById('total-fatura').value = '';
+        }
+        atualizarReadOnly();
+    }
+
+    renderConfigAmigos();
+    renderConfigMenu();
+    renderDropdownItens();
+    renderAmigosBotoes();
+    renderOfertaDropdowns();
+    renderOfertaAmigos();
+    renderPagadorSelect();
+    atualizarUI();
+    renderHistoricoDropdown();
+    renderContas();
+    ghScheduleAutoSave();
+    mostrarMensagem('🗑️ Evento apagado', true);
 }
 
 async function novoEvento() {
