@@ -1296,7 +1296,7 @@
           </div>
           <div>
             <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:3px">Caminho do ficheiro</label>
-            <input type="text" id="gh-path" placeholder="data.json" value="data.json" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:5px;font-size:13px">
+            <input type="text" id="gh-path" placeholder="splitbill-data.json" value="splitbill-data.json" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:5px;font-size:13px">
           </div>
           <div>
             <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:3px">Branch</label>
@@ -3854,7 +3854,7 @@ function toggleAjuda() {
 
 /* ── GITHUB SYNC ───────────────────────────── */
 const GH_KEY = 'splitbill_github_cfg';
-const GH_DEFAULTS = {owner: 'diogoandrefsilva-ghc', repo: 'SplitBill', path: 'data.json', branch: 'main'};
+const GH_DEFAULTS = {owner: 'diogoandrefsilva-ghc', repo: 'AppDataJSON', path: 'splitbill-data.json', branch: 'main'};
 
 function ghLoadCfg() {
     document.getElementById('gh-owner').value = GH_DEFAULTS.owner;
@@ -3867,8 +3867,7 @@ function ghLoadCfg() {
         const c = JSON.parse(s);
         if (c.token) document.getElementById('gh-token').value = c.token;
         if (c.owner) document.getElementById('gh-owner').value = c.owner;
-        if (c.repo) document.getElementById('gh-repo').value = c.repo;
-        if (c.path) document.getElementById('gh-path').value = c.path;
+        // repo/path fixos no repositório de dados — ignorar valores antigos guardados em localStorage
         if (c.branch) document.getElementById('gh-branch').value = c.branch;
     } catch(e) {}
 }
