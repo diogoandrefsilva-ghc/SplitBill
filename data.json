@@ -3349,6 +3349,64 @@
           "valor": 9.48
         }
       }
+    },
+    {
+      "id": 1780489841390,
+      "descricao": "",
+      "data": "03/06/2026",
+      "ordens": [
+        {
+          "id": 1780489847159,
+          "item": "Bitoque",
+          "quantidade": 3,
+          "precoUnitario": 13.9,
+          "precoTotal": 41.7,
+          "amigos": [
+            "Diogo",
+            "Barrona",
+            "Mestre"
+          ],
+          "hora": "03/06, 13:30"
+        }
+      ],
+      "ofertas": [],
+      "totalFatura": null,
+      "pagador": "",
+      "dividas": {},
+      "amigos": [
+        "Diogo",
+        "Barrona",
+        "Mestre",
+        "João Hélder",
+        "Rogélio",
+        "João Paulo",
+        "Luís Pedro",
+        "Filipe",
+        "Samuel",
+        "João Matias"
+      ],
+      "menu": {
+        "Bandida": 3.5,
+        "Batatas": 3,
+        "Bifana": 4.5,
+        "Bitoque": 13.9,
+        "Café": 0.9,
+        "Caneca": 3.5,
+        "Chamuça": 2,
+        "Coca-Cola": 1.8,
+        "Copo Reutilizável": 1,
+        "Costeletão": 17.9,
+        "Croquete": 2,
+        "Imperial": 1.5,
+        "Lagartinhos": 12.9,
+        "Ovo Extra": 1.5,
+        "Ovos Rotos": 11.9,
+        "Panaché": 2,
+        "Pão": 1.5,
+        "Pica-pau Vazia": 12.9,
+        "Prego": 6.9,
+        "Queijo": 4.5
+      }
     }
   ],
   "pagamentos": [
