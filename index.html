@@ -3910,34 +3910,55 @@ function toggleGhSection() {
     arrow.style.transform = open ? 'rotate(90deg)' : 'rotate(0deg)';
 }
 
-async function ghPush() {
+let _ghPushRunning = false, _ghPushQueued = false;
+async function ghPush(silent) {
     const {token, owner, repo, path, branch} = ghGetCfg();
-    if (!token || !owner || !repo) { mostrarMensagem('Preenche Token, Utilizador e Repositório!', false); return; }
-    ghStatus('A guardar no GitHub…');
+    if (!token || !owner || !repo) { if (!silent) mostrarMensagem('Preenche Token, Utilizador e Repositório!', false); return; }
+    // Serializar: se já há uma gravação a decorrer, marcar para repetir no fim (evita corrida entre botão e auto-save)
+    if (_ghPushRunning) { _ghPushQueued = true; return; }
+    _ghPushRunning = true;
+    if (!silent) ghStatus('A guardar no GitHub…');
     try {
-        const content = btoa(unescape(encodeURIComponent(JSON.stringify({historico, pagamentos}, null, 2))));
-        let sha = null;
-        const check = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`, {
-            headers: {'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json'}
-        });
-        if (check.ok) { const j = await check.json(); sha = j.sha; }
-        else if (check.status !== 404) { throw new Error(`Erro ao verificar ficheiro: ${check.status}`); }
+        let lastErr = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+            // Ler o sha mais recente (com cache-buster) imediatamente antes de gravar
+            let sha = null;
+            const check = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}&t=${Date.now()}`, {
+                headers: {'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json'}
+            });
+            if (check.ok) { const j = await check.json(); sha = j.sha; }
+            else if (check.status !== 404) { throw new Error(`Erro ao verificar ficheiro: ${check.status}`); }
 
-        const body = {message: `SplitBill backup ${new Date().toLocaleString('pt-PT')}`, content, branch};
-        if (sha) body.sha = sha;
+            const content = btoa(unescape(encodeURIComponent(JSON.stringify({historico, pagamentos}, null, 2))));
+            const body = {message: `SplitBill backup ${new Date().toLocaleString('pt-PT')}`, content, branch};
+            if (sha) body.sha = sha;
 
-        const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`, {
-            method: 'PUT',
-            headers: {'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'},
-            body: JSON.stringify(body)
-        });
-        if (!res.ok) { const e = await res.json(); throw new Error(e.message || res.status); }
+            const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`, {
+                method: 'PUT',
+                headers: {'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            });
+            if (res.ok) { lastErr = null; break; }
+            const e = await res.json().catch(() => ({}));
+            // Conflito de sha (escrita concorrente / cache) → reler sha e repetir
+            if (res.status === 409 || (e.message && /does not match/i.test(e.message))) { lastErr = new Error(e.message || '409'); continue; }
+            throw new Error(e.message || res.status);
+        }
+        if (lastErr) throw lastErr;
         ghSaveCfg();
-        ghStatus(`✓ Guardado com sucesso em ${owner}/${repo}/${path} (branch: ${branch})`);
-        mostrarMensagem('Dados guardados no GitHub ✓', true);
+        if (!silent) {
+            ghStatus(`✓ Guardado com sucesso em ${owner}/${repo}/${path} (branch: ${branch})`);
+            mostrarMensagem('Dados guardados no GitHub ✓', true);
+        }
     } catch(e) {
-        ghStatus(`✗ Erro: ${e.message}`, true);
-        mostrarMensagem('Erro ao guardar no GitHub!', false);
+        if (!silent) {
+            ghStatus(`✗ Erro: ${e.message}`, true);
+            mostrarMensagem('Erro ao guardar no GitHub!', false);
+        }
+    } finally {
+        _ghPushRunning = false;
+        // Se foi pedida outra gravação enquanto esta corria, fazê-la agora com os dados mais recentes
+        if (_ghPushQueued) { _ghPushQueued = false; ghPush(true); }
     }
 }
 
@@ -4158,30 +4179,9 @@ function ghScheduleAutoSave() {
 }
 
 async function ghAutoSave() {
-    if (_ghAutoSaving) return;
-    const {token, owner, repo, path, branch} = ghGetCfg();
-    if (!token || !owner || !repo) return;
-    _ghAutoSaving = true;
-    try {
-        const content = btoa(unescape(encodeURIComponent(JSON.stringify({historico, pagamentos}, null, 2))));
-        let sha = null;
-        const check = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`, {
-            headers: {'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json'}
-        });
-        if (check.ok) { const j = await check.json(); sha = j.sha; }
-        else if (check.status !== 404) { throw new Error(check.status); }
-        const body = {message: `SplitBill auto-save ${new Date().toLocaleString('pt-PT')}`, content, branch};
-        if (sha) body.sha = sha;
-        const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`, {
-            method: 'PUT',
-            headers: {'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'},
-            body: JSON.stringify(body)
-        });
-        if (!res.ok) throw new Error(res.status);
-    } catch(e) {
-        console.error('GitHub auto-save error:', e);
-    }
-    _ghAutoSaving = false;
+    // Delega no ghPush serializado (com retry em conflito de sha), em modo silencioso.
+    // Evita ter um segundo escritor independente a correr em paralelo com o botão Guardar.
+    ghPush(true);
 }
 /* ── END GITHUB AUTO-SAVE ────────────────────── */
 
