@@ -4076,13 +4076,15 @@ async function ghPull() {
         }
         const data = JSON.parse(text);
         // DEBUG: Log the structure
-        console.log('[ghPull] JSON received:', {
+        const debugInfo = {
             isArray: Array.isArray(data),
             hasHistorico: 'historico' in data,
             hasHistoricoArray: Array.isArray(data?.historico),
             historicoLength: data?.historico?.length,
             keys: Object.keys(data || {})
-        });
+        };
+        console.log('[ghPull] JSON received:', debugInfo);
+        alert('[DEBUG] JSON Structure:\n' + JSON.stringify(debugInfo, null, 2));
         
         // Suporta ambos formatos: array direto ou objeto com { historico, pagamentos }
         let eventCount = 0;
