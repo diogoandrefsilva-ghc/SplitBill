@@ -4075,17 +4075,6 @@ async function ghPull() {
             text = await res.text();
         }
         const data = JSON.parse(text);
-        // DEBUG: Log the structure
-        const debugInfo = {
-            isArray: Array.isArray(data),
-            hasHistorico: 'historico' in data,
-            hasHistoricoArray: Array.isArray(data?.historico),
-            historicoLength: data?.historico?.length,
-            keys: Object.keys(data || {})
-        };
-        console.log('[ghPull] JSON received:', debugInfo);
-        alert('[DEBUG] JSON Structure:\n' + JSON.stringify(debugInfo, null, 2));
-        
         // Suporta ambos formatos: array direto ou objeto com { historico, pagamentos }
         let eventCount = 0;
         if (Array.isArray(data)) {
@@ -4139,10 +4128,18 @@ async function ghReset() {
             text = await res.text();
         }
         const data = JSON.parse(text);
-        if (!Array.isArray(data)) { throw new Error('Ficheiro JSON inválido (esperado array de eventos)'); }
+        // Suporta ambos formatos: array direto ou objeto com { historico, pagamentos }
+        let eventCount = 0;
+        if (Array.isArray(data)) {
+            eventCount = data.length;
+        } else if (data && Array.isArray(data.historico)) {
+            eventCount = data.historico.length;
+        } else {
+            throw new Error('Ficheiro JSON inválido (esperado array de eventos ou objeto com "historico")');
+        }
 
         ghApplyData(data);
-        mostrarMensagem('🔄 Sync completo — ' + data.length + ' evento(s) importado(s) do GitHub', true);
+        mostrarMensagem('🔄 Sync completo — ' + eventCount + ' evento(s) importado(s) do GitHub', true);
     } catch(e) {
         mostrarMensagem('Erro no sync: ' + e.message, false);
     }
