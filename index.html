@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Conta">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
     <style>
         * {
             margin: 0;
@@ -4307,6 +4308,39 @@ async function apagarEventoAtual() {
         novoEvento();
     }
     mostrarMensagem('Evento eliminado!', true);
+}
+</script>
+
+<script>
+// Register Service Worker for automatic updates
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+        .then((reg) => {
+            console.log('[APP] Service Worker registered');
+            
+            // Check for updates every minute
+            setInterval(() => {
+                reg.update().catch(() => {
+                    // Silently fail if offline
+                });
+            }, 60000);
+            
+            // Listen for update messages
+            reg.addEventListener('updatefound', () => {
+                console.log('[APP] Update found, will reload on next navigation');
+            });
+        })
+        .catch((err) => {
+            console.log('[APP] Service Worker registration failed:', err);
+        });
+
+    // Listen for messages from SW (e.g., when new version is activated)
+    navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data.type === 'CLAIM') {
+            console.log('[APP] Service Worker claimed clients, reloading...');
+            window.location.reload();
+        }
+    });
 }
 </script>
 

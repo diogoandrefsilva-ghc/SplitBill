@@ -1,0 +1,19 @@
+{
+  "name": "SplitBill - Divisão de Contas",
+  "short_name": "SplitBill",
+  "description": "Gestão fácil de divisão de contas entre amigos",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#2c3e50",
+  "icons": [
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
