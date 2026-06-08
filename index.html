@@ -4073,11 +4073,19 @@ async function ghPull() {
             text = await res.text();
         }
         const data = JSON.parse(text);
-        if (!Array.isArray(data)) { throw new Error('Ficheiro JSON inválido (esperado array de eventos)'); }
+        // Suporta ambos formatos: array direto ou objeto com { historico, pagamentos }
+        let eventCount = 0;
+        if (Array.isArray(data)) {
+            eventCount = data.length;
+        } else if (data && Array.isArray(data.historico)) {
+            eventCount = data.historico.length;
+        } else {
+            throw new Error('Ficheiro JSON inválido (esperado array de eventos ou objeto com "historico")');
+        }
         ghApplyData(data);
         ghSaveCfg();
         ghStatus(`✓ Dados importados de ${owner}/${repo}/${path} (branch: ${branch})`);
-        mostrarMensagem('✓ ' + data.length + ' evento(s) importado(s) do GitHub', true);
+        mostrarMensagem('✓ ' + eventCount + ' evento(s) importado(s) do GitHub', true);
     } catch(e) {
         ghStatus(`✗ Erro: ${e.message}`, true);
         mostrarMensagem('Erro ao importar do GitHub!', false);
