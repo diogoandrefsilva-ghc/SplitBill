@@ -1118,7 +1118,7 @@
 <div class="section" id="section-ofertas">
     <h2 class="h2-toggle" onclick="toggleSection('ofertas')"><span>2b. 🎁 Ofertas</span><span class="sec-arrow">▼</span></h2>
     <div class="section-body">
-
+    <div id="oferta-form">
     <div class="form-row" style="flex-wrap:wrap; gap:8px; margin-bottom:10px;">
         <select id="oferta-quem" style="flex:1; min-width:100px;">
             <option value="">Amigo</option>
@@ -1136,6 +1136,7 @@
 
     <button id="btn-adicionar-oferta" onclick="adicionarOferta()" style="width:100%; background:#f39c12;" disabled>🎁 Adicionar Oferta</button>
     <div id="mensagem-oferta" style="margin-top:8px;"></div>
+    </div>
 
     <div id="lista-ofertas" style="margin-top:12px;"></div>
     </div>
@@ -1709,7 +1710,7 @@ function _atualizarUIInner() {
                     <div class="oferta-detalhe">A: ${o.para.join(', ')} · ${o.hora || ''}</div>
                 </div>
                 <div class="oferta-valor">€${o.precoTotal.toFixed(2)}</div>
-                <button class="ordem-delete" onclick="removerOferta(${o.id})">×</button>
+                ${modoReadOnly ? '' : `<button class="ordem-delete" onclick="removerOferta(${o.id})">×</button>`}
             </div>
         `).join('');
     }
@@ -2782,6 +2783,9 @@ function aplicarColapsosSecoes() {
 function atualizarReadOnly() {
     const banner = document.getElementById('readonly-banner');
     const sections = ['section-adicionar', 'section-ofertas', 'section-config'];
+    // Em modo leitura, a secção de ofertas mostra só os cartões (não escurece),
+    // por isso o overlay de leitura aplica-se apenas a estas.
+    const dimSections = ['section-adicionar', 'section-config'];
 
     // Sync fatura buttons
     const hasFatura = !!estado.totalFatura;
@@ -2790,12 +2794,17 @@ function atualizarReadOnly() {
     document.getElementById('btn-fechar-evento').style.display = hasFatura ? 'none' : '';
     document.getElementById('btn-reabrir-evento').style.display = hasFatura ? '' : 'none';
 
+    // Formulário de ofertas: escondido em evento fechado, visível ao desbloquear
+    const ofertaForm = document.getElementById('oferta-form');
+    if (ofertaForm) ofertaForm.style.display = modoReadOnly ? 'none' : '';
+
     if (modoReadOnly) {
         banner.style.display = _paginaAtual === 'eventos' ? 'flex' : 'none';
-        sections.forEach(id => {
+        dimSections.forEach(id => {
             const el = document.getElementById(id);
             if (el) el.classList.add('readonly-overlay');
         });
+        document.getElementById('section-ofertas').classList.remove('readonly-overlay');
         sections.forEach(id => {
             const el = document.getElementById(id);
             if (!el) return;
