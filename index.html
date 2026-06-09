@@ -37,7 +37,7 @@
         .top-nav {
             display: flex;
             background: #34495e;
-            border-radius: 0;
+            border-radius: 0 0 8px 8px;
             margin-bottom: 0;
             overflow: hidden;
         }
@@ -98,6 +98,32 @@
             border-bottom: 2px solid #3498db;
             padding-bottom: 8px;
         }
+
+        /* Collapsible sections */
+        .section h2.h2-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .section h2.h2-toggle .sec-arrow {
+            font-size: 11px;
+            color: #3498db;
+            transition: transform 0.2s;
+            flex: 0 0 auto;
+        }
+        .section.collapsed h2.h2-toggle .sec-arrow { transform: rotate(-90deg); }
+        .section.collapsed .section-body { display: none; }
+        .section.collapsed h2.h2-toggle {
+            margin-bottom: 0;
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+        .section.no-toggle h2.h2-toggle { cursor: default; }
+        .section.no-toggle h2.h2-toggle .sec-arrow { visibility: hidden; }
 
         .form-row {
             display: flex;
@@ -1018,7 +1044,7 @@
 </div>
 
 <!-- Event context bar (only visible on Eventos tab) -->
-<div id="header-evento-context" style="background:#2c3e50;padding:10px 15px 15px;border-radius:0 0 8px 8px;margin-bottom:15px;">
+<div id="header-evento-context" style="background:#2c3e50;padding:10px 15px 15px;border-radius:8px;margin-top:8px;margin-bottom:15px;">
     <input type="text" id="descricao-evento" placeholder="Descrição do evento (ex: Almoço Sá 19 Abril)" maxlength="80"
         style="width:100%;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;border-radius:4px;padding:8px 10px;font-size:13px;text-align:center;"
         oninput="estado.descricaoEvento=this.value;salvarNoLocalStorage()"
@@ -1060,7 +1086,8 @@
 
 <!-- ADICIONAR ORDEM -->
 <div class="section" id="section-adicionar">
-    <h2>1. Adiciona uma Ordem</h2>
+    <h2 class="h2-toggle" onclick="toggleSection('adicionar')"><span>1. Adiciona uma Ordem</span><span class="sec-arrow">▼</span></h2>
+    <div class="section-body">
 
     <div class="form-row">
         <select id="item" style="flex: 2;">
@@ -1076,6 +1103,7 @@
 
     <button id="btn-adicionar-ordem" onclick="adicionarOrdem()" style="width: 100%;" disabled>✓ Adicionar Ordem</button>
     <div id="mensagem"></div>
+    </div>
 </div>
 
 <!-- ORDENS REGISTADAS -->
@@ -1088,7 +1116,8 @@
 
 <!-- OFERTAS -->
 <div class="section" id="section-ofertas">
-    <h2>2b. 🎁 Ofertas</h2>
+    <h2 class="h2-toggle" onclick="toggleSection('ofertas')"><span>2b. 🎁 Ofertas</span><span class="sec-arrow">▼</span></h2>
+    <div class="section-body">
 
     <div class="form-row" style="flex-wrap:wrap; gap:8px; margin-bottom:10px;">
         <select id="oferta-quem" style="flex:1; min-width:100px;">
@@ -1109,6 +1138,7 @@
     <div id="mensagem-oferta" style="margin-top:8px;"></div>
 
     <div id="lista-ofertas" style="margin-top:12px;"></div>
+    </div>
 </div>
 
 <!-- RESUMO DA CONTA -->
@@ -2722,6 +2752,33 @@ function atualizarAjuste() {
 
 
 
+function toggleSection(name) {
+    const sec = document.getElementById('section-' + name);
+    if (!sec || sec.classList.contains('no-toggle')) return;
+    sec.classList.toggle('collapsed');
+}
+
+function aplicarColapsosSecoes() {
+    // 1. Adicionar Ordem — colapsado e sem opção de expandir em evento fechado;
+    //    expandido e expansível ao desbloquear.
+    const secAdd = document.getElementById('section-adicionar');
+    if (secAdd) {
+        if (modoReadOnly) {
+            secAdd.classList.add('collapsed', 'no-toggle');
+        } else {
+            secAdd.classList.remove('collapsed', 'no-toggle');
+        }
+    }
+    // 2b. Ofertas — sempre expansível; colapsado por defeito quando não há ofertas
+    //    (eventos novos ou fechados sem ofertas), expandido quando existe oferta.
+    const secOf = document.getElementById('section-ofertas');
+    if (secOf) {
+        secOf.classList.remove('no-toggle');
+        const temOfertas = estado.ofertas && estado.ofertas.length > 0;
+        secOf.classList.toggle('collapsed', !temOfertas);
+    }
+}
+
 function atualizarReadOnly() {
     const banner = document.getElementById('readonly-banner');
     const sections = ['section-adicionar', 'section-ofertas', 'section-config'];
@@ -2759,6 +2816,7 @@ function atualizarReadOnly() {
         document.getElementById('descricao-evento').disabled = false;
         document.getElementById('total-fatura').disabled = false;
     }
+    aplicarColapsosSecoes();
 }
 
 async function desbloquearEvento() {
