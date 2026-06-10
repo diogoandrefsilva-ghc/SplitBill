@@ -1381,12 +1381,6 @@
                 Continuar com Google
             </button>
 
-            <!-- Apple -->
-            <button onclick="sbLoginApple()" style="width:100%;padding:13px 16px;border:1.5px solid #1a1a1a;border-radius:10px;background:#1a1a1a;font-size:15px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:18px;color:#fff;">
-                <svg width="17" height="17" viewBox="0 0 814 1000" fill="#fff"><path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-57.8-155.5-127.4C46 382.8-.2 162.7 32.2 70.8c19.3-53.7 63.3-82.1 108.2-82.1 40.8 0 71.4 27.3 104.6 27.3 32.5 0 69.3-28.6 108.8-28.6 40.2 0 96.5 27.9 130.6 78.3z"/></svg>
-                Continuar com Apple
-            </button>
-
             <!-- Divisor -->
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
                 <div style="flex:1;height:1px;background:#eee;"></div>
@@ -1418,14 +1412,21 @@
     </div>
 </div>
 
-<!-- ═══ PAINEL ADMIN ═══ -->
-<div id="page-admin" style="display:none;position:fixed;inset:0;background:#f5f7f5;z-index:9997;overflow-y:auto;padding:16px;">
-    <div style="max-width:480px;margin:0 auto;">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
-            <button onclick="fecharAdmin()" style="background:none;border:none;font-size:20px;cursor:pointer;">←</button>
-            <h2 style="font-size:18px;font-weight:700;margin:0;">Admin — Pedidos de acesso</h2>
+<!-- ═══ PAINEL ADMIN (NOTIFICAÇÕES) ═══ -->
+<div id="page-admin" style="display:none;position:fixed;inset:0;background:rgba(11,59,43,0.45);z-index:9997;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)fecharAdmin()">
+    <div style="background:#EFF1EC;width:100%;max-width:520px;max-height:85vh;border-radius:16px 16px 0 0;display:flex;flex-direction:column;overflow:hidden;">
+        <div style="background:#0B3B2B;color:#fff;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:18px;">🔔</span>
+                <h2 style="font-size:16px;font-weight:700;margin:0;">Pedidos de acesso</h2>
+            </div>
+            <button onclick="fecharAdmin()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;border-radius:8px;width:32px;height:32px;font-size:18px;cursor:pointer;line-height:1;">✕</button>
         </div>
-        <div id="admin-lista"></div>
+        <div id="admin-lista" style="padding:16px;overflow-y:auto;"></div>
+        <div style="padding:0 16px 16px;border-top:1px solid #DEE3DD;padding-top:14px;">
+            <button onclick="exportarJSON()" style="width:100%;padding:11px;background:#fff;color:#0E7A4F;border:1.5px solid #0E7A4F;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;">💾 Descarregar backup (JSON)</button>
+            <p style="font-size:11px;color:#7C8782;text-align:center;margin:8px 0 0;">O plano gratuito do Supabase não faz backups automáticos.</p>
+        </div>
     </div>
 </div>
 
@@ -1433,7 +1434,7 @@
 <div class="header" style="display:flex;align-items:center;justify-content:space-between;">
     <h1>SplitBill<small>Divisão de contas · dia de jogo</small></h1>
     <div style="display:flex;align-items:center;gap:8px;">
-        <button id="btn-admin" onclick="abrirAdmin()" style="display:none;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:6px;padding:5px 9px;font-size:12px;cursor:pointer;">⚙️</button>
+        <button id="btn-admin" onclick="abrirAdmin()" style="display:none;position:relative;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:6px;padding:5px 9px;font-size:14px;cursor:pointer;">🔔<span id="admin-badge" style="display:none;position:absolute;top:-6px;right:-6px;background:#B3402F;color:#fff;border-radius:10px;min-width:18px;height:18px;font-size:11px;font-weight:700;line-height:18px;text-align:center;padding:0 4px;box-sizing:border-box;">0</span></button>
         <button onclick="sbLogout()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:6px;padding:5px 9px;font-size:12px;cursor:pointer;">Sair</button>
     </div>
 </div>
@@ -1442,7 +1443,6 @@
 <div class="top-nav">
     <button class="top-nav-btn active" id="nav-eventos" onclick="mudarPagina('eventos')">Eventos</button>
     <button class="top-nav-btn" id="nav-pagamentos" onclick="mudarPagina('pagamentos')">Pagamentos<span id="nav-pgto-badge" class="top-nav-badge" style="display:none;"></span></button>
-    <button class="top-nav-btn" id="nav-geral" onclick="mudarPagina('geral')">Geral</button>
 </div>
 
 <!-- Event context bar (only visible on Eventos tab) -->
@@ -1458,7 +1458,6 @@
             <span id="historico-toggle-arrow" style="font-size:10px;opacity:0.6;transition:transform 0.2s;">▼</span>
         </button>
         <button onclick="novoEvento()">＋ Novo</button>
-        <button id="btn-gh-reset" style="display:none;background:rgba(14,122,79,0.85);border-color:rgba(255,255,255,0.4);font-size:12px;padding:8px 10px;" onclick="ghReset()">🔄 Sync</button>
     </div>
     <div class="historico-panel" id="historico-panel"></div>
 </div>
@@ -1680,97 +1679,22 @@
 </div>
 
 <!-- ═══ PAGE: GERAL ═══ -->
+<!-- page-geral removida: aba Geral eliminada. Elementos ocultos mantidos só p/ compatibilidade do código antigo -->
 <div id="page-geral" style="display:none;">
-
-<!-- AJUDA -->
-<div class="section" id="section-ajuda">
-    <div class="config-toggle" onclick="toggleAjuda()">
-        <h2 style="border-bottom:none;margin-bottom:0;">❓ Como usar</h2>
-        <span id="ajuda-arrow" style="font-size:18px;color:#7C8782;">▼</span>
-    </div>
-    <div id="ajuda-body" style="display:none;margin-top:14px;font-size:13px;color:#4A534E;line-height:1.7;">
-        <p><strong>⚙️ Configurações do Evento</strong> — No final da página Eventos, configura os amigos e o menu do restaurante para cada evento. Podes importar um ficheiro Excel, ou editar, adicionar e remover entradas diretamente na app. Cada evento tem os seus próprios amigos e menu.</p>
-        <p style="margin-top:8px;"><strong>📚 Histórico</strong> — Painel no topo para navegar entre eventos. Os eventos com fatura ficam em modo leitura; usa <strong>🔓 Desbloquear</strong> para editar. Todas as alterações são guardadas automaticamente.</p>
-        <p style="margin-top:8px;"><strong>＋ Novo</strong> — Cria um novo evento, herdando os amigos e menu do evento mais recente como ponto de partida.</p>
-        <p style="margin-top:8px;"><strong>1. Adicionar Ordem</strong> — Seleciona o item, a quantidade e quem comeu/bebeu. A data do evento é definida automaticamente pela hora da primeira ordem registada.</p>
-        <p style="margin-top:8px;"><strong>2. Ordens Registadas</strong> — Lista de tudo o que foi pedido. O ✏️ edita a ordem no lugar sem perder a posição; o × apaga.</p>
-        <p style="margin-top:8px;"><strong>2b. 🎁 Ofertas</strong> — Quando alguém quer pagar uma rodada a outros. O custo sobe na conta de quem oferece e desce proporcionalmente na de quem recebe.</p>
-        <p style="margin-top:8px;"><strong>3. Resumo</strong> — Total por pessoa com detalhe do consumo e saldo de ofertas. Seleciona <strong>quem pagou</strong> a conta, introduz a fatura do restaurante e confirma com 🔒 — o ajuste é calculado proporcionalmente considerando ordens e ofertas, e o evento fica automaticamente bloqueado. As dívidas de cada amigo ficam registadas.</p>
-        <p style="margin-top:8px;"><strong>💰 Contas</strong> — Gestão de dívidas e pagamentos. Nos <strong>Saldos</strong> vês quanto cada amigo deve no total, com detalhe por evento. Nos <strong>Eventos</strong> consultas as dívidas de cada evento fechado. No <strong>Histórico</strong> vês todos os pagamentos registados. Para registar um pagamento, escolhe o amigo, se é pagamento de um evento específico ou livre (abate por ordem cronológica aos eventos mais antigos).</p>
-        <p style="margin-top:8px;"><strong>📋 PDF Conta</strong> — Ordens detalhadas + total por item, ideal para confrontar com a fatura do restaurante.<br>
-        <strong>💸 PDF Divisão</strong> — Conta final por pessoa com detalhe de consumo e ajustes.</p>
-        <p style="margin-top:8px;"><strong>💾 Exportar JSON</strong> — Descarrega o histórico completo como ficheiro JSON de backup.<br>
-        <strong>📤 Importar</strong> — Restaura o histórico completo a partir do ficheiro JSON.<br>
-        <strong>🗑️ Apagar Evento</strong> — Remove o evento atual do histórico permanentemente.<br>
-        <strong>🗑️ Limpar Evento</strong> — Limpa todas as ordens e ofertas do evento atual.</p>
-    </div>
-</div>
-
-<!-- GUARDAR / EXPORTAR -->
-<div class="section">
-    <div class="config-toggle" onclick="toggleGuardar()">
-        <h2 style="border-bottom:none;margin-bottom:0;">4. 💾 Guardar / Exportar</h2>
-        <span id="guardar-arrow" style="font-size:18px;color:#7C8782;">▼</span>
-    </div>
-    <div id="guardar-body" style="display:none;margin-top:12px;">
-    <div class="botoes-dados">
-        <button class="secondary" onclick="document.getElementById('input-json').click()">📤 Importar JSON</button>
-        <button onclick="guardarEvento()">💾 Exportar JSON</button>
-        <button id="btn-apagar-evento" class="danger" onclick="apagarEventoAtual()">🗑️ Apagar Evento</button>
-        <button class="danger" onclick="limparTudo()">🗑️ Limpar Evento</button>
-    </div>
+    <div id="ajuda-body" style="display:none;"></div><span id="ajuda-arrow" style="display:none;"></span>
+    <div id="guardar-body" style="display:none;"></div><span id="guardar-arrow" style="display:none;"></span>
     <input type="file" id="input-json" accept=".json" style="display:none;" onchange="importarJSON()">
-
-    <!-- GITHUB SYNC -->
-    <div style="margin-top:15px;border-top:1px solid #DEE3DD;padding-top:15px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;gap:8px" onclick="toggleGhSection()">
-        <div style="display:flex;align-items:center;gap:8px">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:#5B6661;flex-shrink:0"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.2 11.38.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.54-1.38-1.33-1.75-1.33-1.75-1.09-.74.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.49.99.1-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 3-.4c1.02 0 2.04.14 3 .4 2.28-1.55 3.29-1.23 3.29-1.23.66 1.66.25 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.63-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.21.7.82.58C20.56 21.8 24 17.3 24 12 24 5.37 18.63 0 12 0z"/></svg>
-          <span style="font-size:13px;color:#5B6661;font-weight:600">Sincronização com GitHub</span>
-        </div>
-        <span id="gh-body-arrow" style="font-size:12px;color:#5B6661;transition:transform .2s">▶</span>
-      </div>
-      <div id="gh-body" style="display:none;margin-top:12px">
-        <p style="font-size:12px;color:#5B6661;margin-bottom:11px">Guarda o <code style="background:#EFF1EC;padding:1px 5px;border-radius:4px;font-size:11px">data.json</code> no repositório. Para <strong>guardar</strong> precisas de um <a href="https://github.com/settings/tokens" target="_blank" style="color:#0E7A4F">Personal Access Token</a> com permissão <code style="background:#EFF1EC;padding:1px 5px;border-radius:4px;font-size:11px">repo</code>.</p>
-        <p style="font-size:12px;color:#A07712;margin-bottom:11px">⚠️ <strong>Importar do GitHub substitui TODOS os dados locais.</strong> Não é feito automaticamente ao carregar a página para proteger eventos em curso.</p>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:11px">
-          <div>
-            <label style="font-size:12px;font-weight:600;color:#4A534E;display:block;margin-bottom:3px">Token GitHub <em style="text-transform:none;font-weight:400;letter-spacing:0;font-size:11px">(ghp_… — obrigatório para guardar)</em></label>
-            <div style="display:flex;gap:6px">
-              <input type="password" id="gh-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" style="flex:1;padding:8px;border:1px solid #DDE3DD;border-radius:5px;font-size:13px">
-            </div>
-          </div>
-          <div style="display:flex;gap:8px">
-            <div style="flex:1">
-              <label style="font-size:12px;font-weight:600;color:#4A534E;display:block;margin-bottom:3px">Utilizador / Org</label>
-              <input type="text" id="gh-owner" placeholder="diogoandrefsilva-ghc" style="width:100%;padding:8px;border:1px solid #DDE3DD;border-radius:5px;font-size:13px">
-            </div>
-            <div style="flex:1">
-              <label style="font-size:12px;font-weight:600;color:#4A534E;display:block;margin-bottom:3px">Repositório</label>
-              <input type="text" id="gh-repo" placeholder="SplitBill" style="width:100%;padding:8px;border:1px solid #DDE3DD;border-radius:5px;font-size:13px">
-            </div>
-          </div>
-          <div>
-            <label style="font-size:12px;font-weight:600;color:#4A534E;display:block;margin-bottom:3px">Caminho do ficheiro</label>
-            <input type="text" id="gh-path" placeholder="splitbill-data.json" value="splitbill-data.json" style="width:100%;padding:8px;border:1px solid #DDE3DD;border-radius:5px;font-size:13px">
-          </div>
-          <div>
-            <label style="font-size:12px;font-weight:600;color:#4A534E;display:block;margin-bottom:3px">Branch</label>
-            <input type="text" id="gh-branch" placeholder="main" value="main" style="width:100%;padding:8px;border:1px solid #DDE3DD;border-radius:5px;font-size:13px">
-          </div>
-        </div>
-        <div class="botoes-dados" style="margin-bottom:8px">
-          <button style="background:#24292e;color:#fff;border:none;padding:8px 16px;border-radius:5px;cursor:pointer;font-size:13px" onclick="ghSaveCfg(); alert('Configuração guardada! Procura o botão 🔄 Sync acima.')">💾 Guardar Config GitHub</button>
-          <button style="background:#24292e;color:#fff;border:none;padding:8px 16px;border-radius:5px;cursor:pointer;font-size:13px" onclick="ghPush()">⬆ Guardar no GitHub</button>
-        </div>
-        <p id="gh-status" style="font-size:12px;margin-top:9px;display:none"></p>
-      </div>
+    <div style="display:none">
+      <input type="password" id="gh-token">
+      <input type="text" id="gh-owner">
+      <input type="text" id="gh-repo">
+      <input type="text" id="gh-path" value="splitbill-data.json">
+      <input type="text" id="gh-branch" value="main">
+      <p id="gh-status"></p>
     </div>
-    <!-- END GITHUB SYNC -->
-    </div><!-- /guardar-body -->
 </div>
 
-</div> <!-- end page-geral -->
+
 
 <script>
 let amigos = [];
@@ -2495,6 +2419,9 @@ async function apagarEvento(id, ev_) {
 
     salvarHistoricoLocal();
     if (pagamentos.length !== antesPg) salvarPagamentos();
+
+    // Apagar no Supabase (CASCADE remove ordens/ofertas/ligações; pagamentos vão por FK CASCADE)
+    sbApagarEvento(id);
 
     // Se apaguei o evento que estava aberto, carregar outro ou limpar o estado
     if (eventoAtualId == id) {
@@ -3329,7 +3256,6 @@ function mudarPagina(pagina) {
     }
     document.getElementById('nav-eventos').classList.toggle('active', pagina === 'eventos');
     document.getElementById('nav-pagamentos').classList.toggle('active', pagina === 'pagamentos');
-    document.getElementById('nav-geral').classList.toggle('active', pagina === 'geral');
     // FAB visibility: only on pagamentos page + token
     const fab = document.getElementById('fab-pgto');
     fab.style.display = (pagina === 'pagamentos' && ghHasToken()) ? 'block' : 'none';
@@ -4531,15 +4457,15 @@ async function sbAposLogin() {
         // Sem acesso
         document.getElementById('page-sem-acesso').style.display = 'flex';
         document.getElementById('sem-acesso-email').textContent = `Sessão iniciada como ${email}. Esta conta não tem acesso à app.`;
-        // DIAGNÓSTICO temporário
+        // DIAGNÓSTICO (colapsado)
         const diag = document.getElementById('sem-acesso-email');
-        diag.innerHTML += `<br><br><span style="font-size:11px;color:#999;font-family:monospace;">${statusInfo}<br>resposta: ${(rawText || '(vazio)').substring(0, 200).replace(/</g,'&lt;')}</span>`;
+        diag.innerHTML += `<br><br><details style="text-align:left;font-size:11px;color:#999;"><summary style="cursor:pointer;text-align:center;color:#aaa;">Detalhes técnicos</summary><span style="font-family:monospace;display:block;margin-top:6px;word-break:break-all;">${statusInfo}<br>resposta: ${(rawText || '(vazio)').substring(0, 300).replace(/</g,'&lt;')}</span></details>`;
         return;
     }
 
     // Tem acesso — mostrar app
     document.getElementById('page-sem-acesso').style.display = 'none';
-    if (email === ADMIN_EMAIL) document.getElementById('btn-admin').style.display = '';
+    if (email === ADMIN_EMAIL) { document.getElementById('btn-admin').style.display = ''; sbVerificarPedidos(); }
 
     await sbCarregarDados();
     init();
@@ -4687,10 +4613,6 @@ async function sbLoginGoogle() {
     window.location.href = `${SB_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.href)}`;
 }
 
-async function sbLoginApple() {
-    window.location.href = `${SB_URL}/auth/v1/authorize?provider=apple&redirect_to=${encodeURIComponent(window.location.href)}`;
-}
-
 async function sbLoginEmail() {
     const email = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
@@ -4749,13 +4671,14 @@ function sbLogout() {
 
 // Admin
 async function abrirAdmin() {
-    document.getElementById('page-admin').style.display = 'block';
+    document.getElementById('page-admin').style.display = 'flex';
     const lista = document.getElementById('admin-lista');
-    lista.innerHTML = '<p style="color:#999;font-size:14px;">A carregar…</p>';
+    lista.innerHTML = '<p style="color:#999;font-size:14px;text-align:center;padding:20px;">A carregar…</p>';
     try {
         const r = await fetch(`${SB_URL}/rest/v1/access_requests?select=*&order=requested_at.desc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
         const data = await r.json();
-        if (!data.length) { lista.innerHTML = '<p style="color:#999;font-size:14px;">Sem pedidos pendentes.</p>'; return; }
+        sbAtualizarBadge(Array.isArray(data) ? data.length : 0);
+        if (!data.length) { lista.innerHTML = '<p style="color:#999;font-size:14px;text-align:center;padding:24px 0;">✓ Sem pedidos pendentes</p>'; return; }
         lista.innerHTML = data.map(p => `
             <div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 4px rgba(0,0,0,0.08);">
                 <div>
@@ -4764,7 +4687,24 @@ async function abrirAdmin() {
                 </div>
                 <button onclick="sbAprovarAcesso('${p.email}')" style="background:#0E7A4F;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;">Aprovar</button>
             </div>`).join('');
-    } catch(e) { lista.innerHTML = '<p style="color:#B3402F;font-size:14px;">Erro ao carregar pedidos.</p>'; }
+    } catch(e) { lista.innerHTML = '<p style="color:#B3402F;font-size:14px;text-align:center;padding:20px;">Erro ao carregar pedidos.</p>'; }
+}
+
+// Atualiza o contador (badge) de pedidos pendentes no sino
+function sbAtualizarBadge(n) {
+    const badge = document.getElementById('admin-badge');
+    if (!badge) return;
+    if (n > 0) { badge.textContent = n; badge.style.display = ''; }
+    else { badge.style.display = 'none'; }
+}
+
+// Verifica pedidos pendentes em segundo plano (chamado após login do admin)
+async function sbVerificarPedidos() {
+    try {
+        const r = await fetch(`${SB_URL}/rest/v1/access_requests?select=email`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const data = await r.json();
+        sbAtualizarBadge(Array.isArray(data) ? data.length : 0);
+    } catch(e) {}
 }
 
 async function sbAprovarAcesso(email) {
