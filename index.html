@@ -4515,14 +4515,25 @@ async function sbAposLogin() {
     const email = _sbSession.user.email;
 
     // Verificar se tem acesso
-    const r = await fetch(`${SB_URL}/rest/v1/allowed_users?email=eq.${encodeURIComponent(email)}&select=email`, {
-        headers: sbHeaders({ 'Accept': 'application/json' })
-    });
-    const data = await r.json();
+    let data, rawText = '', statusInfo = '';
+    try {
+        const r = await fetch(`${SB_URL}/rest/v1/allowed_users?email=eq.${encodeURIComponent(email)}&select=email`, {
+            headers: sbHeaders({ 'Accept': 'application/json' })
+        });
+        statusInfo = `HTTP ${r.status}`;
+        rawText = await r.text();
+        try { data = JSON.parse(rawText); } catch(e) { data = null; }
+    } catch(e) {
+        statusInfo = 'fetch falhou: ' + e.message;
+    }
+
     if (!Array.isArray(data) || data.length === 0) {
         // Sem acesso
         document.getElementById('page-sem-acesso').style.display = 'flex';
         document.getElementById('sem-acesso-email').textContent = `Sessão iniciada como ${email}. Esta conta não tem acesso à app.`;
+        // DIAGNÓSTICO temporário
+        const diag = document.getElementById('sem-acesso-email');
+        diag.innerHTML += `<br><br><span style="font-size:11px;color:#999;font-family:monospace;">${statusInfo}<br>resposta: ${(rawText || '(vazio)').substring(0, 200).replace(/</g,'&lt;')}</span>`;
         return;
     }
 
