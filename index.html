@@ -10,7 +10,29 @@
 <meta name="apple-mobile-web-app-title" content="Conta">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0B3B2B">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --ink: #1B231F;
+            --ink-soft: #5B6661;
+            --toalha: #EFF1EC;
+            --card: #FFFFFF;
+            --talao: #FFFDF6;
+            --verde: #0E7A4F;
+            --verde-escuro: #0B3B2B;
+            --verde-tinta: #0E5C3F;
+            --verde-claro: #E2EFE8;
+            --dourado: #B8911F;
+            --dourado-claro: #FBF4DC;
+            --rubro: #B3402F;
+            --linha: #DDE3DD;
+            --display: 'Barlow Condensed', -apple-system, sans-serif;
+            --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -19,14 +41,14 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #f5f5f5;
+            background: #EFF1EC;
             padding: 10px;
             max-width: 600px;
             margin: 0 auto;
         }
 
         .header {
-            background: #2c3e50;
+            background: #0B3B2B;
             color: white;
             padding: 15px;
             border-radius: 8px 8px 0 0;
@@ -36,7 +58,7 @@
 
         .top-nav {
             display: flex;
-            background: #34495e;
+            background: #0E5C3F;
             border-radius: 0 0 8px 8px;
             margin-bottom: 0;
             overflow: hidden;
@@ -56,7 +78,7 @@
         }
         .top-nav-btn.active {
             color: white;
-            border-bottom-color: #3498db;
+            border-bottom-color: #0E7A4F;
             background: rgba(255,255,255,0.05);
         }
         .top-nav-btn:not(.active):hover {
@@ -64,7 +86,7 @@
             background: rgba(255,255,255,0.03);
         }
         .top-nav-badge {
-            background: #e74c3c;
+            background: #B3402F;
             color: white;
             font-size: 10px;
             padding: 1px 6px;
@@ -93,9 +115,9 @@
 
         .section h2 {
             font-size: 16px;
-            color: #2c3e50;
+            color: #0B3B2B;
             margin-bottom: 12px;
-            border-bottom: 2px solid #3498db;
+            border-bottom: 2px solid #0E7A4F;
             padding-bottom: 8px;
         }
 
@@ -111,7 +133,7 @@
         }
         .section h2.h2-toggle .sec-arrow {
             font-size: 11px;
-            color: #3498db;
+            color: #0E7A4F;
             transition: transform 0.2s;
             flex: 0 0 auto;
         }
@@ -135,7 +157,7 @@
         input, select {
             flex: 1;
             padding: 10px;
-            border: 1px solid #ddd;
+            border: 1px solid #DDE3DD;
             border-radius: 4px;
             font-size: 14px;
             min-width: 80px;
@@ -143,13 +165,13 @@
 
         input:focus, select:focus {
             outline: none;
-            border-color: #3498db;
-            box-shadow: 0 0 5px rgba(52, 152, 219, 0.3);
+            border-color: #0E7A4F;
+            box-shadow: 0 0 5px rgba(14, 122, 79, 0.3);
         }
 
         button {
             padding: 10px 15px;
-            background: #3498db;
+            background: #0E7A4F;
             color: white;
             border: none;
             border-radius: 4px;
@@ -160,7 +182,7 @@
         }
 
         button:hover {
-            background: #2980b9;
+            background: #0B6340;
         }
 
         button:disabled {
@@ -168,23 +190,23 @@
             cursor: not-allowed;
         }
         button:disabled:hover {
-            background: #3498db;
+            background: #0E7A4F;
         }
 
         button.secondary {
-            background: #95a5a6;
+            background: #7C8782;
         }
 
         button.secondary:hover {
-            background: #7f8c8d;
+            background: #5B6661;
         }
 
         button.danger {
-            background: #e74c3c;
+            background: #B3402F;
         }
 
         button.danger:hover {
-            background: #c0392b;
+            background: #963526;
         }
 
         .amigos-grid {
@@ -196,9 +218,9 @@
 
         .amigo-btn {
             padding: 8px 6px;
-            border: 2px solid #ddd;
+            border: 2px solid #DDE3DD;
             background: white;
-            color: #555;
+            color: #4A534E;
             border-radius: 4px;
             cursor: pointer;
             font-size: 12px;
@@ -206,13 +228,13 @@
         }
 
         .amigo-btn.selected {
-            background: #2ecc71;
+            background: #15915F;
             color: white;
-            border-color: #27ae60;
+            border-color: #0E7A4F;
         }
 
         .ordem {
-            background: #ecf0f1;
+            background: #EFF1EC;
             padding: 10px;
             border-radius: 4px;
             margin-bottom: 8px;
@@ -228,31 +250,31 @@
 
         .ordem-item {
             font-weight: 600;
-            color: #2c3e50;
+            color: #0B3B2B;
         }
 
         .ordem-hora {
             font-size: 10px;
-            color: #b2bec3;
+            color: #A6B0A9;
             margin-top: 2px;
         }
 
         .ordem-amigos {
             font-size: 12px;
-            color: #7f8c8d;
+            color: #5B6661;
             margin-top: 4px;
         }
 
         .ordem-preco {
             font-weight: 700;
-            color: #27ae60;
+            color: #0E7A4F;
             min-width: 50px;
             text-align: right;
             margin-right: 10px;
         }
 
         .ordem-delete {
-            background: #e74c3c;
+            background: #B3402F;
             color: white;
             border: none;
             width: 30px;
@@ -264,7 +286,7 @@
         }
 
         .resumo {
-            background: #ecf0f1;
+            background: #EFF1EC;
             padding: 12px;
             border-radius: 4px;
             margin-bottom: 12px;
@@ -278,11 +300,11 @@
         }
 
         .resumo-linha.total {
-            border-top: 2px solid #95a5a6;
+            border-top: 2px solid #7C8782;
             padding-top: 8px;
             font-weight: 700;
             font-size: 16px;
-            color: #27ae60;
+            color: #0E7A4F;
         }
 
         .resumo-linha.total:first-child {
@@ -298,16 +320,16 @@
             justify-content: space-between;
             align-items: center;
             font-size: 14px;
-            border-left: 3px solid #f39c12;
+            border-left: 3px solid #B8911F;
         }
         .pessoa-ajuste .pessoa-nome { font-weight: 600; flex: 1; }
-        .pessoa-ajuste .valor-original { color: #aaa; text-decoration: line-through; font-size: 12px; margin-right: 10px; }
-        .pessoa-ajuste .valor-ajustado { font-weight: 700; color: #f39c12; }
+        .pessoa-ajuste .valor-original { color: #9AA39D; text-decoration: line-through; font-size: 12px; margin-right: 10px; }
+        .pessoa-ajuste .valor-ajustado { font-weight: 700; color: #B8911F; }
 
 
         .oferta {
-            background: #fef9f0;
-            border-left: 3px solid #f39c12;
+            background: #FBF7EA;
+            border-left: 3px solid #B8911F;
             padding: 10px;
             border-radius: 4px;
             margin-bottom: 8px;
@@ -317,9 +339,9 @@
             font-size: 13px;
         }
         .oferta-info { flex: 1; }
-        .oferta-desc { font-weight: 600; color: #2c3e50; }
-        .oferta-detalhe { font-size: 12px; color: #7f8c8d; margin-top: 3px; }
-        .oferta-valor { font-weight: 700; color: #f39c12; min-width: 55px; text-align: right; margin-right: 10px; }
+        .oferta-desc { font-weight: 600; color: #0B3B2B; }
+        .oferta-detalhe { font-size: 12px; color: #5B6661; margin-top: 3px; }
+        .oferta-valor { font-weight: 700; color: #B8911F; min-width: 55px; text-align: right; margin-right: 10px; }
 
         .pessoa-conta-final {
             background: white;
@@ -327,7 +349,7 @@
             border-radius: 4px;
             margin-bottom: 8px;
             font-size: 14px;
-            border: 1px solid #eee;
+            border: 1px solid #E6EAE4;
         }
         .pessoa-conta-final .linha-principal {
             display: flex;
@@ -335,10 +357,10 @@
             align-items: center;
         }
         .pessoa-conta-final .pessoa-nome { font-weight: 600; }
-        .pessoa-conta-final .pessoa-valor-final { font-weight: 800; color: #27ae60; font-size: 15px; }
+        .pessoa-conta-final .pessoa-valor-final { font-weight: 800; color: #0E7A4F; font-size: 15px; }
         .pessoa-conta-final .detalhe-oferta {
             font-size: 11px;
-            color: #f39c12;
+            color: #B8911F;
             margin-top: 3px;
             padding-left: 2px;
         }
@@ -358,7 +380,7 @@
         }
 
         .pessoa-valor {
-            color: #27ae60;
+            color: #0E7A4F;
             font-weight: 700;
         }
 
@@ -374,23 +396,23 @@
         }
 
         .aviso {
-            background: #fff3cd;
-            color: #856404;
+            background: #FBF4DC;
+            color: #79610F;
             padding: 10px;
             border-radius: 4px;
             font-size: 12px;
             margin-top: 10px;
-            border: 1px solid #ffeaa7;
+            border: 1px solid #ECDFB4;
         }
 
         .sucesso {
-            background: #d4edda;
-            color: #155724;
+            background: #DDEEE3;
+            color: #0E5C3F;
             padding: 10px;
             border-radius: 4px;
             font-size: 12px;
             margin-top: 10px;
-            border: 1px solid #c3e6cb;
+            border: 1px solid #BFD9CC;
         }
 
         #mensagem {
@@ -400,9 +422,9 @@
         #descricao-evento::placeholder { color: rgba(255,255,255,0.5); }
         #readonly-banner {
             display: none;
-            background: #fff3cd;
-            border: 1px solid #ffc107;
-            color: #856404;
+            background: #FBF4DC;
+            border: 1px solid #D9B53A;
+            color: #79610F;
             padding: 10px 14px;
             border-radius: 6px;
             margin-bottom: 12px;
@@ -413,15 +435,15 @@
             gap: 10px;
         }
         #readonly-banner button {
-            background: #ffc107;
-            color: #333;
+            background: #D9B53A;
+            color: #1B231F;
             border: none;
             padding: 6px 12px;
             font-size: 12px;
             border-radius: 4px;
             white-space: nowrap;
         }
-        #readonly-banner button:hover { background: #e0a800; }
+        #readonly-banner button:hover { background: #A07712; }
         .readonly-overlay { pointer-events: none; opacity: 0.5; }
         .header-nav {
             display: flex;
@@ -440,7 +462,7 @@
             min-width: 0;
             display: none;
         }
-        .header-nav select option { background: #2c3e50; color: white; }
+        .header-nav select option { background: #0B3B2B; color: white; }
         .header-nav button {
             background: rgba(255,255,255,0.2);
             border: 1px solid rgba(255,255,255,0.3);
@@ -494,8 +516,8 @@
         .historico-card:last-child { margin-bottom: 0; }
         .historico-card:active { background: rgba(255,255,255,0.2); }
         .historico-card.ativo {
-            background: rgba(46,204,113,0.2);
-            border-color: rgba(46,204,113,0.5);
+            background: rgba(21,145,95,0.2);
+            border-color: rgba(21,145,95,0.5);
         }
         .historico-card-nome {
             font-size: 13px;
@@ -526,7 +548,7 @@
             line-height: 1;
             transition: background 0.15s, color 0.15s;
         }
-        .historico-card-del:active { background: rgba(231,76,60,0.25); color: #e74c3c; }
+        .historico-card-del:active { background: rgba(179,64,47,0.25); color: #B3402F; }
         .historico-empty {
             text-align: center;
             color: rgba(255,255,255,0.4);
@@ -567,17 +589,17 @@
         .modal-body .modal-title {
             font-size: 15px;
             font-weight: 700;
-            color: #2c3e50;
+            color: #0B3B2B;
             margin-bottom: 6px;
         }
         .modal-body .modal-msg {
             font-size: 13px;
-            color: #636e72;
+            color: #5B6661;
             line-height: 1.5;
         }
         .modal-actions {
             display: flex;
-            border-top: 1px solid #eee;
+            border-top: 1px solid #E6EAE4;
         }
         .modal-actions button {
             flex: 1;
@@ -589,11 +611,11 @@
             cursor: pointer;
             transition: background 0.15s;
         }
-        .modal-actions button:active { background: #f0f0f0; }
-        .modal-actions button.modal-cancel { color: #95a5a6; }
-        .modal-actions button.modal-confirm { color: #3498db; }
-        .modal-actions button.modal-danger { color: #e74c3c; }
-        .modal-actions button + button { border-left: 1px solid #eee; }
+        .modal-actions button:active { background: #ECEFEA; }
+        .modal-actions button.modal-cancel { color: #7C8782; }
+        .modal-actions button.modal-confirm { color: #0E7A4F; }
+        .modal-actions button.modal-danger { color: #B3402F; }
+        .modal-actions button + button { border-left: 1px solid #E6EAE4; }
         @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes modalSlideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
@@ -607,8 +629,8 @@
 
         /* Inline edit panel */
         .ordem-edit-panel {
-            background: #eaf4fb;
-            border-top: 1px solid #aed6f1;
+            background: #E2EFE8;
+            border-top: 1px solid #BFD9CC;
             padding: 10px;
             margin-top: 8px;
             border-radius: 0 0 4px 4px;
@@ -625,7 +647,7 @@
         /* Consumo detail in resumo */
         .detalhe-consumo {
             font-size: 11px;
-            color: #95a5a6;
+            color: #7C8782;
             margin-top: 4px;
             padding-left: 2px;
             line-height: 1.5;
@@ -653,7 +675,7 @@
         }
         .config-item .preco-tag {
             font-size: 12px;
-            color: #27ae60;
+            color: #0E7A4F;
             font-weight: 600;
             min-width: 45px;
             text-align: right;
@@ -680,7 +702,7 @@
         .config-section-label {
             font-size: 12px;
             font-weight: 700;
-            color: #7f8c8d;
+            color: #5B6661;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             margin: 14px 0 6px;
@@ -693,7 +715,7 @@
             margin-bottom: 12px;
             border-radius: 6px;
             overflow: hidden;
-            border: 1px solid #ddd;
+            border: 1px solid #DDE3DD;
         }
         .contas-tab {
             flex: 1;
@@ -702,24 +724,24 @@
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            background: #f5f5f5;
-            color: #7f8c8d;
+            background: #EFF1EC;
+            color: #5B6661;
             border: none;
             transition: all 0.2s;
         }
         .contas-tab.active {
-            background: #2c3e50;
+            background: #0B3B2B;
             color: white;
         }
         .contas-tab:not(.active):hover {
-            background: #e8e8e8;
+            background: #E2E7E0;
         }
         .contas-evento {
-            background: #f9f9f9;
+            background: #F7F8F4;
             border-radius: 8px;
             padding: 12px;
             margin-bottom: 10px;
-            border: 1px solid #eee;
+            border: 1px solid #E6EAE4;
         }
         .contas-evento-header {
             display: flex;
@@ -731,15 +753,15 @@
         .contas-evento-titulo {
             font-weight: 700;
             font-size: 14px;
-            color: #2c3e50;
+            color: #0B3B2B;
         }
         .contas-evento-data {
             font-size: 11px;
-            color: #95a5a6;
+            color: #7C8782;
         }
         .contas-evento-pagador {
             font-size: 12px;
-            color: #3498db;
+            color: #0E7A4F;
             margin-bottom: 8px;
         }
         .contas-divida-item {
@@ -751,12 +773,12 @@
             border-radius: 5px;
             margin-bottom: 4px;
             font-size: 13px;
-            border: 1px solid #eee;
+            border: 1px solid #E6EAE4;
         }
         .contas-divida-item .nome { font-weight: 600; flex: 1; }
         .contas-divida-item .valor { font-weight: 700; min-width: 70px; text-align: right; margin-left: auto; padding-left: 10px; }
-        .contas-divida-item .valor.pendente { color: #e74c3c; }
-        .contas-divida-item .valor.pago { color: #27ae60; }
+        .contas-divida-item .valor.pendente { color: #B3402F; }
+        .contas-divida-item .valor.pago { color: #0E7A4F; }
         .contas-divida-item .btn-toggle-pago {
             padding: 4px 10px;
             font-size: 11px;
@@ -767,29 +789,29 @@
             transition: all 0.2s;
         }
         .contas-divida-item .btn-toggle-pago.marcar-pago {
-            background: #27ae60;
+            background: #0E7A4F;
             color: white;
         }
         .contas-divida-item .btn-toggle-pago.marcar-pendente {
-            background: #e74c3c;
+            background: #B3402F;
             color: white;
         }
         .contas-resumo-total {
             display: flex;
             justify-content: space-between;
             padding: 10px 12px;
-            background: #fff3cd;
+            background: #FBF4DC;
             border-radius: 6px;
             font-weight: 700;
             font-size: 14px;
             margin-top: 12px;
-            border: 1px solid #ffe082;
+            border: 1px solid #E7E2D2;
         }
-        .contas-resumo-total .label { color: #856404; }
-        .contas-resumo-total .valor { color: #e74c3c; }
+        .contas-resumo-total .label { color: #79610F; }
+        .contas-resumo-total .valor { color: #B3402F; }
         .contas-vazio {
             text-align: center;
-            color: #95a5a6;
+            color: #7C8782;
             font-size: 13px;
             padding: 20px 0;
         }
@@ -801,17 +823,17 @@
             background: white;
             border-radius: 6px;
             margin-bottom: 6px;
-            border: 1px solid #eee;
+            border: 1px solid #E6EAE4;
             font-size: 14px;
             cursor: pointer;
         }
         .saldo-card .nome { font-weight: 600; flex: 1; }
         .saldo-card .saldo-valor { font-weight: 800; font-size: 15px; }
-        .saldo-card .saldo-valor.devedor { color: #e74c3c; }
-        .saldo-card .saldo-valor.liquidado { color: #27ae60; }
+        .saldo-card .saldo-valor.devedor { color: #B3402F; }
+        .saldo-card .saldo-valor.liquidado { color: #0E7A4F; }
         .saldo-detalhe {
             font-size: 11px;
-            color: #95a5a6;
+            color: #7C8782;
             margin-top: 2px;
             max-height: 0;
             overflow: hidden;
@@ -824,7 +846,7 @@
         }
         .saldo-expand-icon {
             font-size: 10px;
-            color: #bdc3c7;
+            color: #B9C2BB;
             margin-left: 8px;
             transition: transform 0.2s;
         }
@@ -833,11 +855,11 @@
         }
         /* New saldo-pessoa card styles */
         .saldo-pessoa-card {
-            background: #f9f9f9;
+            background: #F7F8F4;
             border-radius: 8px;
             padding: 12px;
             margin-bottom: 10px;
-            border: 1px solid #eee;
+            border: 1px solid #E6EAE4;
         }
         .saldo-pessoa-header {
             display: flex;
@@ -848,19 +870,19 @@
         .saldo-pessoa-nome {
             font-weight: 700;
             font-size: 14px;
-            color: #2c3e50;
+            color: #0B3B2B;
         }
         .saldo-pessoa-total {
             font-weight: 800;
             font-size: 15px;
-            color: #e74c3c;
+            color: #B3402F;
         }
         .saldo-evento-row {
             background: white;
             border-radius: 5px;
             padding: 8px 10px;
             margin-bottom: 4px;
-            border: 1px solid #eee;
+            border: 1px solid #E6EAE4;
             font-size: 13px;
         }
         .saldo-evento-info {
@@ -870,20 +892,20 @@
         }
         .saldo-evento-nome {
             font-weight: 600;
-            color: #2c3e50;
+            color: #0B3B2B;
         }
         .saldo-evento-data {
             font-size: 11px;
-            color: #95a5a6;
+            color: #7C8782;
         }
         .saldo-evento-consumo {
             font-size: 11px;
-            color: #95a5a6;
+            color: #7C8782;
             margin-top: 3px;
         }
         .saldo-evento-valor {
             font-weight: 700;
-            color: #e74c3c;
+            color: #B3402F;
             margin-top: 4px;
             font-size: 13px;
         }
@@ -895,20 +917,20 @@
             background: white;
             border-radius: 6px;
             margin-bottom: 5px;
-            border: 1px solid #eee;
+            border: 1px solid #E6EAE4;
             font-size: 13px;
         }
         .pgto-hist-item .pgto-info-col { flex: 1; }
         .pgto-hist-item .pgto-nome { font-weight: 600; }
-        .pgto-hist-item .pgto-detalhe { font-size: 11px; color: #95a5a6; margin-top: 2px; }
-        .pgto-hist-item .pgto-valor { font-weight: 700; color: #27ae60; min-width: 60px; text-align: right; margin-right: 8px; }
+        .pgto-hist-item .pgto-detalhe { font-size: 11px; color: #7C8782; margin-top: 2px; }
+        .pgto-hist-item .pgto-valor { font-weight: 700; color: #0E7A4F; min-width: 60px; text-align: right; margin-right: 8px; }
         .pgto-hist-item .pgto-delete {
-            background: #e74c3c; color: white; border: none;
+            background: #B3402F; color: white; border: none;
             width: 24px; height: 24px; border-radius: 50%;
             cursor: pointer; font-size: 13px; padding: 0;
         }
         .pgto-hist-item .pgto-edit {
-            background: #3498db; color: white; border: none;
+            background: #0E7A4F; color: white; border: none;
             width: 24px; height: 24px; border-radius: 50%;
             cursor: pointer; font-size: 11px; padding: 0;
             margin-right: 4px;
@@ -920,7 +942,7 @@
             width: 56px;
             height: 56px;
             border-radius: 50%;
-            background: #27ae60;
+            background: #0E7A4F;
             color: white;
             font-size: 28px;
             border: none;
@@ -954,24 +976,24 @@
         .pgto-search {
             width: 100%;
             padding: 10px 12px;
-            border: 1px solid #ddd;
+            border: 1px solid #DDE3DD;
             border-radius: 6px;
             font-size: 13px;
             margin-bottom: 10px;
         }
-        .pgto-search:focus { outline: none; border-color: #3498db; }
+        .pgto-search:focus { outline: none; border-color: #0E7A4F; }
         .pgto-edit-row {
             display: flex;
             gap: 6px;
             align-items: center;
             margin-top: 6px;
             padding: 6px 8px;
-            background: #f0f7ff;
+            background: #EAF3EE;
             border-radius: 4px;
         }
         .pgto-edit-row input {
             padding: 6px 8px;
-            border: 1px solid #ccc;
+            border: 1px solid #C8D0C8;
             border-radius: 4px;
             font-size: 12px;
         }
@@ -988,13 +1010,13 @@
         }
         .pagador-selector label {
             font-size: 13px;
-            color: #7f8c8d;
+            color: #5B6661;
             white-space: nowrap;
         }
         .pagador-selector select {
             flex: 1;
             padding: 8px;
-            border: 1px solid #ddd;
+            border: 1px solid #DDE3DD;
             border-radius: 4px;
             font-size: 13px;
         }
@@ -1027,29 +1049,314 @@
                 font-size: 13px;
             }
         }
+
+        /* ═══════════ SKIN: Talão de dia de jogo ═══════════ */
+        body {
+            background: var(--toalha);
+            color: var(--ink);
+            padding: 0 10px 24px;
+        }
+        .header {
+            background:
+                repeating-linear-gradient(0deg, rgba(255,255,255,0.045) 0 7px, transparent 7px 14px),
+                var(--verde-escuro);
+            margin: 0 -10px;
+            padding: 18px 16px 12px;
+            border-radius: 0;
+            text-align: left;
+        }
+        .header h1 {
+            font-family: var(--display);
+            font-weight: 600;
+            font-size: 26px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            line-height: 1;
+            margin-bottom: 0;
+        }
+        .header h1 small {
+            display: block;
+            font-size: 11px;
+            letter-spacing: 0.22em;
+            font-weight: 500;
+            color: #9CC4AF;
+            margin-top: 4px;
+        }
+        .top-nav {
+            background:
+                repeating-linear-gradient(0deg, rgba(255,255,255,0.045) 0 7px, transparent 7px 14px),
+                var(--verde-escuro);
+            margin: 0 -10px;
+            padding: 12px 16px 0;
+            border-radius: 0;
+            gap: 4px;
+            overflow: visible;
+        }
+        .top-nav::before { display: none; }
+        .top-nav-btn {
+            border-radius: 7px 7px 0 0;
+            background: rgba(0,0,0,0.25);
+            font-family: var(--display);
+            font-weight: 600;
+            font-size: 15px;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: #9CC4AF;
+            border-bottom: none;
+            padding: 10px 6px;
+            position: relative;
+        }
+        .top-nav-btn.active {
+            background: var(--verde-tinta);
+            color: #fff;
+            border-bottom: none;
+        }
+        .top-nav-btn:not(.active):hover { color: #C9DFD2; background: rgba(0,0,0,0.32); }
+        .top-nav-badge {
+            position: absolute;
+            top: -7px;
+            right: -4px;
+            background: var(--rubro);
+            font-family: var(--mono);
+            font-weight: 600;
+            font-size: 9px;
+            margin-left: 0;
+            border: 1.5px solid var(--verde-escuro);
+            z-index: 2;
+        }
+        #header-evento-context {
+            background: var(--verde-tinta);
+            margin: 0 -10px 16px;
+            padding: 14px 16px;
+            border-radius: 0 0 16px 16px;
+        }
+        #descricao-evento {
+            width: 100%;
+            background: transparent;
+            border: none;
+            border-bottom: 1px dashed rgba(255,255,255,0.45);
+            border-radius: 0;
+            color: #fff;
+            font-family: var(--display);
+            font-weight: 600;
+            font-size: 19px;
+            letter-spacing: 0.03em;
+            padding: 4px 2px 7px;
+            text-align: center;
+        }
+        #descricao-evento:focus { outline: none; box-shadow: none; border-bottom-color: #fff; }
+        .header-nav button, .historico-toggle-btn {
+            border-radius: 8px;
+            font-family: var(--display);
+            font-weight: 600;
+            font-size: 14px;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+        .header-nav button:not(.historico-toggle-btn) {
+            background: #fff;
+            color: var(--verde-escuro);
+            border-color: #fff;
+        }
+        .section {
+            border: 1px solid var(--linha);
+            border-radius: 14px;
+            padding: 16px;
+            box-shadow: none;
+        }
+        .eyebrow {
+            font-family: var(--display);
+            font-weight: 600;
+            font-size: 12px;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--verde);
+            margin-bottom: 2px;
+        }
+        .section h2 {
+            font-family: var(--display);
+            font-weight: 600;
+            font-size: 21px;
+            letter-spacing: 0.02em;
+            color: var(--ink);
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+        .section.collapsed .eyebrow { margin-bottom: 0; }
+        .section h2.h2-toggle .sec-arrow { color: var(--verde); }
+        input, select {
+            border: 1px solid var(--linha);
+            border-radius: 9px;
+            background: #FAFBF9;
+            color: var(--ink);
+            padding: 11px 10px;
+            -webkit-appearance: none;
+            appearance: none;
+            min-width: 0;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+        input:focus, select:focus {
+            border-color: var(--verde);
+            box-shadow: 0 0 0 3px rgba(14,122,79,0.15);
+        }
+        button {
+            border-radius: 9px;
+            font-family: var(--display);
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            font-size: 15px;
+        }
+        .amigo-btn {
+            border-radius: 9px;
+            border: 1.5px solid var(--linha);
+            background: #FAFBF9;
+            color: var(--ink-soft);
+            font-family: var(--body, -apple-system, sans-serif);
+            font-weight: 600;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+        .amigo-btn.selected {
+            background: var(--verde);
+            border-color: var(--verde);
+            color: #fff;
+        }
+        .ordem, .oferta {
+            background: transparent;
+            border-radius: 0;
+            border-bottom: 1px solid var(--linha);
+            margin-bottom: 0;
+            padding: 10px 2px;
+        }
+        .oferta { border-left: none; background: var(--dourado-claro); border-radius: 9px; padding: 10px; margin-bottom: 6px; border-bottom: none; }
+        .resumo { background: var(--verde-claro); border-radius: 10px; }
+        /* dinheiro: sempre tabular mono */
+        .ordem-preco, .oferta-valor, .pessoa-valor, .pessoa-valor-final,
+        .preco-tag, .valor, .valor-ajustado, .valor-original, .saldo-valor,
+        .saldo-pessoa-total, .saldo-evento-valor, .pgto-valor,
+        #total-mesa, #num-pessoas, .top-nav-badge, .ordem-qtd-badge {
+            font-family: var(--mono);
+            font-weight: 600;
+        }
+        /* ═══ O TALÃO ═══ */
+        .talao {
+            margin: 16px -4px 4px;
+            background: var(--talao);
+            border: 1px solid #E7E2D2;
+            border-bottom: none;
+            box-shadow: 0 6px 14px rgba(27,35,31,0.10);
+            font-family: var(--mono);
+            color: #2A2C28;
+            padding: 16px 14px 20px;
+            position: relative;
+            clip-path: polygon(0 0,100% 0,100% calc(100% - 7px),
+                97.5% 100%,95% calc(100% - 7px),92.5% 100%,90% calc(100% - 7px),87.5% 100%,
+                85% calc(100% - 7px),82.5% 100%,80% calc(100% - 7px),77.5% 100%,
+                75% calc(100% - 7px),72.5% 100%,70% calc(100% - 7px),67.5% 100%,
+                65% calc(100% - 7px),62.5% 100%,60% calc(100% - 7px),57.5% 100%,
+                55% calc(100% - 7px),52.5% 100%,50% calc(100% - 7px),47.5% 100%,
+                45% calc(100% - 7px),42.5% 100%,40% calc(100% - 7px),37.5% 100%,
+                35% calc(100% - 7px),32.5% 100%,30% calc(100% - 7px),27.5% 100%,
+                25% calc(100% - 7px),22.5% 100%,20% calc(100% - 7px),17.5% 100%,
+                15% calc(100% - 7px),12.5% 100%,10% calc(100% - 7px),7.5% 100%,
+                5% calc(100% - 7px),2.5% 100%,0 calc(100% - 7px));
+        }
+        .talao-head {
+            text-align: center;
+            font-size: 11px;
+            letter-spacing: 0.18em;
+            margin-bottom: 10px;
+            color: #2A2C28;
+        }
+        .talao-head b {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.22em;
+        }
+        .talao-hr, .talao hr {
+            border: none;
+            border-top: 1px dashed #C9C2AC;
+            margin: 9px 0;
+        }
+        .talao label { font-family: var(--mono); }
+        .talao input, .talao select { background: #fff; font-family: var(--mono); }
+        .talao .pagador-selector label { color: #4A534E; }
+        .carimbo {
+            position: absolute;
+            top: 44px;
+            right: 10px;
+            transform: rotate(8deg);
+            border: 2px solid var(--verde);
+            color: var(--verde);
+            border-radius: 6px;
+            font-family: var(--display);
+            font-weight: 600;
+            font-size: 12px;
+            letter-spacing: 0.16em;
+            padding: 2px 7px;
+            text-transform: uppercase;
+            opacity: 0.85;
+            pointer-events: none;
+        }
+        #ajuste-racio { font-family: var(--mono); font-size: 12px !important; }
+        .pessoa-ajuste { border-left: none; background: transparent; border-bottom: 1px dashed #E0DAC4; border-radius: 0; }
+        .pessoa-conta-final { border: none; border-bottom: 1px solid var(--linha); border-radius: 0; margin-bottom: 0; padding: 10px 2px; }
+        /* contas / pagamentos */
+        .contas-tab-bar { border-radius: 9px; border-color: var(--linha); }
+        .contas-tab {
+            font-family: var(--display);
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            font-size: 14px;
+            background: #FAFBF9;
+        }
+        .contas-tab.active { background: var(--verde-escuro); }
+        .contas-evento, .saldo-pessoa-card { border-radius: 12px; }
+        .fab {
+            background: var(--verde);
+            box-shadow: 0 4px 14px rgba(11,59,43,0.35);
+            font-family: var(--body, -apple-system, sans-serif);
+        }
+        .fab-panel { border-radius: 14px; }
+        .modal-box { border-radius: 16px; }
+        .modal-body .modal-title { font-family: var(--display); font-weight: 600; font-size: 17px; letter-spacing: 0.03em; }
+        #readonly-banner { border-radius: 10px; }
+        .config-section-label {
+            font-family: var(--display);
+            font-weight: 600;
+            font-size: 12px;
+            letter-spacing: 0.2em;
+            color: var(--verde);
+        }
+        @media (max-width: 480px) {
+            body { padding: 0 8px 24px; }
+            .header, .top-nav, #header-evento-context { margin-left: -8px; margin-right: -8px; }
+            .header h1 { font-size: 24px; }
+        }
     </style>
 </head>
 <body>
 
 
 <div class="header">
-    <h1>Divisão de Contas <span style="font-size:1.2em;">🍽️⚽💰</span></h1>
+    <h1>SplitBill<small>Divisão de contas · dia de jogo</small></h1>
 </div>
 
 <!-- Top Navigation -->
 <div class="top-nav">
-    <button class="top-nav-btn active" id="nav-eventos" onclick="mudarPagina('eventos')">📋 Eventos</button>
-    <button class="top-nav-btn" id="nav-pagamentos" onclick="mudarPagina('pagamentos')">💰 Pagamentos <span id="nav-pgto-badge" class="top-nav-badge" style="display:none;"></span></button>
-    <button class="top-nav-btn" id="nav-geral" onclick="mudarPagina('geral')">⚙️ Geral</button>
+    <button class="top-nav-btn active" id="nav-eventos" onclick="mudarPagina('eventos')">Eventos</button>
+    <button class="top-nav-btn" id="nav-pagamentos" onclick="mudarPagina('pagamentos')">Pagamentos<span id="nav-pgto-badge" class="top-nav-badge" style="display:none;"></span></button>
+    <button class="top-nav-btn" id="nav-geral" onclick="mudarPagina('geral')">Geral</button>
 </div>
 
 <!-- Event context bar (only visible on Eventos tab) -->
-<div id="header-evento-context" style="background:#2c3e50;padding:10px 15px 15px;border-radius:8px;margin-top:8px;margin-bottom:15px;">
+<div id="header-evento-context">
     <input type="text" id="descricao-evento" placeholder="Descrição do evento (ex: Almoço Sá 19 Abril)" maxlength="80"
-        style="width:100%;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;border-radius:4px;padding:8px 10px;font-size:13px;text-align:center;"
-        oninput="estado.descricaoEvento=this.value;salvarNoLocalStorage()"
-        onfocus="this.style.background='rgba(255,255,255,0.25)'"
-        onblur="this.style.background='rgba(255,255,255,0.15)'">
+        oninput="estado.descricaoEvento=this.value;salvarNoLocalStorage()">
     <div class="header-nav" style="margin-top:10px;">
         <select id="historico-select" onchange="navegarHistorico(this.value)" style="display:none;">
             <option value="">📚 Histórico de eventos</option>
@@ -1059,7 +1366,7 @@
             <span id="historico-toggle-arrow" style="font-size:10px;opacity:0.6;transition:transform 0.2s;">▼</span>
         </button>
         <button onclick="novoEvento()">＋ Novo</button>
-        <button id="btn-gh-reset" style="display:none;background:rgba(52,152,219,0.85);border-color:rgba(255,255,255,0.4);font-size:12px;padding:8px 10px;" onclick="ghReset()">🔄 Sync</button>
+        <button id="btn-gh-reset" style="display:none;background:rgba(14,122,79,0.85);border-color:rgba(255,255,255,0.4);font-size:12px;padding:8px 10px;" onclick="ghReset()">🔄 Sync</button>
     </div>
     <div class="historico-panel" id="historico-panel"></div>
 </div>
@@ -1086,7 +1393,8 @@
 
 <!-- ADICIONAR ORDEM -->
 <div class="section" id="section-adicionar">
-    <h2 class="h2-toggle" onclick="toggleSection('adicionar')"><span>1. Adiciona uma Ordem</span><span class="sec-arrow">▼</span></h2>
+    <div class="eyebrow">Pedidos</div>
+    <h2 class="h2-toggle" onclick="toggleSection('adicionar')"><span>Adiciona uma ordem</span><span class="sec-arrow">▼</span></h2>
     <div class="section-body">
 
     <div class="form-row">
@@ -1097,7 +1405,7 @@
     </div>
 
     <div>
-        <label style="font-size: 13px; color: #7f8c8d; margin-bottom: 8px; display: block;">Quem comeu/bebeu?</label>
+        <label style="font-size: 13px; color: #5B6661; margin-bottom: 8px; display: block;">Quem comeu/bebeu?</label>
         <div class="amigos-grid" id="amigos-grid"></div>
     </div>
 
@@ -1108,15 +1416,17 @@
 
 <!-- ORDENS REGISTADAS -->
 <div class="section">
-    <h2>2. Ordens Registadas</h2>
+    <div class="eyebrow">Mesa</div>
+    <h2>Ordens registadas</h2>
     <div id="lista-ordens"></div>
-    <p style="color: #7f8c8d; font-size: 12px; margin-top: 10px;">Total de ordens: <strong id="total-ordens">0</strong></p>
+    <p style="color: #5B6661; font-size: 12px; margin-top: 10px;">Total de ordens: <strong id="total-ordens">0</strong></p>
 </div>
 
 
 <!-- OFERTAS -->
 <div class="section" id="section-ofertas">
-    <h2 class="h2-toggle" onclick="toggleSection('ofertas')"><span>2b. 🎁 Ofertas</span><span class="sec-arrow">▼</span></h2>
+    <div class="eyebrow">Rodadas</div>
+    <h2 class="h2-toggle" onclick="toggleSection('ofertas')"><span>🎁 Ofertas</span><span class="sec-arrow">▼</span></h2>
     <div class="section-body">
     <div id="oferta-form">
     <div class="form-row" style="flex-wrap:wrap; gap:8px; margin-bottom:10px;">
@@ -1130,11 +1440,11 @@
     </div>
 
     <div>
-        <label style="font-size: 13px; color: #7f8c8d; margin-bottom: 8px; display: block;">Oferece a quem?</label>
+        <label style="font-size: 13px; color: #5B6661; margin-bottom: 8px; display: block;">Oferece a quem?</label>
         <div class="amigos-grid" id="oferta-amigos-grid"></div>
     </div>
 
-    <button id="btn-adicionar-oferta" onclick="adicionarOferta()" style="width:100%; background:#f39c12;" disabled>🎁 Adicionar Oferta</button>
+    <button id="btn-adicionar-oferta" onclick="adicionarOferta()" style="width:100%; background:#B8911F;" disabled>🎁 Adicionar Oferta</button>
     <div id="mensagem-oferta" style="margin-top:8px;"></div>
     </div>
 
@@ -1144,12 +1454,13 @@
 
 <!-- RESUMO DA CONTA -->
 <div class="section">
-    <h2>3. Resumo da Conta</h2>
+    <div class="eyebrow">Fecho</div>
+    <h2>Resumo da conta</h2>
 
     <div class="resumo">
         <div class="resumo-linha">
             <span>Total da mesa:</span>
-            <span id="total-mesa" style="color: #27ae60; font-weight: 700;">€0.00</span>
+            <span id="total-mesa" style="color: #0E7A4F; font-weight: 700;">€0.00</span>
         </div>
         <div class="resumo-linha">
             <span>Número de pessoas:</span>
@@ -1158,17 +1469,19 @@
     </div>
 
     <div>
-        <label style="font-size: 13px; color: #7f8c8d; margin-bottom: 8px; display: block;">💸 Conta por pessoa:</label>
+        <label style="font-size: 13px; color: #5B6661; margin-bottom: 8px; display: block;">💸 Conta por pessoa:</label>
         <div id="conta-pessoas"></div>
     </div>
 
     <div style="margin-top: 16px;">
-        <label style="font-size: 13px; color: #7f8c8d; margin-bottom: 8px; display: block;">🧾 Total por item:</label>
+        <label style="font-size: 13px; color: #5B6661; margin-bottom: 8px; display: block;">🧾 Total por item:</label>
         <div id="total-itens"></div>
     </div>
 
-    <div id="fatura-section" style="margin-top: 16px; background: #fff8e1; border: 1px solid #ffe082; border-radius: 6px; padding: 12px;">
-        <label style="font-size: 13px; color: #7f8c8d; margin-bottom: 8px; display: block;">🧾 Fatura do Restaurante</label>
+    <div id="fatura-section" class="talao">
+        <div class="carimbo" id="talao-carimbo" style="display:none;">Fechado</div>
+        <div class="talao-head"><b>FATURA DO RESTAURANTE</b>conferência da conta</div>
+        <hr class="talao-hr">
         <div class="pagador-selector">
             <label>💳 Quem pagou:</label>
             <select id="pagador-select" onchange="atualizarPagador()">
@@ -1177,18 +1490,18 @@
         </div>
         <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px;">
             <input type="number" id="total-fatura" placeholder="Total (€)" min="0" step="0.01"
-                style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
-            <button id="btn-fechar-evento" onclick="fecharComFatura()" style="flex: 1; padding: 10px 14px; font-size: 13px; background:#27ae60;">🔒 Fechar Conta</button>
+                style="flex: 1; padding: 10px; border: 1px solid #DDE3DD; border-radius: 4px; font-size: 14px;">
+            <button id="btn-fechar-evento" onclick="fecharComFatura()" style="flex: 1; padding: 10px 14px; font-size: 13px; background:#0E7A4F;">🔒 Fechar Conta</button>
             <button id="btn-reabrir-evento" onclick="reabrirEvento()" style="flex: 1; padding: 10px 14px; font-size: 13px; display:none;" class="secondary">🔓 Reabrir Conta</button>
         </div>
         <div id="ajuste-info" style="display:none;">
-            <div id="ajuste-racio" style="font-size: 13px; color: #555; margin-bottom: 8px;"></div>
+            <div id="ajuste-racio" style="font-size: 13px; color: #4A534E; margin-bottom: 8px;"></div>
             <div id="conta-pessoas-ajustada"></div>
         </div>
     </div>
 
     <!-- PDFs no final do bloco 3 -->
-    <div style="margin-top:16px;border-top:1px solid #e8e8e8;padding-top:12px;display:flex;gap:8px;">
+    <div style="margin-top:16px;border-top:1px solid #E2E7E0;padding-top:12px;display:flex;gap:8px;">
         <button onclick="exportarPDFConta()" style="flex:1;">📋 PDF Conta</button>
         <button onclick="exportarPDFDivisao()" style="flex:1;">💸 PDF Divisão</button>
     </div>
@@ -1198,7 +1511,7 @@
 <div class="section" id="section-config">
     <div class="config-toggle" onclick="toggleConfig()">
         <h2 style="border-bottom:none;margin-bottom:0;">⚙️ Configurações do Evento</h2>
-        <span id="config-arrow" style="font-size:18px;color:#95a5a6;">▼</span>
+        <span id="config-arrow" style="font-size:18px;color:#7C8782;">▼</span>
     </div>
     <div class="config-body" id="config-body" style="display:none;">
         <div class="config-section-label">👥 Amigos</div>
@@ -1247,30 +1560,30 @@
 <div class="fab-backdrop" id="fab-backdrop" onclick="fecharFabPanel()"></div>
 <button class="fab" id="fab-pgto" onclick="abrirFabPanel()">＋</button>
 <div class="fab-panel" id="fab-panel">
-    <div style="font-size:14px;font-weight:700;color:#2c3e50;margin-bottom:12px;">💸 Registar Pagamento</div>
+    <div style="font-size:14px;font-weight:700;color:#0B3B2B;margin-bottom:12px;">💸 Registar Pagamento</div>
     <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
-        <select id="pgto-pessoa" style="flex:1;min-width:100px;padding:8px;border:1px solid #ccc;border-radius:4px;font-size:13px;" onchange="atualizarPgtoForm()">
+        <select id="pgto-pessoa" style="flex:1;min-width:100px;padding:8px;border:1px solid #C8D0C8;border-radius:4px;font-size:13px;" onchange="atualizarPgtoForm()">
             <option value="">Quem pagou?</option>
         </select>
-        <select id="pgto-tipo" style="flex:1;min-width:120px;padding:8px;border:1px solid #ccc;border-radius:4px;font-size:13px;" onchange="atualizarPgtoForm()">
+        <select id="pgto-tipo" style="flex:1;min-width:120px;padding:8px;border:1px solid #C8D0C8;border-radius:4px;font-size:13px;" onchange="atualizarPgtoForm()">
             <option value="evento">Pagar evento</option>
             <option value="livre">Pagamento livre</option>
         </select>
     </div>
     <div id="pgto-evento-row" style="display:flex;gap:8px;margin-bottom:8px;">
-        <select id="pgto-evento" style="flex:1;padding:8px;border:1px solid #ccc;border-radius:4px;font-size:11px;" onchange="atualizarPgtoValorEvento()">
+        <select id="pgto-evento" style="flex:1;padding:8px;border:1px solid #C8D0C8;border-radius:4px;font-size:11px;" onchange="atualizarPgtoValorEvento()">
             <option value="">-- Seleciona evento --</option>
         </select>
     </div>
     <div id="pgto-livre-row" style="display:none;gap:8px;margin-bottom:8px;">
-        <input type="number" id="pgto-valor-livre" placeholder="Valor (€)" min="0" step="0.01" style="flex:1;padding:8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+        <input type="number" id="pgto-valor-livre" placeholder="Valor (€)" min="0" step="0.01" style="flex:1;padding:8px;border:1px solid #C8D0C8;border-radius:4px;font-size:13px;">
     </div>
     <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">
-        <label style="font-size:12px;color:#7f8c8d;white-space:nowrap;">📅 Data:</label>
-        <input type="text" id="pgto-data" placeholder="dd/mm/aaaa" style="flex:1;padding:8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+        <label style="font-size:12px;color:#5B6661;white-space:nowrap;">📅 Data:</label>
+        <input type="text" id="pgto-data" placeholder="dd/mm/aaaa" style="flex:1;padding:8px;border:1px solid #C8D0C8;border-radius:4px;font-size:13px;">
     </div>
-    <div id="pgto-info" style="font-size:12px;color:#555;margin-bottom:8px;display:none;"></div>
-    <button onclick="registarPagamento()" style="width:100%;background:#27ae60;padding:10px;font-size:13px;">✓ Registar Pagamento</button>
+    <div id="pgto-info" style="font-size:12px;color:#4A534E;margin-bottom:8px;display:none;"></div>
+    <button onclick="registarPagamento()" style="width:100%;background:#0E7A4F;padding:10px;font-size:13px;">✓ Registar Pagamento</button>
     <div id="pgto-msg" style="margin-top:6px;"></div>
 </div>
 
@@ -1281,9 +1594,9 @@
 <div class="section" id="section-ajuda">
     <div class="config-toggle" onclick="toggleAjuda()">
         <h2 style="border-bottom:none;margin-bottom:0;">❓ Como usar</h2>
-        <span id="ajuda-arrow" style="font-size:18px;color:#95a5a6;">▼</span>
+        <span id="ajuda-arrow" style="font-size:18px;color:#7C8782;">▼</span>
     </div>
-    <div id="ajuda-body" style="display:none;margin-top:14px;font-size:13px;color:#555;line-height:1.7;">
+    <div id="ajuda-body" style="display:none;margin-top:14px;font-size:13px;color:#4A534E;line-height:1.7;">
         <p><strong>⚙️ Configurações do Evento</strong> — No final da página Eventos, configura os amigos e o menu do restaurante para cada evento. Podes importar um ficheiro Excel, ou editar, adicionar e remover entradas diretamente na app. Cada evento tem os seus próprios amigos e menu.</p>
         <p style="margin-top:8px;"><strong>📚 Histórico</strong> — Painel no topo para navegar entre eventos. Os eventos com fatura ficam em modo leitura; usa <strong>🔓 Desbloquear</strong> para editar. Todas as alterações são guardadas automaticamente.</p>
         <p style="margin-top:8px;"><strong>＋ Novo</strong> — Cria um novo evento, herdando os amigos e menu do evento mais recente como ponto de partida.</p>
@@ -1305,7 +1618,7 @@
 <div class="section">
     <div class="config-toggle" onclick="toggleGuardar()">
         <h2 style="border-bottom:none;margin-bottom:0;">4. 💾 Guardar / Exportar</h2>
-        <span id="guardar-arrow" style="font-size:18px;color:#95a5a6;">▼</span>
+        <span id="guardar-arrow" style="font-size:18px;color:#7C8782;">▼</span>
     </div>
     <div id="guardar-body" style="display:none;margin-top:12px;">
     <div class="botoes-dados">
@@ -1317,41 +1630,41 @@
     <input type="file" id="input-json" accept=".json" style="display:none;" onchange="importarJSON()">
 
     <!-- GITHUB SYNC -->
-    <div style="margin-top:15px;border-top:1px solid #e0e0e0;padding-top:15px;">
+    <div style="margin-top:15px;border-top:1px solid #DEE3DD;padding-top:15px;">
       <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;gap:8px" onclick="toggleGhSection()">
         <div style="display:flex;align-items:center;gap:8px">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:#7f8c8d;flex-shrink:0"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.2 11.38.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.54-1.38-1.33-1.75-1.33-1.75-1.09-.74.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.49.99.1-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 3-.4c1.02 0 2.04.14 3 .4 2.28-1.55 3.29-1.23 3.29-1.23.66 1.66.25 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.63-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.21.7.82.58C20.56 21.8 24 17.3 24 12 24 5.37 18.63 0 12 0z"/></svg>
-          <span style="font-size:13px;color:#7f8c8d;font-weight:600">Sincronização com GitHub</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:#5B6661;flex-shrink:0"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.2 11.38.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.54-1.38-1.33-1.75-1.33-1.75-1.09-.74.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.49.99.1-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 3-.4c1.02 0 2.04.14 3 .4 2.28-1.55 3.29-1.23 3.29-1.23.66 1.66.25 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.63-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.21.7.82.58C20.56 21.8 24 17.3 24 12 24 5.37 18.63 0 12 0z"/></svg>
+          <span style="font-size:13px;color:#5B6661;font-weight:600">Sincronização com GitHub</span>
         </div>
-        <span id="gh-body-arrow" style="font-size:12px;color:#7f8c8d;transition:transform .2s">▶</span>
+        <span id="gh-body-arrow" style="font-size:12px;color:#5B6661;transition:transform .2s">▶</span>
       </div>
       <div id="gh-body" style="display:none;margin-top:12px">
-        <p style="font-size:12px;color:#7f8c8d;margin-bottom:11px">Guarda o <code style="background:#f5f5f5;padding:1px 5px;border-radius:4px;font-size:11px">data.json</code> no repositório. Para <strong>guardar</strong> precisas de um <a href="https://github.com/settings/tokens" target="_blank" style="color:#3498db">Personal Access Token</a> com permissão <code style="background:#f5f5f5;padding:1px 5px;border-radius:4px;font-size:11px">repo</code>.</p>
-        <p style="font-size:12px;color:#e67e22;margin-bottom:11px">⚠️ <strong>Importar do GitHub substitui TODOS os dados locais.</strong> Não é feito automaticamente ao carregar a página para proteger eventos em curso.</p>
+        <p style="font-size:12px;color:#5B6661;margin-bottom:11px">Guarda o <code style="background:#EFF1EC;padding:1px 5px;border-radius:4px;font-size:11px">data.json</code> no repositório. Para <strong>guardar</strong> precisas de um <a href="https://github.com/settings/tokens" target="_blank" style="color:#0E7A4F">Personal Access Token</a> com permissão <code style="background:#EFF1EC;padding:1px 5px;border-radius:4px;font-size:11px">repo</code>.</p>
+        <p style="font-size:12px;color:#A07712;margin-bottom:11px">⚠️ <strong>Importar do GitHub substitui TODOS os dados locais.</strong> Não é feito automaticamente ao carregar a página para proteger eventos em curso.</p>
         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:11px">
           <div>
-            <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:3px">Token GitHub <em style="text-transform:none;font-weight:400;letter-spacing:0;font-size:11px">(ghp_… — obrigatório para guardar)</em></label>
+            <label style="font-size:12px;font-weight:600;color:#4A534E;display:block;margin-bottom:3px">Token GitHub <em style="text-transform:none;font-weight:400;letter-spacing:0;font-size:11px">(ghp_… — obrigatório para guardar)</em></label>
             <div style="display:flex;gap:6px">
-              <input type="password" id="gh-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" style="flex:1;padding:8px;border:1px solid #ddd;border-radius:5px;font-size:13px">
+              <input type="password" id="gh-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" style="flex:1;padding:8px;border:1px solid #DDE3DD;border-radius:5px;font-size:13px">
             </div>
           </div>
           <div style="display:flex;gap:8px">
             <div style="flex:1">
-              <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:3px">Utilizador / Org</label>
-              <input type="text" id="gh-owner" placeholder="diogoandrefsilva-ghc" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:5px;font-size:13px">
+              <label style="font-size:12px;font-weight:600;color:#4A534E;display:block;margin-bottom:3px">Utilizador / Org</label>
+              <input type="text" id="gh-owner" placeholder="diogoandrefsilva-ghc" style="width:100%;padding:8px;border:1px solid #DDE3DD;border-radius:5px;font-size:13px">
             </div>
             <div style="flex:1">
-              <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:3px">Repositório</label>
-              <input type="text" id="gh-repo" placeholder="SplitBill" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:5px;font-size:13px">
+              <label style="font-size:12px;font-weight:600;color:#4A534E;display:block;margin-bottom:3px">Repositório</label>
+              <input type="text" id="gh-repo" placeholder="SplitBill" style="width:100%;padding:8px;border:1px solid #DDE3DD;border-radius:5px;font-size:13px">
             </div>
           </div>
           <div>
-            <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:3px">Caminho do ficheiro</label>
-            <input type="text" id="gh-path" placeholder="splitbill-data.json" value="splitbill-data.json" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:5px;font-size:13px">
+            <label style="font-size:12px;font-weight:600;color:#4A534E;display:block;margin-bottom:3px">Caminho do ficheiro</label>
+            <input type="text" id="gh-path" placeholder="splitbill-data.json" value="splitbill-data.json" style="width:100%;padding:8px;border:1px solid #DDE3DD;border-radius:5px;font-size:13px">
           </div>
           <div>
-            <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:3px">Branch</label>
-            <input type="text" id="gh-branch" placeholder="main" value="main" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:5px;font-size:13px">
+            <label style="font-size:12px;font-weight:600;color:#4A534E;display:block;margin-bottom:3px">Branch</label>
+            <input type="text" id="gh-branch" placeholder="main" value="main" style="width:100%;padding:8px;border:1px solid #DDE3DD;border-radius:5px;font-size:13px">
           </div>
         </div>
         <div class="botoes-dados" style="margin-bottom:8px">
@@ -1659,7 +1972,7 @@ function _atualizarUIInner() {
     // Lista de ordens
     const lista = document.getElementById('lista-ordens');
     if (estado.ordens.length === 0) {
-        lista.innerHTML = '<p style="color: #95a5a6; font-size: 13px; text-align: center;">Nenhuma ordem registada ainda</p>';
+        lista.innerHTML = '<p style="color: #7C8782; font-size: 13px; text-align: center;">Nenhuma ordem registada ainda</p>';
     } else {
         lista.innerHTML = estado.ordens.map(ordem => `
             <div class="ordem" id="ordem-${ordem.id}" style="flex-wrap:wrap;">
@@ -1701,7 +2014,7 @@ function _atualizarUIInner() {
     // Render lista ofertas
     const listaOfertas = document.getElementById('lista-ofertas');
     if (estado.ofertas.length === 0) {
-        listaOfertas.innerHTML = '<p style="color:#95a5a6;font-size:13px;text-align:center;">Nenhuma oferta ainda</p>';
+        listaOfertas.innerHTML = '<p style="color:#7C8782;font-size:13px;text-align:center;">Nenhuma oferta ainda</p>';
     } else {
         listaOfertas.innerHTML = estado.ofertas.map(o => `
             <div class="oferta">
@@ -1726,7 +2039,7 @@ function _atualizarUIInner() {
 
     const contaDiv = document.getElementById('conta-pessoas');
     if (todasPessoas.size === 0) {
-        contaDiv.innerHTML = '<p style="color: #95a5a6; font-size: 13px; text-align: center;">Sem dados ainda</p>';
+        contaDiv.innerHTML = '<p style="color: #7C8782; font-size: 13px; text-align: center;">Sem dados ainda</p>';
     } else {
         const pessoas = Array.from(todasPessoas).sort();
         contaDiv.innerHTML = pessoas.map(pessoa => {
@@ -1773,12 +2086,12 @@ function _atualizarUIInner() {
     });
     const itensDiv = document.getElementById('total-itens');
     if (estado.ordens.length === 0) {
-        itensDiv.innerHTML = '<p style="color: #95a5a6; font-size: 13px; text-align: center;">Sem dados ainda</p>';
+        itensDiv.innerHTML = '<p style="color: #7C8782; font-size: 13px; text-align: center;">Sem dados ainda</p>';
     } else {
         const itens = Object.keys(totalPorItem).sort();
         itensDiv.innerHTML = itens.map(item => `
             <div class="pessoa-conta">
-                <span class="pessoa-nome">${item} <span style="font-weight:400;color:#95a5a6;font-size:12px;">(${qtdPorItem[item]}x)</span></span>
+                <span class="pessoa-nome">${item} <span style="font-weight:400;color:#7C8782;font-size:12px;">(${qtdPorItem[item]}x)</span></span>
                 <span class="pessoa-valor">€${totalPorItem[item].toFixed(2)}</span>
             </div>
         `).join('');
@@ -1987,8 +2300,8 @@ function renderHistoricoDropdown() {
             });
         }
         const indicador = ev.totalFatura
-            ? (temPendentes ? '<span style="font-size:10px;color:#e74c3c;margin-left:6px;">⏳</span>' : '<span style="font-size:10px;color:#27ae60;margin-left:6px;">✅</span>')
-            : '<span style="font-size:10px;color:#95a5a6;margin-left:6px;">📝</span>';
+            ? (temPendentes ? '<span style="font-size:10px;color:#B3402F;margin-left:6px;">⏳</span>' : '<span style="font-size:10px;color:#0E7A4F;margin-left:6px;">✅</span>')
+            : '<span style="font-size:10px;color:#7C8782;margin-left:6px;">📝</span>';
         return `
             <div class="historico-card${isAtual ? ' ativo' : ''}" onclick="${isAtual ? '' : 'navegarHistorico(' + ev.id + ')'}">
                 <div class="historico-card-nome">${ev.descricao || 'Sem nome'}${indicador}</div>
@@ -2329,7 +2642,7 @@ function mostrarMensagem(msg, sucesso) {
 }
 
 function pdfCabecalho(totalMesa, fatura, racio, diff, pct, sinal, corAjuste) {
-    return `<div style="background:#2c3e50;color:white;padding:22px 28px;border-radius:10px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;">
+    return `<div style="background:#0B3B2B;color:white;padding:22px 28px;border-radius:10px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;">
         <div>
             <div style="font-size:22px;font-weight:700;">🍽️ Divisão de Contas</div>
             ${estado.descricaoEvento ? `<div style="font-size:15px;font-weight:600;margin-top:6px;opacity:0.9;">${estado.descricaoEvento}</div>` : ''}
@@ -2337,9 +2650,9 @@ function pdfCabecalho(totalMesa, fatura, racio, diff, pct, sinal, corAjuste) {
         </div>
         <div style="text-align:right;">
             <div style="font-size:11px;opacity:0.6;margin-bottom:2px;">Total calculado</div>
-            <div style="font-size:24px;font-weight:800;color:#2ecc71;">€${totalMesa.toFixed(2)}</div>
+            <div style="font-size:24px;font-weight:800;color:#15915F;">€${totalMesa.toFixed(2)}</div>
             ${racio ? `<div style="font-size:11px;opacity:0.6;margin-top:8px;margin-bottom:2px;">Restaurante</div>
-            <div style="font-size:20px;font-weight:800;color:#f39c12;">€${fatura.toFixed(2)}</div>
+            <div style="font-size:20px;font-weight:800;color:#B8911F;">€${fatura.toFixed(2)}</div>
             <div style="font-size:14px;font-weight:700;color:${corAjuste};margin-top:3px;">${sinal}€${Math.abs(diff).toFixed(2)} (${sinal}${pct}%)</div>` : ''}
         </div>
     </div>`;
@@ -2362,10 +2675,10 @@ function abrirJanelaPDF(html, titulo) {
     ov.id = 'pdfOverlay';
     ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#525659;display:flex;flex-direction:column';
     ov.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#2c3e50;color:#fff;flex:0 0 auto">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#0B3B2B;color:#fff;flex:0 0 auto">
             <span style="font-weight:700;font-size:14px">${titulo}</span>
             <div style="display:flex;gap:8px">
-                <button id="pdfPrint" style="background:#3498db;border:none;color:#fff;font-size:14px;padding:8px 14px;border-radius:6px;cursor:pointer">🖨 Imprimir / Guardar PDF</button>
+                <button id="pdfPrint" style="background:#0E7A4F;border:none;color:#fff;font-size:14px;padding:8px 14px;border-radius:6px;cursor:pointer">🖨 Imprimir / Guardar PDF</button>
                 <button id="pdfClose" style="background:rgba(255,255,255,.15);border:none;color:#fff;font-size:18px;padding:8px 14px;border-radius:6px;cursor:pointer">✕</button>
             </div>
         </div>
@@ -2389,7 +2702,7 @@ function exportarPDFConta() {
     const diff = fatura ? fatura - totalMesa : null;
     const pct = racio ? ((racio - 1) * 100).toFixed(1) : null;
     const sinal = (diff >= 0) ? '+' : '';
-    const corAjuste = (diff >= 0) ? '#e74c3c' : '#27ae60';
+    const corAjuste = (diff >= 0) ? '#B3402F' : '#0E7A4F';
 
     const totalPorItem = {};
     const qtdPorItem = {};
@@ -2401,28 +2714,28 @@ function exportarPDFConta() {
     const itens = Object.keys(totalPorItem).sort();
 
     const linhasOrdens = estado.ordens.length === 0
-        ? '<tr><td colspan="5" style="text-align:center;color:#999;padding:20px;">Nenhuma ordem registada.</td></tr>'
+        ? '<tr><td colspan="5" style="text-align:center;color:#8A938D;padding:20px;">Nenhuma ordem registada.</td></tr>'
         : estado.ordens.map((o, i) => `
-            <tr style="background:${i % 2 === 0 ? '#fff' : '#f9f9f9'}">
-                <td style="padding:8px 10px;font-size:12px;color:#777;">${o.hora ? o.hora.replace(', ', ' ') : '—'}</td>
+            <tr style="background:${i % 2 === 0 ? '#fff' : '#F7F8F4'}">
+                <td style="padding:8px 10px;font-size:12px;color:#6B746F;">${o.hora ? o.hora.replace(', ', ' ') : '—'}</td>
                 <td style="padding:8px 10px;font-weight:600;">${o.item}</td>
                 <td style="padding:8px 10px;text-align:center;">${o.quantidade}x</td>
-                <td style="padding:8px 10px;font-size:12px;color:#555;">${o.amigos.join(', ')}</td>
-                <td style="padding:8px 10px;text-align:right;font-weight:700;color:#27ae60;">€${o.precoTotal.toFixed(2)}</td>
+                <td style="padding:8px 10px;font-size:12px;color:#4A534E;">${o.amigos.join(', ')}</td>
+                <td style="padding:8px 10px;text-align:right;font-weight:700;color:#0E7A4F;">€${o.precoTotal.toFixed(2)}</td>
             </tr>`).join('');
 
     const linhasItens = itens.map((item, i) => `
-        <tr style="background:${i % 2 === 0 ? '#fff' : '#f9f9f9'}">
+        <tr style="background:${i % 2 === 0 ? '#fff' : '#F7F8F4'}">
             <td style="padding:9px 14px;font-weight:600;">${item}</td>
-            <td style="padding:9px 14px;text-align:center;color:#555;">${qtdPorItem[item]}x</td>
-            <td style="padding:9px 14px;text-align:right;font-weight:700;color:#27ae60;">€${totalPorItem[item].toFixed(2)}</td>
+            <td style="padding:9px 14px;text-align:center;color:#4A534E;">${qtdPorItem[item]}x</td>
+            <td style="padding:9px 14px;text-align:right;font-weight:700;color:#0E7A4F;">€${totalPorItem[item].toFixed(2)}</td>
         </tr>`).join('');
 
     const html = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:680px;margin:0 auto;padding:30px;">
         ${pdfCabecalho(totalMesa, fatura, racio, diff, pct, sinal, corAjuste)}
-        <div style="font-size:12px;font-weight:700;color:#2c3e50;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">📋 Ordens</div>
+        <div style="font-size:12px;font-weight:700;color:#0B3B2B;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">📋 Ordens</div>
         <table style="width:100%;border-collapse:collapse;font-size:13px;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);margin-bottom:24px;">
-            <thead><tr style="background:#3498db;color:white;">
+            <thead><tr style="background:#0E7A4F;color:white;">
                 <th style="padding:9px 10px;text-align:left;">Hora</th>
                 <th style="padding:9px 10px;text-align:left;">Item</th>
                 <th style="padding:9px 10px;text-align:center;">Qtd</th>
@@ -2431,24 +2744,24 @@ function exportarPDFConta() {
             </tr></thead>
             <tbody>${linhasOrdens}</tbody>
             <tfoot>
-                <tr style="background:#ecf0f1;">
+                <tr style="background:#EFF1EC;">
                     <td colspan="4" style="padding:10px;font-weight:700;">Total calculado</td>
-                    <td style="padding:10px;text-align:right;font-weight:800;color:#27ae60;">€${totalMesa.toFixed(2)}</td>
+                    <td style="padding:10px;text-align:right;font-weight:800;color:#0E7A4F;">€${totalMesa.toFixed(2)}</td>
                 </tr>
                 ${fatura ? `
-                <tr style="background:#fff8e1;">
+                <tr style="background:#FFFDF6;">
                     <td colspan="4" style="padding:10px;font-weight:700;">Total restaurante</td>
-                    <td style="padding:10px;text-align:right;font-weight:800;color:#f39c12;">€${fatura.toFixed(2)}</td>
+                    <td style="padding:10px;text-align:right;font-weight:800;color:#B8911F;">€${fatura.toFixed(2)}</td>
                 </tr>
-                <tr style="background:${diff >= 0 ? '#fdecea' : '#eafaf1'};">
+                <tr style="background:${diff >= 0 ? '#F7E4E0' : '#E2EFE8'};">
                     <td colspan="4" style="padding:10px;font-weight:700;">Diferença</td>
-                    <td style="padding:10px;text-align:right;font-weight:800;color:${diff >= 0 ? '#e74c3c' : '#27ae60'};">${diff >= 0 ? '+' : ''}€${diff.toFixed(2)}</td>
+                    <td style="padding:10px;text-align:right;font-weight:800;color:${diff >= 0 ? '#B3402F' : '#0E7A4F'};">${diff >= 0 ? '+' : ''}€${diff.toFixed(2)}</td>
                 </tr>` : ''}
             </tfoot>
         </table>
-        <div style="font-size:12px;font-weight:700;color:#2c3e50;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">🧾 Total por item</div>
+        <div style="font-size:12px;font-weight:700;color:#0B3B2B;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">🧾 Total por item</div>
         <table style="width:100%;border-collapse:collapse;font-size:13px;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);">
-            <thead><tr style="background:#2c3e50;color:white;">
+            <thead><tr style="background:#0B3B2B;color:white;">
                 <th style="padding:9px 14px;text-align:left;">Item</th>
                 <th style="padding:9px 14px;text-align:center;">Qtd</th>
                 <th style="padding:9px 14px;text-align:right;">Total</th>
@@ -2468,7 +2781,7 @@ function exportarPDFDivisao() {
     const diff = fatura ? fatura - totalMesa : null;
     const pct = racio ? ((racio - 1) * 100).toFixed(1) : null;
     const sinal = (diff >= 0) ? '+' : '';
-    const corAjuste = (diff >= 0) ? '#e74c3c' : '#27ae60';
+    const corAjuste = (diff >= 0) ? '#B3402F' : '#0E7A4F';
 
     const setPessoas = new Set();
     estado.ordens.forEach(o => o.amigos.forEach(a => setPessoas.add(a)));
@@ -2487,15 +2800,15 @@ function exportarPDFDivisao() {
 
     const linhasOfertas = estado.ofertas.length === 0 ? '' :
         estado.ofertas.map((o, i) => `
-            <tr style="background:${i % 2 === 0 ? '#fff' : '#f9f9f9'}">
-                <td style="padding:8px 10px;font-size:12px;color:#777;">${o.hora || '—'}</td>
-                <td style="padding:8px 10px;font-weight:600;color:#f39c12;">🎁 ${o.quem}</td>
+            <tr style="background:${i % 2 === 0 ? '#fff' : '#F7F8F4'}">
+                <td style="padding:8px 10px;font-size:12px;color:#6B746F;">${o.hora || '—'}</td>
+                <td style="padding:8px 10px;font-weight:600;color:#B8911F;">🎁 ${o.quem}</td>
                 <td style="padding:8px 10px;">${o.quantidade}x ${o.item} → ${o.para.join(', ')}</td>
-                <td style="padding:8px 10px;text-align:right;font-weight:700;color:#f39c12;">€${o.precoTotal.toFixed(2)}</td>
+                <td style="padding:8px 10px;text-align:right;font-weight:700;color:#B8911F;">€${o.precoTotal.toFixed(2)}</td>
             </tr>`).join('');
 
     const cols = racio ? 4 : (hasOfertas ? 3 : 2);
-    const cabPessoas = `<tr style="background:#2c3e50;color:white;">
+    const cabPessoas = `<tr style="background:#0B3B2B;color:white;">
         <th style="padding:10px 14px;text-align:left;">Pessoa</th>
         <th style="padding:10px 14px;text-align:right;">Ordens</th>
         ${hasOfertas ? '<th style="padding:10px 14px;text-align:right;">Ofertas</th>' : ''}
@@ -2503,13 +2816,13 @@ function exportarPDFDivisao() {
     </tr>`;
 
     const linhasPessoas = pessoasFinais.length === 0
-        ? `<tr><td colspan="${cols}" style="text-align:center;color:#999;padding:20px;">Sem dados.</td></tr>`
+        ? `<tr><td colspan="${cols}" style="text-align:center;color:#8A938D;padding:20px;">Sem dados.</td></tr>`
         : pessoasFinais.map((p, i) => {
             const base = contaPorPessoa[p] || 0;
             const delta = saldoOfertas[p] || 0;
             const total = base + delta;
             const ajustado = racio ? total * racio : null;
-            const deltaStr = delta !== 0 ? `<span style="color:#f39c12;font-size:12px;">${delta>0?'+':''}€${delta.toFixed(2)}</span>` : '<span style="color:#ccc;">—</span>';
+            const deltaStr = delta !== 0 ? `<span style="color:#B8911F;font-size:12px;">${delta>0?'+':''}€${delta.toFixed(2)}</span>` : '<span style="color:#C8D0C8;">—</span>';
             const consumos = {};
             estado.ordens.forEach(o => {
                 if (o.amigos.includes(p)) {
@@ -2521,23 +2834,23 @@ function exportarPDFDivisao() {
                 const qtd = consumos[item];
                 return `${Number.isInteger(qtd) ? qtd : qtd.toFixed(1)}× ${item}`;
             }).join(', ');
-            return `<tr style="background:${i % 2 === 0 ? '#fff' : '#f9f9f9'}">
+            return `<tr style="background:${i % 2 === 0 ? '#fff' : '#F7F8F4'}">
                 <td style="padding:10px 14px;">
                     <div style="font-weight:600;font-size:14px;">${p}</div>
                     ${consumoStr ? `<div style="font-size:11px;color:#666;margin-top:3px;">${consumoStr}</div>` : ''}
                 </td>
-                <td style="padding:10px 14px;text-align:right;vertical-align:top;${(hasOfertas||racio)?'color:#aaa;font-size:13px;':'font-weight:800;color:#27ae60;font-size:15px;'}">€${base.toFixed(2)}</td>
+                <td style="padding:10px 14px;text-align:right;vertical-align:top;${(hasOfertas||racio)?'color:#9AA39D;font-size:13px;':'font-weight:800;color:#0E7A4F;font-size:15px;'}">€${base.toFixed(2)}</td>
                 ${hasOfertas ? `<td style="padding:10px 14px;text-align:right;vertical-align:top;">${deltaStr}</td>` : ''}
-                ${racio ? `<td style="padding:10px 14px;text-align:right;vertical-align:top;font-weight:800;font-size:15px;color:#f39c12;">€${ajustado.toFixed(2)}</td>` : (hasOfertas ? `<td style="padding:10px 14px;text-align:right;vertical-align:top;font-weight:800;color:#27ae60;font-size:15px;">€${total.toFixed(2)}</td>` : '')}
+                ${racio ? `<td style="padding:10px 14px;text-align:right;vertical-align:top;font-weight:800;font-size:15px;color:#B8911F;">€${ajustado.toFixed(2)}</td>` : (hasOfertas ? `<td style="padding:10px 14px;text-align:right;vertical-align:top;font-weight:800;color:#0E7A4F;font-size:15px;">€${total.toFixed(2)}</td>` : '')}
             </tr>`;
         }).join('');
 
     const html = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:680px;margin:0 auto;padding:30px;">
         ${pdfCabecalho(totalMesa, fatura, racio, diff, pct, sinal, corAjuste)}
         ${estado.ofertas.length > 0 ? `
-        <div style="font-size:12px;font-weight:700;color:#2c3e50;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">🎁 Ofertas</div>
+        <div style="font-size:12px;font-weight:700;color:#0B3B2B;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">🎁 Ofertas</div>
         <table style="width:100%;border-collapse:collapse;font-size:13px;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);margin-bottom:24px;">
-            <thead><tr style="background:#f39c12;color:white;">
+            <thead><tr style="background:#B8911F;color:white;">
                 <th style="padding:9px 10px;text-align:left;">Hora</th>
                 <th style="padding:9px 10px;text-align:left;">Quem</th>
                 <th style="padding:9px 10px;text-align:left;">Oferta</th>
@@ -2545,7 +2858,7 @@ function exportarPDFDivisao() {
             </tr></thead>
             <tbody>${linhasOfertas}</tbody>
         </table>` : ''}
-        <div style="font-size:12px;font-weight:700;color:#2c3e50;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">💸 Conta por pessoa</div>
+        <div style="font-size:12px;font-weight:700;color:#0B3B2B;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">💸 Conta por pessoa</div>
         <table style="width:100%;border-collapse:collapse;font-size:13px;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);">
             <thead>${cabPessoas}</thead>
             <tbody>${linhasPessoas}</tbody>
@@ -2703,7 +3016,7 @@ function atualizarAjuste() {
 
     if (isMatch) {
         // Fatura bate certo — visto verde, sem lista de ajustes
-        racioDiv.innerHTML = '<span style="color:#27ae60;font-weight:600;">✅ Fatura confere com o total das ordens (€' + totalMesa.toFixed(2) + ')</span>';
+        racioDiv.innerHTML = '<span style="color:#0E7A4F;font-weight:600;">✅ Fatura confere com o total das ordens (€' + totalMesa.toFixed(2) + ')</span>';
         ajusteDiv.innerHTML = '';
         return;
     }
@@ -2712,8 +3025,8 @@ function atualizarAjuste() {
     const racio = fatura / totalMesa;
     const pct = ((racio - 1) * 100).toFixed(1);
     const sinal = diff >= 0 ? '+' : '';
-    const cor = diff >= 0 ? '#e74c3c' : '#27ae60';
-    racioDiv.innerHTML = '<span style="color:#e67e22;font-weight:600;">⚠️ Diferença na fatura</span><br>' +
+    const cor = diff >= 0 ? '#B3402F' : '#0E7A4F';
+    racioDiv.innerHTML = '<span style="color:#A07712;font-weight:600;">⚠️ Diferença na fatura</span><br>' +
         'Fatura: <strong>€' + fatura.toFixed(2) + '</strong> · Calculado: <strong>€' + totalMesa.toFixed(2) + '</strong> · Ajuste: <strong style="color:' + cor + '">' + sinal + pct + '%</strong>';
 
     // Consumo bruto (antes de ofertas)
@@ -2793,6 +3106,8 @@ function atualizarReadOnly() {
     document.getElementById('pagador-select').disabled = hasFatura;
     document.getElementById('btn-fechar-evento').style.display = hasFatura ? 'none' : '';
     document.getElementById('btn-reabrir-evento').style.display = hasFatura ? '' : 'none';
+    const _car = document.getElementById('talao-carimbo');
+    if (_car) _car.style.display = hasFatura ? '' : 'none';
 
     // Formulário de ofertas: escondido em evento fechado, visível ao desbloquear
     const ofertaForm = document.getElementById('oferta-form');
@@ -3152,9 +3467,9 @@ function renderContasSaldos(lista, resumo) {
                 + '</div>'
                 + (consumoStr ? '<div class="saldo-evento-consumo">' + consumoStr + '</div>' : '')
                 + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">'
-                + '<div style="font-size:11px;color:#3498db;">💳 Deve a: <strong>' + credorNome + '</strong></div>'
+                + '<div style="font-size:11px;color:#0E7A4F;">💳 Deve a: <strong>' + credorNome + '</strong></div>'
                 + '<div class="saldo-evento-valor" style="margin-top:0;">\u20ac' + e.restante.toFixed(2)
-                + (e.restante < e.valor - 0.005 ? ' <span style="color:#27ae60;font-size:10px;">(parcial)</span>' : '')
+                + (e.restante < e.valor - 0.005 ? ' <span style="color:#0E7A4F;font-size:10px;">(parcial)</span>' : '')
                 + '</div>'
                 + '</div>'
                 + '</div>';
@@ -3178,7 +3493,7 @@ function renderContasSaldos(lista, resumo) {
             <span class="valor">€${totalPendente.toFixed(2)}</span>
         </div>`;
     } else {
-        resumo.innerHTML = '<div style="text-align:center;font-size:13px;color:#27ae60;padding:10px;font-weight:600;">✅ Tudo liquidado!</div>';
+        resumo.innerHTML = '<div style="text-align:center;font-size:13px;color:#0E7A4F;padding:10px;font-weight:600;">✅ Tudo liquidado!</div>';
     }
 }
 
@@ -3241,8 +3556,8 @@ function renderContasEventos(lista, resumo) {
             }).join(', ');
             return '<div class="contas-divida-item" style="flex-wrap:wrap;">'
                 + '<span class="nome">' + p + '</span>'
-                + '<span class="valor ' + (isPago ? 'pago' : 'pendente') + '">\u20ac' + d.valor.toFixed(2) + (!isPago && restante < d.valor - 0.005 ? ' (resta \u20ac' + restante.toFixed(2) + ')' : '') + ' <span style="display:inline-block;width:24px;text-align:center;margin-left:6px;">' + (isPago ? '<span style="color:#27ae60;font-size:16px;">✓</span>' : '\u23f3') + '</span></span>'
-                + (consumoStr ? '<div style="width:100%;font-size:11px;color:#95a5a6;margin-top:2px;">' + consumoStr + '</div>' : '')
+                + '<span class="valor ' + (isPago ? 'pago' : 'pendente') + '">\u20ac' + d.valor.toFixed(2) + (!isPago && restante < d.valor - 0.005 ? ' (resta \u20ac' + restante.toFixed(2) + ')' : '') + ' <span style="display:inline-block;width:24px;text-align:center;margin-left:6px;">' + (isPago ? '<span style="color:#0E7A4F;font-size:16px;">✓</span>' : '\u23f3') + '</span></span>'
+                + (consumoStr ? '<div style="width:100%;font-size:11px;color:#7C8782;margin-top:2px;">' + consumoStr + '</div>' : '')
                 + '</div>';
         }).join('');
 
@@ -3263,10 +3578,10 @@ function renderContasEventos(lista, resumo) {
             }).join(', ');
             const contaFinal = calcularContaFinalEvento(ev);
             const pagadorValor = contaFinal[ev.pagador] || 0;
-            pagadorConsumoHtml = '<div class="contas-divida-item" style="flex-wrap:wrap;opacity:0.65;border:1px dashed #ccc;background:#f9f9f9;">'
-                + '<span class="nome" style="color:#7f8c8d;">' + ev.pagador + ' <span style="font-weight:400;font-size:11px;">(pagou)</span></span>'
-                + '<span class="valor" style="color:#7f8c8d;font-weight:600;">\u20ac' + pagadorValor.toFixed(2) + ' <span style="display:inline-block;width:24px;text-align:center;margin-left:6px;">💳</span></span>'
-                + (pagadorConsumoStr ? '<div style="width:100%;font-size:11px;color:#aaa;margin-top:2px;">' + pagadorConsumoStr + '</div>' : '')
+            pagadorConsumoHtml = '<div class="contas-divida-item" style="flex-wrap:wrap;opacity:0.65;border:1px dashed #C8D0C8;background:#F7F8F4;">'
+                + '<span class="nome" style="color:#5B6661;">' + ev.pagador + ' <span style="font-weight:400;font-size:11px;">(pagou)</span></span>'
+                + '<span class="valor" style="color:#5B6661;font-weight:600;">\u20ac' + pagadorValor.toFixed(2) + ' <span style="display:inline-block;width:24px;text-align:center;margin-left:6px;">💳</span></span>'
+                + (pagadorConsumoStr ? '<div style="width:100%;font-size:11px;color:#9AA39D;margin-top:2px;">' + pagadorConsumoStr + '</div>' : '')
                 + '</div>';
         }
 
@@ -3388,7 +3703,7 @@ function renderContasPagamentos(lista, resumo) {
             + '<div class="pgto-info-col">'
             + '<div class="pgto-nome">' + p.pessoa + '</div>'
             + '<div class="pgto-detalhe">' + eventoDesc + ' \u00b7 ' + p.data + '</div>'
-            + (consumoStr ? '<div style="font-size:11px;color:#95a5a6;margin-top:2px;">' + consumoStr + '</div>' : '')
+            + (consumoStr ? '<div style="font-size:11px;color:#7C8782;margin-top:2px;">' + consumoStr + '</div>' : '')
             + '</div>'
             + '<span class="pgto-valor">\u20ac' + p.valor.toFixed(2) + '</span>'
             + acoes
@@ -3404,7 +3719,7 @@ function renderContasPagamentos(lista, resumo) {
     var isFiltered = _pgtoFilterPessoa || _pgtoFilterEvento;
     var showTotal = isFiltered ? totalFiltrado : totalGeral;
     var showCount = isFiltered ? filtrados.length : pagamentos.length;
-    resumo.innerHTML = '<div style="text-align:right;font-size:13px;color:#27ae60;padding:8px 0;font-weight:600;">Total' + (isFiltered ? ' filtrado' : ' recebido') + ': \u20ac' + showTotal.toFixed(2) + ' (' + showCount + ' pagamento' + (showCount !== 1 ? 's' : '') + ')</div>';
+    resumo.innerHTML = '<div style="text-align:right;font-size:13px;color:#0E7A4F;padding:8px 0;font-weight:600;">Total' + (isFiltered ? ' filtrado' : ' recebido') + ': \u20ac' + showTotal.toFixed(2) + ' (' + showCount + ' pagamento' + (showCount !== 1 ? 's' : '') + ')</div>';
 }
 
 function editarPagamento(id) {
@@ -3418,9 +3733,9 @@ function editarPagamento(id) {
     const editRow = document.createElement('div');
     editRow.className = 'pgto-edit-row';
     editRow.innerHTML = `
-        <label style="font-size:12px;color:#555;white-space:nowrap;">Data:</label>
+        <label style="font-size:12px;color:#4A534E;white-space:nowrap;">Data:</label>
         <input type="text" id="pgto-edit-data-${id}" value="${p.data}" style="flex:1;" placeholder="dd/mm/aaaa, hh:mm">
-        <button onclick="guardarEdicaoPgto(${id})" style="background:#27ae60;color:white;">✓</button>
+        <button onclick="guardarEdicaoPgto(${id})" style="background:#0E7A4F;color:white;">✓</button>
         <button onclick="this.closest('.pgto-edit-row').remove()" class="secondary" style="padding:6px 8px;">✕</button>
     `;
     container.appendChild(editRow);
@@ -3679,7 +3994,7 @@ function toggleEditOrdem(id) {
     // Amigos grid
     const label = document.createElement('div');
     label.textContent = 'Quem comeu/bebeu?';
-    label.style.cssText = 'font-size:12px;color:#7f8c8d;margin:8px 0 4px;';
+    label.style.cssText = 'font-size:12px;color:#5B6661;margin:8px 0 4px;';
     panel.appendChild(label);
 
     const grid = document.createElement('div');
@@ -4070,7 +4385,7 @@ function ghGetCfg() {
 function ghStatus(msg, err) {
     const el = document.getElementById('gh-status');
     el.style.display = 'block';
-    el.style.color = err ? '#e74c3c' : '#27ae60';
+    el.style.color = err ? '#B3402F' : '#0E7A4F';
     el.textContent = msg;
 }
 
