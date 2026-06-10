@@ -4456,7 +4456,7 @@ const ADMIN_EMAIL = 'diogo.andre.f.silva@gmail.com';
 let _sbSession = null;
 
 function sbHeaders(extra = {}) {
-    const h = { 'Content-Type': 'application/json', 'apikey': SB_KEY, 'Authorization': `Bearer ${_sbSession?.access_token || SB_KEY}` };
+    const h = { 'Content-Type': 'application/json', 'apikey': SB_KEY, 'Authorization': `Bearer ${_sbSession?.access_token || SB_KEY}`, 'Accept-Profile': 'splitbill', 'Content-Profile': 'splitbill' };
     return Object.assign(h, extra);
 }
 
@@ -4515,7 +4515,7 @@ async function sbAposLogin() {
     const email = _sbSession.user.email;
 
     // Verificar se tem acesso
-    const r = await fetch(`${SB_URL}/rest/v1/splitbill.allowed_users?email=eq.${encodeURIComponent(email)}&select=email`, {
+    const r = await fetch(`${SB_URL}/rest/v1/allowed_users?email=eq.${encodeURIComponent(email)}&select=email`, {
         headers: sbHeaders({ 'Accept': 'application/json' })
     });
     const data = await r.json();
@@ -4537,19 +4537,19 @@ async function sbAposLogin() {
 async function sbCarregarDados() {
     try {
         // Carregar eventos
-        const evRes = await fetch(`${SB_URL}/rest/v1/splitbill.eventos?select=*&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const evRes = await fetch(`${SB_URL}/rest/v1/eventos?select=*&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
         const eventos = await evRes.json();
 
         // Carregar ordens + ordem_amigos
-        const ordRes = await fetch(`${SB_URL}/rest/v1/splitbill.ordens?select=*,splitbill.ordem_amigos(amigo)&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const ordRes = await fetch(`${SB_URL}/rest/v1/ordens?select=*,ordem_amigos(amigo)&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
         const ordens = await ordRes.json();
 
         // Carregar ofertas + oferta_para
-        const ofRes = await fetch(`${SB_URL}/rest/v1/splitbill.ofertas?select=*,splitbill.oferta_para(amigo)&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const ofRes = await fetch(`${SB_URL}/rest/v1/ofertas?select=*,oferta_para(amigo)&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
         const ofertas = await ofRes.json();
 
         // Carregar pagamentos
-        const pgRes = await fetch(`${SB_URL}/rest/v1/splitbill.pagamentos?select=*&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const pgRes = await fetch(`${SB_URL}/rest/v1/pagamentos?select=*&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
         const pags = await pgRes.json();
 
         // Reconstruir historico no formato esperado pela app
@@ -4561,7 +4561,7 @@ async function sbCarregarDados() {
                 precoUnitario: parseFloat(o.preco_unitario),
                 precoTotal: parseFloat(o.preco_total),
                 hora: o.hora,
-                amigos: (o['splitbill.ordem_amigos'] || []).map(a => a.amigo)
+                amigos: (o['ordem_amigos'] || []).map(a => a.amigo)
             }));
             const evOfertas = ofertas.filter(o => o.evento_id === ev.id).map(o => ({
                 id: o.id,
@@ -4571,7 +4571,7 @@ async function sbCarregarDados() {
                 precoUnitario: parseFloat(o.preco_unitario),
                 precoTotal: parseFloat(o.preco_total),
                 hora: o.hora,
-                para: (o['splitbill.oferta_para'] || []).map(a => a.amigo)
+                para: (o['oferta_para'] || []).map(a => a.amigo)
             }));
             const evDividas = {};
             // recalcular dividas a partir dos pagamentos
@@ -4610,27 +4610,27 @@ async function sbGuardarEvento(ev) {
     if (!_sbSession) return;
     try {
         // Upsert evento
-        await fetch(`${SB_URL}/rest/v1/splitbill.eventos`, {
+        await fetch(`${SB_URL}/rest/v1/eventos`, {
             method: 'POST',
             headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
             body: JSON.stringify({ id: ev.id, descricao: ev.descricao, data: ev.data, total_fatura: ev.totalFatura, pagador: ev.pagador })
         });
 
         // Apagar ordens/ofertas antigas e reinserir
-        await fetch(`${SB_URL}/rest/v1/splitbill.ordens?evento_id=eq.${ev.id}`, { method: 'DELETE', headers: sbHeaders() });
+        await fetch(`${SB_URL}/rest/v1/ordens?evento_id=eq.${ev.id}`, { method: 'DELETE', headers: sbHeaders() });
         if (ev.ordens && ev.ordens.length > 0) {
             const ordens = ev.ordens.map(o => ({ id: o.id, evento_id: ev.id, item: o.item, quantidade: o.quantidade, preco_unitario: o.precoUnitario, preco_total: o.precoTotal, hora: o.hora }));
-            await fetch(`${SB_URL}/rest/v1/splitbill.ordens`, { method: 'POST', headers: sbHeaders({ 'Prefer': 'return=representation' }), body: JSON.stringify(ordens) });
+            await fetch(`${SB_URL}/rest/v1/ordens`, { method: 'POST', headers: sbHeaders({ 'Prefer': 'return=representation' }), body: JSON.stringify(ordens) });
             const ordemAmigos = ev.ordens.flatMap(o => (o.amigos || []).map(a => ({ ordem_id: o.id, amigo: a })));
-            if (ordemAmigos.length > 0) await fetch(`${SB_URL}/rest/v1/splitbill.ordem_amigos`, { method: 'POST', headers: sbHeaders(), body: JSON.stringify(ordemAmigos) });
+            if (ordemAmigos.length > 0) await fetch(`${SB_URL}/rest/v1/ordem_amigos`, { method: 'POST', headers: sbHeaders(), body: JSON.stringify(ordemAmigos) });
         }
 
-        await fetch(`${SB_URL}/rest/v1/splitbill.ofertas?evento_id=eq.${ev.id}`, { method: 'DELETE', headers: sbHeaders() });
+        await fetch(`${SB_URL}/rest/v1/ofertas?evento_id=eq.${ev.id}`, { method: 'DELETE', headers: sbHeaders() });
         if (ev.ofertas && ev.ofertas.length > 0) {
             const ofertas = ev.ofertas.map(o => ({ id: o.id, evento_id: ev.id, quem: o.quem, item: o.item, quantidade: o.quantidade, preco_unitario: o.precoUnitario, preco_total: o.precoTotal, hora: o.hora }));
-            await fetch(`${SB_URL}/rest/v1/splitbill.ofertas`, { method: 'POST', headers: sbHeaders({ 'Prefer': 'return=representation' }), body: JSON.stringify(ofertas) });
+            await fetch(`${SB_URL}/rest/v1/ofertas`, { method: 'POST', headers: sbHeaders({ 'Prefer': 'return=representation' }), body: JSON.stringify(ofertas) });
             const ofertaPara = ev.ofertas.flatMap(o => (o.para || []).map(a => ({ oferta_id: o.id, amigo: a })));
-            if (ofertaPara.length > 0) await fetch(`${SB_URL}/rest/v1/splitbill.oferta_para`, { method: 'POST', headers: sbHeaders(), body: JSON.stringify(ofertaPara) });
+            if (ofertaPara.length > 0) await fetch(`${SB_URL}/rest/v1/oferta_para`, { method: 'POST', headers: sbHeaders(), body: JSON.stringify(ofertaPara) });
         }
     } catch(e) { console.error('Erro ao guardar evento no Supabase:', e); }
 }
@@ -4638,7 +4638,7 @@ async function sbGuardarEvento(ev) {
 async function sbGuardarPagamento(p) {
     if (!_sbSession) return;
     try {
-        await fetch(`${SB_URL}/rest/v1/splitbill.pagamentos`, {
+        await fetch(`${SB_URL}/rest/v1/pagamentos`, {
             method: 'POST',
             headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
             body: JSON.stringify({ id: p.id, evento_id: p.eventoId, pessoa: p.pessoa, valor: p.valor, tipo: p.tipo, data: p.data })
@@ -4649,14 +4649,14 @@ async function sbGuardarPagamento(p) {
 async function sbApagarPagamento(id) {
     if (!_sbSession) return;
     try {
-        await fetch(`${SB_URL}/rest/v1/splitbill.pagamentos?id=eq.${id}`, { method: 'DELETE', headers: sbHeaders() });
+        await fetch(`${SB_URL}/rest/v1/pagamentos?id=eq.${id}`, { method: 'DELETE', headers: sbHeaders() });
     } catch(e) { console.error('Erro ao apagar pagamento no Supabase:', e); }
 }
 
 async function sbApagarEvento(id) {
     if (!_sbSession) return;
     try {
-        await fetch(`${SB_URL}/rest/v1/splitbill.eventos?id=eq.${id}`, { method: 'DELETE', headers: sbHeaders() });
+        await fetch(`${SB_URL}/rest/v1/eventos?id=eq.${id}`, { method: 'DELETE', headers: sbHeaders() });
     } catch(e) { console.error('Erro ao apagar evento no Supabase:', e); }
 }
 
@@ -4720,7 +4720,7 @@ async function sbSolicitarAcesso() {
     const status = document.getElementById('solicitar-status');
     btn.disabled = true; btn.textContent = 'A enviar…';
     try {
-        await fetch(`${SB_URL}/rest/v1/splitbill.access_requests`, {
+        await fetch(`${SB_URL}/rest/v1/access_requests`, {
             method: 'POST',
             headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
             body: JSON.stringify({ email: _sbSession.user.email })
@@ -4742,7 +4742,7 @@ async function abrirAdmin() {
     const lista = document.getElementById('admin-lista');
     lista.innerHTML = '<p style="color:#999;font-size:14px;">A carregar…</p>';
     try {
-        const r = await fetch(`${SB_URL}/rest/v1/splitbill.access_requests?select=*&order=requested_at.desc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const r = await fetch(`${SB_URL}/rest/v1/access_requests?select=*&order=requested_at.desc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
         const data = await r.json();
         if (!data.length) { lista.innerHTML = '<p style="color:#999;font-size:14px;">Sem pedidos pendentes.</p>'; return; }
         lista.innerHTML = data.map(p => `
@@ -4758,11 +4758,11 @@ async function abrirAdmin() {
 
 async function sbAprovarAcesso(email) {
     try {
-        await fetch(`${SB_URL}/rest/v1/splitbill.allowed_users`, {
+        await fetch(`${SB_URL}/rest/v1/allowed_users`, {
             method: 'POST', headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
             body: JSON.stringify({ email })
         });
-        await fetch(`${SB_URL}/rest/v1/splitbill.access_requests?email=eq.${encodeURIComponent(email)}`, { method: 'DELETE', headers: sbHeaders() });
+        await fetch(`${SB_URL}/rest/v1/access_requests?email=eq.${encodeURIComponent(email)}`, { method: 'DELETE', headers: sbHeaders() });
         mostrarMensagem(`✓ ${email} aprovado!`, true);
         abrirAdmin();
     } catch(e) { mostrarMensagem('Erro ao aprovar.', false); }
