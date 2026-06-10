@@ -1361,7 +1361,7 @@
 <body>
 
 <!-- ═══ ECRÃ DE LOGIN ═══ -->
-<div id="page-login" style="display:none;position:fixed;inset:0;z-index:9999;flex-direction:column;overflow-y:auto;">
+<div id="page-login" style="display:flex;position:fixed;inset:0;z-index:9999;flex-direction:column;overflow-y:auto;">
     <!-- Header igual à app -->
     <div style="background:#0B3B2B;padding:28px 20px 40px;text-align:center;flex-shrink:0;">
         <div style="font-size:44px;margin-bottom:8px;">⚽</div>
@@ -4448,8 +4448,6 @@ function toggleAjuda() {
     arrow.textContent = visible ? '▼' : '▲';
 }
 
-}
-
 /* ── SUPABASE ───────────────────────────────── */
 const SB_URL = 'https://gjweqwfbnkgnibhajldc.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdqd2Vxd2ZibmtnbmliaGFqbGRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDk4NzUsImV4cCI6MjA5NjY4NTg3NX0.h6st-RayGhQdsqH7E2Ko-rPWk2QZUpTevO6cbjvlSnk';
@@ -4463,15 +4461,6 @@ function sbHeaders(extra = {}) {
 }
 
 async function sbInit() {
-    // Tentar recuperar sessão existente
-    try {
-        const r = await fetch(`${SB_URL}/auth/v1/user`, { headers: sbHeaders() });
-        if (r.ok) {
-            const u = await r.json();
-            if (u.email) { _sbSession = { access_token: SB_KEY, user: u }; }
-        }
-    } catch(e) {}
-
     // Verificar sessão em localStorage
     const stored = localStorage.getItem('sb_session');
     if (stored) {
