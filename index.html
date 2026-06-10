@@ -1332,6 +1332,25 @@
             letter-spacing: 0.2em;
             color: var(--verde);
         }
+        .saldo-credor-bloco { margin-bottom: 12px; }
+        .saldo-credor-bloco:last-child { margin-bottom: 2px; }
+        .saldo-credor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--verde-claro);
+            border-radius: 8px;
+            padding: 6px 10px;
+            margin-bottom: 6px;
+            font-size: 12px;
+            color: var(--verde-tinta);
+        }
+        .saldo-credor-header strong { font-weight: 700; }
+        .saldo-credor-subtotal {
+            font-family: var(--mono);
+            font-weight: 600;
+            color: var(--rubro);
+        }
         @media (max-width: 480px) {
             body { padding: 0 8px 24px; }
             .header, .top-nav, #header-evento-context { margin-left: -8px; margin-right: -8px; }
@@ -3441,7 +3460,16 @@ function renderContasSaldos(lista, resumo) {
         // Only show events with remaining balance
         const eventosPendentes = s.eventos.filter(e => e.restante >= 0.01);
 
-        const eventosHtml = eventosPendentes.map(e => {
+        // Agrupar eventos pendentes por credor (a quem se deve)
+        const porCredor = {};
+        eventosPendentes.forEach(e => {
+            const c = e.pagador || '\u2014';
+            (porCredor[c] = porCredor[c] || []).push(e);
+        });
+        const subtotalDe = c => porCredor[c].reduce((t, e) => t + e.restante, 0);
+        const credores = Object.keys(porCredor).sort((a, b) => subtotalDe(b) - subtotalDe(a));
+
+        const renderEvento = e => {
             // Get consumption detail for this person in this event
             const ev = historico.find(h => h.id === e.eventoId);
             let consumoStr = '';
@@ -3458,7 +3486,6 @@ function renderContasSaldos(lista, resumo) {
                     return (Number.isInteger(qtd) ? qtd : qtd.toFixed(1)) + '\u00d7 ' + item;
                 }).join(', ');
             }
-            const credorNome = e.pagador || '—';
             const hasToken = ghHasToken();
             return '<div class="saldo-evento-row"' + (hasToken ? ' style="cursor:pointer;" onclick="abrirPagamentoPrePreenchido(\'' + pessoa.replace(/'/g, "\\'") + '\',' + e.eventoId + ')" title="Clica para registar pagamento"' : '') + '>'
                 + '<div class="saldo-evento-info">'
@@ -3466,12 +3493,20 @@ function renderContasSaldos(lista, resumo) {
                 + '<span class="saldo-evento-data">' + (e.data || '\u2014') + '</span>'
                 + '</div>'
                 + (consumoStr ? '<div class="saldo-evento-consumo">' + consumoStr + '</div>' : '')
-                + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">'
-                + '<div style="font-size:11px;color:#0E7A4F;">💳 Deve a: <strong>' + credorNome + '</strong></div>'
-                + '<div class="saldo-evento-valor" style="margin-top:0;">\u20ac' + e.restante.toFixed(2)
+                + '<div class="saldo-evento-valor" style="text-align:right;">\u20ac' + e.restante.toFixed(2)
                 + (e.restante < e.valor - 0.005 ? ' <span style="color:#0E7A4F;font-size:10px;">(parcial)</span>' : '')
                 + '</div>'
+                + '</div>';
+        };
+
+        const blocosHtml = credores.map(credor => {
+            const subtotal = subtotalDe(credor);
+            return '<div class="saldo-credor-bloco">'
+                + '<div class="saldo-credor-header">'
+                + '<span>\uD83D\uDCB3 Deve a <strong>' + credor + '</strong></span>'
+                + '<span class="saldo-credor-subtotal">\u20ac' + subtotal.toFixed(2) + '</span>'
                 + '</div>'
+                + porCredor[credor].map(renderEvento).join('')
                 + '</div>';
         }).join('');
 
@@ -3480,7 +3515,7 @@ function renderContasSaldos(lista, resumo) {
             + '<span class="saldo-pessoa-nome">\uD83D\uDC64 ' + pessoa + '</span>'
             + '<span class="saldo-pessoa-total">\u20ac' + s.saldo.toFixed(2) + '</span>'
             + '</div>'
-            + eventosHtml
+            + blocosHtml
             + '</div>';
     }).join('');
 
