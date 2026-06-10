@@ -1360,9 +1360,58 @@
 </head>
 <body>
 
+<!-- ═══ ECRÃ DE LOGIN ═══ -->
+<div id="page-login" style="display:none;position:fixed;inset:0;background:#f5f7f5;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;">
+    <div style="background:#fff;border-radius:16px;padding:32px 24px;max-width:360px;width:100%;box-shadow:0 4px 24px rgba(0,0,0,0.10);">
+        <div style="text-align:center;margin-bottom:24px;">
+            <div style="font-size:40px;margin-bottom:8px;">⚽</div>
+            <h1 style="font-size:22px;font-weight:700;color:#1a1a1a;margin:0 0 4px;">SplitBill</h1>
+            <p style="color:#666;font-size:14px;margin:0;">Divisão de contas · dia de jogo</p>
+        </div>
+        <div id="login-form">
+            <button onclick="sbLoginGoogle()" style="width:100%;padding:12px;border:1.5px solid #ddd;border-radius:10px;background:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:12px;">
+                <img src="https://www.google.com/favicon.ico" style="width:18px;height:18px;"> Entrar com Google
+            </button>
+            <div style="text-align:center;color:#aaa;font-size:12px;margin:16px 0;">ou</div>
+            <input id="login-email" type="email" placeholder="Email" style="width:100%;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
+            <input id="login-password" type="password" placeholder="Password" style="width:100%;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:12px;">
+            <button onclick="sbLoginEmail()" style="width:100%;padding:11px;background:#0E7A4F;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:8px;">Entrar</button>
+            <button onclick="sbRegistarEmail()" style="width:100%;padding:11px;background:transparent;color:#0E7A4F;border:1.5px solid #0E7A4F;border-radius:8px;font-size:14px;cursor:pointer;">Criar conta</button>
+        </div>
+        <div id="login-status" style="margin-top:12px;text-align:center;font-size:13px;color:#B3402F;display:none;"></div>
+    </div>
+</div>
 
-<div class="header">
+<!-- ═══ ECRÃ SEM ACESSO ═══ -->
+<div id="page-sem-acesso" style="display:none;position:fixed;inset:0;background:#f5f7f5;z-index:9998;flex-direction:column;align-items:center;justify-content:center;padding:24px;">
+    <div style="background:#fff;border-radius:16px;padding:32px 24px;max-width:360px;width:100%;box-shadow:0 4px 24px rgba(0,0,0,0.10);text-align:center;">
+        <div style="font-size:40px;margin-bottom:12px;">🔒</div>
+        <h2 style="font-size:18px;font-weight:700;margin:0 0 8px;">Acesso não autorizado</h2>
+        <p style="color:#666;font-size:14px;margin:0 0 24px;" id="sem-acesso-email"></p>
+        <button onclick="sbSolicitarAcesso()" id="btn-solicitar" style="width:100%;padding:11px;background:#0E7A4F;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:10px;">Solicitar acesso</button>
+        <button onclick="sbLogout()" style="width:100%;padding:10px;background:transparent;color:#666;border:1.5px solid #ddd;border-radius:8px;font-size:14px;cursor:pointer;">Sair</button>
+        <div id="solicitar-status" style="margin-top:10px;font-size:13px;display:none;"></div>
+    </div>
+</div>
+
+<!-- ═══ PAINEL ADMIN ═══ -->
+<div id="page-admin" style="display:none;position:fixed;inset:0;background:#f5f7f5;z-index:9997;overflow-y:auto;padding:16px;">
+    <div style="max-width:480px;margin:0 auto;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+            <button onclick="fecharAdmin()" style="background:none;border:none;font-size:20px;cursor:pointer;">←</button>
+            <h2 style="font-size:18px;font-weight:700;margin:0;">Admin — Pedidos de acesso</h2>
+        </div>
+        <div id="admin-lista"></div>
+    </div>
+</div>
+
+
+<div class="header" style="display:flex;align-items:center;justify-content:space-between;">
     <h1>SplitBill<small>Divisão de contas · dia de jogo</small></h1>
+    <div style="display:flex;align-items:center;gap:8px;">
+        <button id="btn-admin" onclick="abrirAdmin()" style="display:none;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:6px;padding:5px 9px;font-size:12px;cursor:pointer;">⚙️</button>
+        <button onclick="sbLogout()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:6px;padding:5px 9px;font-size:12px;cursor:pointer;">Sair</button>
+    </div>
 </div>
 
 <!-- Top Navigation -->
@@ -3233,7 +3282,7 @@ function carregarPagamentos() {
 
 function salvarPagamentos() {
     localStorage.setItem('splitbill_pagamentos', JSON.stringify(pagamentos));
-    ghScheduleAutoSave();
+    sbScheduleAutoSave();
 }
 
 // ── Page switching ──
@@ -4375,360 +4424,354 @@ function toggleAjuda() {
     arrow.textContent = visible ? '▼' : '▲';
 }
 
-/* ── GITHUB SYNC ───────────────────────────── */
-const GH_KEY = 'splitbill_github_cfg';
-const GH_DEFAULTS = {owner: 'diogoandrefsilva-ghc', repo: 'AppDataJSON', path: 'splitbill-data.json', branch: 'main'};
+}
 
-function ghLoadCfg() {
-    document.getElementById('gh-owner').value = GH_DEFAULTS.owner;
-    document.getElementById('gh-repo').value = GH_DEFAULTS.repo;
-    document.getElementById('gh-path').value = GH_DEFAULTS.path;
-    document.getElementById('gh-branch').value = GH_DEFAULTS.branch;
-    const s = localStorage.getItem(GH_KEY);
-    if (!s) return;
+/* ── SUPABASE ───────────────────────────────── */
+const SB_URL = 'https://gjweqwfbnkgnibhajldc.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdqd2Vxd2ZibmtnbmliaGFqbGRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDk4NzUsImV4cCI6MjA5NjY4NTg3NX0.h6st-RayGhQdsqH7E2Ko-rPWk2QZUpTevO6cbjvlSnk';
+const ADMIN_EMAIL = 'diogo.andre.f.silva@gmail.com';
+
+let _sbSession = null;
+
+function sbHeaders(extra = {}) {
+    const h = { 'Content-Type': 'application/json', 'apikey': SB_KEY, 'Authorization': `Bearer ${_sbSession?.access_token || SB_KEY}` };
+    return Object.assign(h, extra);
+}
+
+async function sbInit() {
+    // Tentar recuperar sessão existente
     try {
-        const c = JSON.parse(s);
-        if (c.token) document.getElementById('gh-token').value = c.token;
-        if (c.owner) document.getElementById('gh-owner').value = c.owner;
-        // repo/path fixos no repositório de dados — ignorar valores antigos guardados em localStorage
-        if (c.branch) document.getElementById('gh-branch').value = c.branch;
+        const r = await fetch(`${SB_URL}/auth/v1/user`, { headers: sbHeaders() });
+        if (r.ok) {
+            const u = await r.json();
+            if (u.email) { _sbSession = { access_token: SB_KEY, user: u }; }
+        }
     } catch(e) {}
-}
 
-function ghSaveCfg() {
-    const cfg = {
-        token: document.getElementById('gh-token').value.trim(),
-        owner: document.getElementById('gh-owner').value.trim(),
-        repo: document.getElementById('gh-repo').value.trim(),
-        path: document.getElementById('gh-path').value.trim() || 'data.json',
-        branch: document.getElementById('gh-branch').value.trim() || 'main'
-    };
-    localStorage.setItem(GH_KEY, JSON.stringify(cfg));
-    ghUpdateSyncBtn();
-}
-
-function ghGetCfg() {
-    return {
-        token: document.getElementById('gh-token').value.trim(),
-        owner: document.getElementById('gh-owner').value.trim(),
-        repo: document.getElementById('gh-repo').value.trim(),
-        path: document.getElementById('gh-path').value.trim() || 'data.json',
-        branch: document.getElementById('gh-branch').value.trim() || 'main'
-    };
-}
-
-function ghStatus(msg, err) {
-    const el = document.getElementById('gh-status');
-    el.style.display = 'block';
-    el.style.color = err ? '#B3402F' : '#0E7A4F';
-    el.textContent = msg;
-}
-
-
-function toggleGhSection() {
-    const body = document.getElementById('gh-body');
-    const arrow = document.getElementById('gh-body-arrow');
-    const open = body.style.display === 'none';
-    body.style.display = open ? 'block' : 'none';
-    arrow.style.transform = open ? 'rotate(90deg)' : 'rotate(0deg)';
-}
-
-let _ghPushRunning = false, _ghPushQueued = false;
-async function ghPush(silent) {
-    const {token, owner, repo, path, branch} = ghGetCfg();
-    if (!token || !owner || !repo) { if (!silent) mostrarMensagem('Preenche Token, Utilizador e Repositório!', false); return; }
-    // Serializar: se já há uma gravação a decorrer, marcar para repetir no fim (evita corrida entre botão e auto-save)
-    if (_ghPushRunning) { _ghPushQueued = true; return; }
-    _ghPushRunning = true;
-    if (!silent) ghStatus('A guardar no GitHub…');
-    try {
-        let lastErr = null;
-        for (let attempt = 0; attempt < 3; attempt++) {
-            // Ler o sha mais recente (com cache-buster) imediatamente antes de gravar
-            let sha = null;
-            const check = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}&t=${Date.now()}`, {
-                headers: {'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json'}
+    // Verificar sessão em localStorage
+    const stored = localStorage.getItem('sb_session');
+    if (stored) {
+        try {
+            const s = JSON.parse(stored);
+            const r = await fetch(`${SB_URL}/auth/v1/user`, {
+                headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${s.access_token}` }
             });
-            if (check.ok) { const j = await check.json(); sha = j.sha; }
-            else if (check.status !== 404) { throw new Error(`Erro ao verificar ficheiro: ${check.status}`); }
-
-            const content = btoa(unescape(encodeURIComponent(JSON.stringify({historico, pagamentos}, null, 2))));
-            const body = {message: `SplitBill backup ${new Date().toLocaleString('pt-PT')}`, content, branch};
-            if (sha) body.sha = sha;
-
-            const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`, {
-                method: 'PUT',
-                headers: {'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'},
-                body: JSON.stringify(body)
-            });
-            if (res.ok) { lastErr = null; break; }
-            const e = await res.json().catch(() => ({}));
-            // Conflito de sha (escrita concorrente / cache) → reler sha e repetir
-            if (res.status === 409 || (e.message && /does not match/i.test(e.message))) { lastErr = new Error(e.message || '409'); continue; }
-            throw new Error(e.message || res.status);
-        }
-        if (lastErr) throw lastErr;
-        ghSaveCfg();
-        if (!silent) {
-            ghStatus(`✓ Guardado com sucesso em ${owner}/${repo}/${path} (branch: ${branch})`);
-            mostrarMensagem('Dados guardados no GitHub ✓', true);
-        }
-    } catch(e) {
-        if (!silent) {
-            ghStatus(`✗ Erro: ${e.message}`, true);
-            mostrarMensagem('Erro ao guardar no GitHub!', false);
-        }
-    } finally {
-        _ghPushRunning = false;
-        // Se foi pedida outra gravação enquanto esta corria, fazê-la agora com os dados mais recentes
-        if (_ghPushQueued) { _ghPushQueued = false; ghPush(true); }
+            if (r.ok) {
+                const u = await r.json();
+                _sbSession = { ...s, user: u };
+                await sbAposLogin();
+                return;
+            }
+        } catch(e) {}
+        localStorage.removeItem('sb_session');
     }
+
+    // Verificar OAuth callback na URL
+    const hash = window.location.hash;
+    if (hash.includes('access_token')) {
+        const params = new URLSearchParams(hash.substring(1));
+        const access_token = params.get('access_token');
+        const refresh_token = params.get('refresh_token');
+        if (access_token) {
+            const r = await fetch(`${SB_URL}/auth/v1/user`, {
+                headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${access_token}` }
+            });
+            if (r.ok) {
+                const u = await r.json();
+                _sbSession = { access_token, refresh_token, user: u };
+                localStorage.setItem('sb_session', JSON.stringify(_sbSession));
+                window.history.replaceState({}, document.title, window.location.pathname);
+                await sbAposLogin();
+                return;
+            }
+        }
+    }
+
+    // Sem sessão — mostrar login
+    sbMostrarLogin();
 }
 
-async function ghPull() {
-    const {token, owner, repo, path, branch} = ghGetCfg();
-    if (!owner || !repo) { mostrarMensagem('Preenche Utilizador e Repositório!', false); return; }
-    const ok = await mostrarModal({
-        icon: '⬇️',
-        title: 'Importar do GitHub',
-        msg: `Importar de ${owner}/${repo}/${path}?<br>Isto irá <strong>substituir</strong> todos os dados locais.`,
-        confirmText: 'Importar',
-        cancelText: 'Cancelar',
-        danger: true
+function sbMostrarLogin() {
+    document.getElementById('page-login').style.display = 'flex';
+    document.getElementById('page-sem-acesso').style.display = 'none';
+    document.getElementById('page-admin').style.display = 'none';
+}
+
+async function sbAposLogin() {
+    document.getElementById('page-login').style.display = 'none';
+    const email = _sbSession.user.email;
+
+    // Verificar se tem acesso
+    const r = await fetch(`${SB_URL}/rest/v1/splitbill.allowed_users?email=eq.${encodeURIComponent(email)}&select=email`, {
+        headers: sbHeaders({ 'Accept': 'application/json' })
     });
-    if (!ok) return;
-    ghStatus('A importar do GitHub…');
-    try {
-        let text;
-        if (token) {
-            const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`, {
-                headers: {'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json'}
-            });
-            if (!res.ok) { const e = await res.json(); throw new Error(e.message || res.status); }
-            const j = await res.json();
-            text = decodeURIComponent(escape(atob(j.content.replace(/\n/g, ''))));
-        } else {
-            const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}?t=${Date.now()}`;
-            const res = await fetch(rawUrl);
-            if (!res.ok) throw new Error(`Erro ${res.status} — verifica se o repositório é público e o caminho está correto`);
-            text = await res.text();
-        }
-        const data = JSON.parse(text);
-        // Suporta ambos formatos: array direto ou objeto com { historico, pagamentos }
-        let eventCount = 0;
-        if (Array.isArray(data)) {
-            eventCount = data.length;
-        } else if (data && Array.isArray(data.historico)) {
-            eventCount = data.historico.length;
-        } else {
-            throw new Error('Ficheiro JSON inválido (esperado array de eventos ou objeto com "historico")');
-        }
-        ghApplyData(data);
-        ghSaveCfg();
-        ghStatus(`✓ Dados importados de ${owner}/${repo}/${path} (branch: ${branch})`);
-        mostrarMensagem('✓ ' + eventCount + ' evento(s) importado(s) do GitHub', true);
-    } catch(e) {
-        ghStatus(`✗ Erro: ${e.message}`, true);
-        mostrarMensagem('Erro ao importar do GitHub!', false);
+    const data = await r.json();
+    if (!Array.isArray(data) || data.length === 0) {
+        // Sem acesso
+        document.getElementById('page-sem-acesso').style.display = 'flex';
+        document.getElementById('sem-acesso-email').textContent = `Sessão iniciada como ${email}. Esta conta não tem acesso à app.`;
+        return;
     }
+
+    // Tem acesso — mostrar app
+    document.getElementById('page-sem-acesso').style.display = 'none';
+    if (email === ADMIN_EMAIL) document.getElementById('btn-admin').style.display = '';
+
+    await sbCarregarDados();
+    init();
 }
 
-async function ghReset() {
-    const {token, owner, repo, path, branch} = ghGetCfg();
-    if (!owner || !repo) { mostrarMensagem('Configura o GitHub primeiro (secção 4)', false); return; }
-    const ok = await mostrarModal({
-        icon: '🔄',
-        title: 'Sincronizar com GitHub',
-        msg: 'Isto vai <strong>substituir todos os dados locais</strong> pelos dados do GitHub. Dados não guardados serão perdidos.',
-        confirmText: 'Sincronizar',
-        cancelText: 'Cancelar',
-        danger: true
-    });
-    if (!ok) return;
-
-    const btn = document.getElementById('btn-gh-reset');
-    const origText = btn.textContent;
-    btn.textContent = '⏳ A sincronizar…';
-    btn.style.pointerEvents = 'none';
-
+async function sbCarregarDados() {
     try {
-        let text;
-        if (token) {
-            const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`, {
-                headers: {'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json'}
-            });
-            if (!res.ok) { const e = await res.json(); throw new Error(e.message || res.status); }
-            const j = await res.json();
-            text = decodeURIComponent(escape(atob(j.content.replace(/\n/g, ''))));
-        } else {
-            const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}?t=${Date.now()}`;
-            const res = await fetch(rawUrl);
-            if (!res.ok) throw new Error(`Erro ${res.status}`);
-            text = await res.text();
-        }
-        const data = JSON.parse(text);
-        // Suporta ambos formatos: array direto ou objeto com { historico, pagamentos }
-        let eventCount = 0;
-        if (Array.isArray(data)) {
-            eventCount = data.length;
-        } else if (data && Array.isArray(data.historico)) {
-            eventCount = data.historico.length;
-        } else {
-            throw new Error('Ficheiro JSON inválido (esperado array de eventos ou objeto com "historico")');
-        }
+        // Carregar eventos
+        const evRes = await fetch(`${SB_URL}/rest/v1/splitbill.eventos?select=*&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const eventos = await evRes.json();
 
-        ghApplyData(data);
-        mostrarMensagem('🔄 Sync completo — ' + eventCount + ' evento(s) importado(s) do GitHub', true);
-    } catch(e) {
-        mostrarMensagem('Erro no sync: ' + e.message, false);
-    }
-    btn.textContent = origText;
-    btn.style.pointerEvents = '';
-}
+        // Carregar ordens + ordem_amigos
+        const ordRes = await fetch(`${SB_URL}/rest/v1/splitbill.ordens?select=*,splitbill.ordem_amigos(amigo)&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const ordens = await ordRes.json();
 
-async function ghPromptSync() {
-    const {owner, repo, path, branch, token} = ghGetCfg();
-    if (!owner || !repo) return; // No config, skip
+        // Carregar ofertas + oferta_para
+        const ofRes = await fetch(`${SB_URL}/rest/v1/splitbill.ofertas?select=*,splitbill.oferta_para(amigo)&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const ofertas = await ofRes.json();
 
-    try {
-        // 1. Pull from GitHub
-        let text;
-        if (token) {
-            const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`, {
-                headers: {'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json'}
-            });
-            if (!res.ok) return; // silently fail
-            const j = await res.json();
-            text = decodeURIComponent(escape(atob(j.content.replace(/\n/g, ''))));
-        } else {
-            const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}?t=${Date.now()}`;
-            const res = await fetch(rawUrl);
-            if (!res.ok) return;
-            text = await res.text();
-        }
-        const ghData = JSON.parse(text);
-        if (!Array.isArray(ghData)) return;
+        // Carregar pagamentos
+        const pgRes = await fetch(`${SB_URL}/rest/v1/splitbill.pagamentos?select=*&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const pags = await pgRes.json();
 
-        // 2. Compare local vs GitHub
-        const ghMap = new Map(ghData.map(ev => [ev.id, JSON.stringify(ev)]));
-        let temConflito = false;
-        for (const evLocal of historico) {
-            const ghJson = ghMap.get(evLocal.id);
-            if (!ghJson) {
-                // Evento local não existe no GitHub → conflito
-                temConflito = true;
-                break;
-            }
-            if (JSON.stringify(evLocal) !== ghJson) {
-                // Evento local difere do GitHub → conflito
-                temConflito = true;
-                break;
-            }
-        }
-
-        // 3. Sem conflito → sync silencioso
-        if (!temConflito) {
-            ghApplyData(ghData);
-            if (ghData.length > historico.length) {
-                mostrarMensagem('✓ Dados atualizados do GitHub (' + ghData.length + ' eventos)', true);
-            }
-            return;
-        }
-
-        // 4. Com conflito → perguntar ao utilizador
-        const ok = await mostrarModal({
-            icon: '🔄',
-            title: 'Dados locais diferem do GitHub',
-            msg: 'Tens alterações locais que não estão no GitHub. Queres substituir pelos dados do GitHub ou manter os locais?',
-            confirmText: '⬇ Usar GitHub',
-            cancelText: '💾 Manter locais'
+        // Reconstruir historico no formato esperado pela app
+        historico = eventos.map(ev => {
+            const evOrdens = ordens.filter(o => o.evento_id === ev.id).map(o => ({
+                id: o.id,
+                item: o.item,
+                quantidade: o.quantidade,
+                precoUnitario: parseFloat(o.preco_unitario),
+                precoTotal: parseFloat(o.preco_total),
+                hora: o.hora,
+                amigos: (o['splitbill.ordem_amigos'] || []).map(a => a.amigo)
+            }));
+            const evOfertas = ofertas.filter(o => o.evento_id === ev.id).map(o => ({
+                id: o.id,
+                quem: o.quem,
+                item: o.item,
+                quantidade: o.quantidade,
+                precoUnitario: parseFloat(o.preco_unitario),
+                precoTotal: parseFloat(o.preco_total),
+                hora: o.hora,
+                para: (o['splitbill.oferta_para'] || []).map(a => a.amigo)
+            }));
+            const evDividas = {};
+            // recalcular dividas a partir dos pagamentos
+            return {
+                id: ev.id,
+                descricao: ev.descricao,
+                data: ev.data,
+                totalFatura: ev.total_fatura ? parseFloat(ev.total_fatura) : null,
+                pagador: ev.pagador,
+                ordens: evOrdens,
+                ofertas: evOfertas,
+                amigos: [...new Set(evOrdens.flatMap(o => o.amigos))],
+                menu: {},
+                dividas: evDividas
+            };
         });
-        if (ok) {
-            ghApplyData(ghData);
-            mostrarMensagem('✓ Dados atualizados do GitHub (' + ghData.length + ' eventos)', true);
-        }
+
+        pagamentos = pags.map(p => ({
+            id: p.id,
+            pessoa: p.pessoa,
+            valor: parseFloat(p.valor),
+            tipo: p.tipo,
+            eventoId: p.evento_id,
+            data: p.data
+        }));
+
+        salvarHistoricoLocal();
+        salvarPagamentos();
     } catch(e) {
-        console.error('Erro no sync inicial:', e);
+        console.error('Erro ao carregar dados do Supabase:', e);
+        mostrarMensagem('Erro ao carregar dados!', false);
     }
 }
 
-function ghApplyData(data) {
-    // Support old format (array) and new format ({historico, pagamentos})
-    if (Array.isArray(data)) {
-        historico = data;
-    } else if (data && Array.isArray(data.historico)) {
-        historico = data.historico;
-        if (Array.isArray(data.pagamentos)) {
-            pagamentos = data.pagamentos;
-            salvarPagamentos();
+async function sbGuardarEvento(ev) {
+    if (!_sbSession) return;
+    try {
+        // Upsert evento
+        await fetch(`${SB_URL}/rest/v1/splitbill.eventos`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
+            body: JSON.stringify({ id: ev.id, descricao: ev.descricao, data: ev.data, total_fatura: ev.totalFatura, pagador: ev.pagador })
+        });
+
+        // Apagar ordens/ofertas antigas e reinserir
+        await fetch(`${SB_URL}/rest/v1/splitbill.ordens?evento_id=eq.${ev.id}`, { method: 'DELETE', headers: sbHeaders() });
+        if (ev.ordens && ev.ordens.length > 0) {
+            const ordens = ev.ordens.map(o => ({ id: o.id, evento_id: ev.id, item: o.item, quantidade: o.quantidade, preco_unitario: o.precoUnitario, preco_total: o.precoTotal, hora: o.hora }));
+            await fetch(`${SB_URL}/rest/v1/splitbill.ordens`, { method: 'POST', headers: sbHeaders({ 'Prefer': 'return=representation' }), body: JSON.stringify(ordens) });
+            const ordemAmigos = ev.ordens.flatMap(o => (o.amigos || []).map(a => ({ ordem_id: o.id, amigo: a })));
+            if (ordemAmigos.length > 0) await fetch(`${SB_URL}/rest/v1/splitbill.ordem_amigos`, { method: 'POST', headers: sbHeaders(), body: JSON.stringify(ordemAmigos) });
         }
-    } else {
-        historico = [];
-    }
-    salvarHistoricoLocal();
-    if (historico.length > 0) {
-        const ultimo = historico[historico.length - 1];
-        carregarEvento(ultimo);
-    } else {
-        eventoAtualId = null;
-        estado.ordens = []; estado.ofertas = [];
-        estado.totalFatura = null; estado.descricaoEvento = '';
-        amigos = []; menu = {};
-        modoReadOnly = false;
-        document.getElementById('descricao-evento').value = '';
-        document.getElementById('total-fatura').value = '';
-    }
-    atualizarReadOnly();
-    renderHistoricoDropdown();
-    renderConfigAmigos();
-    renderConfigMenu();
-    renderDropdownItens();
-    renderAmigosBotoes();
-    renderOfertaDropdowns();
-    renderOfertaAmigos();
-    renderPagadorSelect();
-    atualizarUI();
-    renderContas();
-}
-/* ── END GITHUB SYNC ──────────────────────── */
 
-/* ── GITHUB AUTO-SAVE (debounced push for token users) ── */
-let _ghAutoSaveTimer = null;
-let _ghAutoSaving = false;
-
-function ghUpdateSyncBtn() {
-    const resetBtn = document.getElementById('btn-gh-reset');
-    const s = localStorage.getItem(GH_KEY);
-    let hasConfig = false;
-    if (s) { try { const c = JSON.parse(s); hasConfig = !!(c.owner && c.repo); } catch(e) {} }
-    if (resetBtn) resetBtn.style.display = hasConfig ? '' : 'none';
+        await fetch(`${SB_URL}/rest/v1/splitbill.ofertas?evento_id=eq.${ev.id}`, { method: 'DELETE', headers: sbHeaders() });
+        if (ev.ofertas && ev.ofertas.length > 0) {
+            const ofertas = ev.ofertas.map(o => ({ id: o.id, evento_id: ev.id, quem: o.quem, item: o.item, quantidade: o.quantidade, preco_unitario: o.precoUnitario, preco_total: o.precoTotal, hora: o.hora }));
+            await fetch(`${SB_URL}/rest/v1/splitbill.ofertas`, { method: 'POST', headers: sbHeaders({ 'Prefer': 'return=representation' }), body: JSON.stringify(ofertas) });
+            const ofertaPara = ev.ofertas.flatMap(o => (o.para || []).map(a => ({ oferta_id: o.id, amigo: a })));
+            if (ofertaPara.length > 0) await fetch(`${SB_URL}/rest/v1/splitbill.oferta_para`, { method: 'POST', headers: sbHeaders(), body: JSON.stringify(ofertaPara) });
+        }
+    } catch(e) { console.error('Erro ao guardar evento no Supabase:', e); }
 }
 
-function ghHasToken() {
-    const s = localStorage.getItem(GH_KEY);
-    if (s) { try { const c = JSON.parse(s); if (c.token) return true; } catch(e) {} }
-    const field = document.getElementById('gh-token');
-    return field && field.value.trim().length > 0;
+async function sbGuardarPagamento(p) {
+    if (!_sbSession) return;
+    try {
+        await fetch(`${SB_URL}/rest/v1/splitbill.pagamentos`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
+            body: JSON.stringify({ id: p.id, evento_id: p.eventoId, pessoa: p.pessoa, valor: p.valor, tipo: p.tipo, data: p.data })
+        });
+    } catch(e) { console.error('Erro ao guardar pagamento no Supabase:', e); }
 }
 
-function ghScheduleAutoSave() {
-    if (!ghHasToken()) return;
-    if (_ghAutoSaveTimer) clearTimeout(_ghAutoSaveTimer);
-    _ghAutoSaveTimer = setTimeout(() => ghAutoSave(), 3000);
+async function sbApagarPagamento(id) {
+    if (!_sbSession) return;
+    try {
+        await fetch(`${SB_URL}/rest/v1/splitbill.pagamentos?id=eq.${id}`, { method: 'DELETE', headers: sbHeaders() });
+    } catch(e) { console.error('Erro ao apagar pagamento no Supabase:', e); }
 }
 
-async function ghAutoSave() {
-    // Delega no ghPush serializado (com retry em conflito de sha), em modo silencioso.
-    // Evita ter um segundo escritor independente a correr em paralelo com o botão Guardar.
-    ghPush(true);
+async function sbApagarEvento(id) {
+    if (!_sbSession) return;
+    try {
+        await fetch(`${SB_URL}/rest/v1/splitbill.eventos?id=eq.${id}`, { method: 'DELETE', headers: sbHeaders() });
+    } catch(e) { console.error('Erro ao apagar evento no Supabase:', e); }
 }
-/* ── END GITHUB AUTO-SAVE ────────────────────── */
 
-// Iniciar na página (compatível com todos os browsers)
+// Auto-save debounced
+let _sbAutoSaveTimer = null;
+function sbScheduleAutoSave() {
+    if (!_sbSession) return;
+    if (_sbAutoSaveTimer) clearTimeout(_sbAutoSaveTimer);
+    _sbAutoSaveTimer = setTimeout(() => {
+        const ev = historico.find(e => e.id === eventoAtualId);
+        if (ev) sbGuardarEvento(ev);
+    }, 2000);
+}
+
+// Auth helpers
+async function sbLoginGoogle() {
+    window.location.href = `${SB_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.href)}`;
+}
+
+async function sbLoginEmail() {
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const status = document.getElementById('login-status');
+    status.style.display = 'block'; status.textContent = 'A entrar…'; status.style.color = '#666';
+    try {
+        const r = await fetch(`${SB_URL}/auth/v1/token?grant_type=password`, {
+            method: 'POST', headers: { 'apikey': SB_KEY, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        const d = await r.json();
+        if (!r.ok) { status.style.color = '#B3402F'; status.textContent = d.error_description || d.msg || 'Erro ao entrar.'; return; }
+        _sbSession = { access_token: d.access_token, refresh_token: d.refresh_token, user: d.user };
+        localStorage.setItem('sb_session', JSON.stringify(_sbSession));
+        await sbAposLogin();
+    } catch(e) { status.style.color = '#B3402F'; status.textContent = 'Erro de ligação.'; }
+}
+
+async function sbRegistarEmail() {
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const status = document.getElementById('login-status');
+    status.style.display = 'block'; status.textContent = 'A criar conta…'; status.style.color = '#666';
+    try {
+        const r = await fetch(`${SB_URL}/auth/v1/signup`, {
+            method: 'POST', headers: { 'apikey': SB_KEY, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        const d = await r.json();
+        if (!r.ok) { status.style.color = '#B3402F'; status.textContent = d.error_description || d.msg || 'Erro ao criar conta.'; return; }
+        status.style.color = '#0E7A4F'; status.textContent = 'Conta criada! Confirma o email e volta a entrar.';
+    } catch(e) { status.style.color = '#B3402F'; status.textContent = 'Erro de ligação.'; }
+}
+
+async function sbSolicitarAcesso() {
+    if (!_sbSession) return;
+    const btn = document.getElementById('btn-solicitar');
+    const status = document.getElementById('solicitar-status');
+    btn.disabled = true; btn.textContent = 'A enviar…';
+    try {
+        await fetch(`${SB_URL}/rest/v1/splitbill.access_requests`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
+            body: JSON.stringify({ email: _sbSession.user.email })
+        });
+        status.style.display = 'block'; status.style.color = '#0E7A4F'; status.textContent = '✓ Pedido enviado! Aguarda aprovação.';
+        btn.style.display = 'none';
+    } catch(e) { status.style.display = 'block'; status.style.color = '#B3402F'; status.textContent = 'Erro ao enviar pedido.'; btn.disabled = false; btn.textContent = 'Solicitar acesso'; }
+}
+
+function sbLogout() {
+    localStorage.removeItem('sb_session');
+    _sbSession = null;
+    window.location.reload();
+}
+
+// Admin
+async function abrirAdmin() {
+    document.getElementById('page-admin').style.display = 'block';
+    const lista = document.getElementById('admin-lista');
+    lista.innerHTML = '<p style="color:#999;font-size:14px;">A carregar…</p>';
+    try {
+        const r = await fetch(`${SB_URL}/rest/v1/splitbill.access_requests?select=*&order=requested_at.desc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const data = await r.json();
+        if (!data.length) { lista.innerHTML = '<p style="color:#999;font-size:14px;">Sem pedidos pendentes.</p>'; return; }
+        lista.innerHTML = data.map(p => `
+            <div style="background:#fff;border-radius:10px;padding:14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+                <div>
+                    <div style="font-weight:600;font-size:14px;">${p.email}</div>
+                    <div style="font-size:12px;color:#999;">${new Date(p.requested_at).toLocaleString('pt-PT')}</div>
+                </div>
+                <button onclick="sbAprovarAcesso('${p.email}')" style="background:#0E7A4F;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;">Aprovar</button>
+            </div>`).join('');
+    } catch(e) { lista.innerHTML = '<p style="color:#B3402F;font-size:14px;">Erro ao carregar pedidos.</p>'; }
+}
+
+async function sbAprovarAcesso(email) {
+    try {
+        await fetch(`${SB_URL}/rest/v1/splitbill.allowed_users`, {
+            method: 'POST', headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
+            body: JSON.stringify({ email })
+        });
+        await fetch(`${SB_URL}/rest/v1/splitbill.access_requests?email=eq.${encodeURIComponent(email)}`, { method: 'DELETE', headers: sbHeaders() });
+        mostrarMensagem(`✓ ${email} aprovado!`, true);
+        abrirAdmin();
+    } catch(e) { mostrarMensagem('Erro ao aprovar.', false); }
+}
+
+function fecharAdmin() {
+    document.getElementById('page-admin').style.display = 'none';
+}
+
+/* ── FIM SUPABASE ───────────────────────────── */
+
+// Compatibilidade: funções GitHub que ainda são referenciadas no HTML
+function ghHasToken() { return !!_sbSession; }
+function ghScheduleAutoSave() { sbScheduleAutoSave(); }
+function ghUpdateSyncBtn() {}
+function ghLoadCfg() {}
+function ghSaveCfg() {}
+function ghPromptSync() {}
+function ghPush() { mostrarMensagem('Dados guardados automaticamente no Supabase ✓', true); }
+function ghReset() { sbCarregarDados().then(() => { renderHistoricoDropdown(); renderContas(); mostrarMensagem('✓ Dados sincronizados do Supabase', true); }); }
+
+// Iniciar
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
+  document.addEventListener('DOMContentLoaded', sbInit);
 } else {
-  init();
+  sbInit();
 }
 </script>
 
