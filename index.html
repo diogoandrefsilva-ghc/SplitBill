@@ -809,6 +809,46 @@
         }
         .contas-resumo-total .label { color: #79610F; }
         .contas-resumo-total .valor { color: #B3402F; }
+        /* Split flux totalizador (não-admin): a receber / a pagar */
+        .resumo-fluxo-wrap {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .resumo-fluxo {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 11px 14px;
+            border-radius: 10px;
+            border: 1px solid transparent;
+        }
+        .resumo-fluxo .label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            opacity: 0.85;
+        }
+        .resumo-fluxo .valor {
+            font-family: var(--mono, monospace);
+            font-size: 18px;
+            font-weight: 700;
+            line-height: 1.1;
+        }
+        .resumo-receber {
+            background: #FBF4DC;
+            border-color: #E3CF8A;
+        }
+        .resumo-receber .label { color: #8A6D12; }
+        .resumo-receber .valor { color: #8A6D12; }
+        .resumo-pagar {
+            background: #F7E4E0;
+            border-color: #E2B5AC;
+        }
+        .resumo-pagar .label { color: #9A3322; }
+        .resumo-pagar .valor { color: #B3402F; }
         .contas-vazio {
             text-align: center;
             color: #7C8782;
@@ -1114,16 +1154,38 @@
         .top-nav-btn:not(.active):hover { color: #C9DFD2; background: rgba(0,0,0,0.32); }
         .top-nav-badge {
             position: absolute;
-            top: -7px;
-            right: -4px;
+            top: -9px;
+            right: -6px;
             background: var(--rubro);
             font-family: var(--mono);
             font-weight: 600;
-            font-size: 9px;
+            font-size: 9.5px;
+            letter-spacing: -0.02em;
             margin-left: 0;
+            padding: 2px 7px;
+            border-radius: 999px;
             border: 1.5px solid var(--verde-escuro);
             z-index: 2;
+            line-height: 1.4;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.25);
         }
+        /* Split badge: two stacked color chips inside one rounded container */
+        .top-nav-badge.badge-split {
+            display: inline-flex;
+            align-items: center;
+            gap: 0;
+            padding: 0;
+            background: var(--verde-escuro);
+            overflow: hidden;
+        }
+        .top-nav-badge.badge-split .badge-receber,
+        .top-nav-badge.badge-split .badge-devo {
+            padding: 2px 7px;
+            line-height: 1.4;
+        }
+        .top-nav-badge .badge-receber { background: var(--dourado); color: #2A2206; }
+        .top-nav-badge .badge-devo    { background: var(--rubro);   color: #fff; }
+        .top-nav-badge.badge-devo { background: var(--rubro); color: #fff; }
         #header-evento-context {
             background: var(--verde-tinta);
             margin: 0 -10px 16px;
@@ -3386,46 +3448,41 @@ function atualizarNavBadge() {
     const badge = document.getElementById('nav-pgto-badge');
 
     if (isAdmin()) {
-        // Admin: total global pendente (comportamento anterior)
         let total = 0;
         Object.values(saldos).forEach(s => total += s.saldo);
         if (total > 0.005) {
+            badge.className = 'top-nav-badge badge-devo';
             badge.textContent = '€' + total.toFixed(2);
-            badge.style.background = 'var(--rubro)';
-            badge.style.display = 'inline';
+            badge.style.display = 'inline-flex';
         } else {
             badge.style.display = 'none';
         }
-    } else {
-        // Não-admin: separar "o que devo" (vermelho) de "o que me devem" (amarelo)
-        let aDevo = 0;   // sou devedor
-        let aReceber = 0; // sou credor (outros devem-me)
-        Object.entries(saldos).forEach(([pessoa, s]) => {
-            s.eventos.forEach(e => {
-                if (e.restante < 0.01) return;
-                if (ehEu(pessoa)) {
-                    aDevo += e.restante;          // eu devo ao pagador
-                } else if (ehEu(e.pagador)) {
-                    aReceber += e.restante;        // alguém me deve a mim
-                }
-            });
-        });
-        aDevo = Math.round(aDevo * 100) / 100;
-        aReceber = Math.round(aReceber * 100) / 100;
-
-        if (aDevo < 0.01 && aReceber < 0.01) {
-            badge.style.display = 'none';
-            badge.innerHTML = '';
-            return;
-        }
-        badge.style.display = 'inline';
-        badge.style.background = 'transparent';
-        // Construir conteúdo com spans coloridos
-        const partes = [];
-        if (aReceber >= 0.01) partes.push('<span style="color:#F5C842;">€' + aReceber.toFixed(2) + '</span>');
-        if (aDevo >= 0.01)    partes.push('<span style="color:#E07060;">€' + aDevo.toFixed(2) + '</span>');
-        badge.innerHTML = partes.join('<span style="color:rgba(255,255,255,0.5);margin:0 2px;">·</span>');
+        return;
     }
+
+    // Não-admin: separar o que me devem (receber) do que devo (pagar)
+    let aReceber = 0, aDevo = 0;
+    Object.entries(saldos).forEach(([pessoa, s]) => {
+        s.eventos.forEach(e => {
+            if (e.restante < 0.01) return;
+            if (ehEu(pessoa)) aDevo += e.restante;
+            else if (ehEu(e.pagador)) aReceber += e.restante;
+        });
+    });
+    aReceber = Math.round(aReceber * 100) / 100;
+    aDevo = Math.round(aDevo * 100) / 100;
+
+    if (aReceber < 0.01 && aDevo < 0.01) {
+        badge.style.display = 'none';
+        badge.innerHTML = '';
+        return;
+    }
+    const partes = [];
+    if (aReceber >= 0.01) partes.push('<span class="badge-receber">+€' + aReceber.toFixed(2) + '</span>');
+    if (aDevo >= 0.01)    partes.push('<span class="badge-devo">−€' + aDevo.toFixed(2) + '</span>');
+    badge.className = 'top-nav-badge badge-split';
+    badge.innerHTML = partes.join('');
+    badge.style.display = 'inline-flex';
 }
 
 // ── FAB ──
@@ -3654,62 +3711,67 @@ function renderContasSaldos(lista, resumo) {
                 + '</div>';
         }).join('');
 
+        // Total a mostrar no cabeçalho da pessoa:
+        // - admin vê o saldo global da pessoa
+        // - não-admin vê apenas o que lhe é relevante (a sua própria dívida, ou o que essa pessoa lhe deve a si)
+        let totalCabecalho = s.saldo;
+        if (!isAdmin() && !ehEu(pessoa)) {
+            totalCabecalho = credores.reduce((t, c) => t + subtotalDe(c), 0);
+        }
+        totalCabecalho = Math.round(totalCabecalho * 100) / 100;
+
         return '<div class="saldo-pessoa-card">'
             + '<div class="saldo-pessoa-header">'
             + '<span class="saldo-pessoa-nome">\uD83D\uDC64 ' + pessoa + (ehEu(pessoa) ? ' <span style="font-size:10px;color:#0E7A4F;font-weight:600;">(tu)</span>' : '') + '</span>'
-            + '<span class="saldo-pessoa-total">\u20ac' + s.saldo.toFixed(2) + '</span>'
+            + '<span class="saldo-pessoa-total">\u20ac' + totalCabecalho.toFixed(2) + '</span>'
             + '</div>'
             + blocosHtml
             + '</div>';
     }).join('');
 
     if (isAdmin()) {
-        // Admin: total global de todas as dívidas pendentes
         let totalPendente = 0;
         Object.values(saldos).forEach(s => totalPendente += s.saldo);
         if (totalPendente > 0.005) {
             resumo.innerHTML = `
             <div class="contas-resumo-total">
-                <span class="label">💰 Total pendente</span>
+                <span class="label">Total pendente</span>
                 <span class="valor">€${totalPendente.toFixed(2)}</span>
             </div>`;
         } else {
-            resumo.innerHTML = '<div style="text-align:center;font-size:13px;color:#0E7A4F;padding:10px;font-weight:600;">✅ Tudo liquidado!</div>';
+            resumo.innerHTML = '<div style="text-align:center;font-size:13px;color:#0E7A4F;padding:10px;font-weight:600;">Tudo liquidado</div>';
         }
-    } else {
-        // Não-admin: separar "o que devo" vs "o que me devem"
-        let aDevo = 0;
-        let aReceber = 0;
-        pessoas.forEach(p => {
-            saldos[p].eventos.forEach(e => {
-                if (e.restante < 0.01) return;
-                if (ehEu(p)) {
-                    aDevo += e.restante;
-                } else if (ehEu(e.pagador)) {
-                    aReceber += e.restante;
-                }
-            });
-        });
-        aDevo = Math.round(aDevo * 100) / 100;
-        aReceber = Math.round(aReceber * 100) / 100;
-
-        if (aDevo < 0.01 && aReceber < 0.01) {
-            resumo.innerHTML = '<div style="text-align:center;font-size:13px;color:#0E7A4F;padding:10px;font-weight:600;">✅ Tudo liquidado!</div>';
-        } else {
-            const linhas = [];
-            if (aReceber >= 0.01) linhas.push(`
-                <div class="contas-resumo-total" style="background:#FBF4DC;border-color:#D9B53A;">
-                    <span class="label" style="color:#79610F;">📥 A receber</span>
-                    <span class="valor" style="color:#79610F;">€${aReceber.toFixed(2)}</span>
-                </div>`);
-            if (aDevo >= 0.01) linhas.push(`
-                <div class="contas-resumo-total" style="margin-top:6px;">
-                    <span class="label">💸 A pagar</span>
-                    <span class="valor">€${aDevo.toFixed(2)}</span>
-                </div>`);
-            resumo.innerHTML = linhas.join('');
-        }
+        return;
     }
+
+    // Não-admin: separar o que me devem (a receber) do que devo (a pagar)
+    let aReceber = 0, aDevo = 0;
+    pessoas.forEach(p => {
+        saldos[p].eventos.forEach(e => {
+            if (e.restante < 0.01) return;
+            if (ehEu(p)) aDevo += e.restante;
+            else if (ehEu(e.pagador)) aReceber += e.restante;
+        });
+    });
+    aReceber = Math.round(aReceber * 100) / 100;
+    aDevo = Math.round(aDevo * 100) / 100;
+
+    if (aReceber < 0.01 && aDevo < 0.01) {
+        resumo.innerHTML = '<div style="text-align:center;font-size:13px;color:#0E7A4F;padding:10px;font-weight:600;">Tudo liquidado</div>';
+        return;
+    }
+    const linhas = [];
+    if (aReceber >= 0.01) linhas.push(`
+        <div class="resumo-fluxo resumo-receber">
+            <span class="label">A receber</span>
+            <span class="valor">€${aReceber.toFixed(2)}</span>
+        </div>`);
+    if (aDevo >= 0.01) linhas.push(`
+        <div class="resumo-fluxo resumo-pagar">
+            <span class="label">A pagar</span>
+            <span class="valor">€${aDevo.toFixed(2)}</span>
+        </div>`);
+    resumo.innerHTML = '<div class="resumo-fluxo-wrap">' + linhas.join('') + '</div>';
 }
 
 function renderContasEventos(lista, resumo) {
