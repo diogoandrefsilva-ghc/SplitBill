@@ -5075,14 +5075,24 @@ async function sbVerificarPedidos() {
 
 async function sbAprovarAcesso(email) {
     try {
-        await sbFetch(`${SB_URL}/rest/v1/allowed_users`, {
+        const rIns = await sbFetch(`${SB_URL}/rest/v1/allowed_users`, {
             method: 'POST', headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
             body: JSON.stringify({ email })
         });
-        await sbFetch(`${SB_URL}/rest/v1/access_requests?email=eq.${encodeURIComponent(email)}`, { method: 'DELETE', headers: sbHeaders() });
-        mostrarMensagem(`✓ ${email} aprovado!`, true);
+        if (!rIns.ok) {
+            let msg = 'HTTP ' + rIns.status;
+            try { const j = await rIns.json(); msg = j.message || msg; } catch(_) {}
+            mostrarMensagem('Erro ao adicionar utilizador: ' + msg, false);
+            return;
+        }
+        const rDel = await sbFetch(`${SB_URL}/rest/v1/access_requests?email=eq.${encodeURIComponent(email)}`, { method: 'DELETE', headers: sbHeaders() });
+        if (!rDel.ok) {
+            mostrarMensagem(`✓ ${email} aprovado (pedido não removido — refresca manualmente).`, true);
+        } else {
+            mostrarMensagem(`✓ ${email} aprovado!`, true);
+        }
         abrirAdmin();
-    } catch(e) { mostrarMensagem('Erro ao aprovar.', false); }
+    } catch(e) { mostrarMensagem('Erro ao aprovar: ' + e.message, false); }
 }
 
 function fecharAdmin() {
