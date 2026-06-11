@@ -1424,9 +1424,25 @@
         </div>
         <div id="admin-lista" style="padding:16px;overflow-y:auto;"></div>
         <div style="padding:0 16px 16px;border-top:1px solid #DEE3DD;padding-top:14px;">
+            <button onclick="abrirEquivalencias()" style="width:100%;padding:11px;background:#0B3B2B;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:10px;">👥 Equivalências amigo ↔ conta</button>
             <button onclick="exportarJSON()" style="width:100%;padding:11px;background:#fff;color:#0E7A4F;border:1.5px solid #0E7A4F;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;">💾 Descarregar backup (JSON)</button>
             <p style="font-size:11px;color:#7C8782;text-align:center;margin:8px 0 0;">O plano gratuito do Supabase não faz backups automáticos.</p>
         </div>
+    </div>
+</div>
+
+<!-- ═══ PAINEL EQUIVALÊNCIAS (amigo ↔ conta) — só admin ═══ -->
+<div id="page-equivalencias" style="display:none;position:fixed;inset:0;background:rgba(11,59,43,0.45);z-index:9997;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)fecharEquivalencias()">
+    <div style="background:#EFF1EC;width:100%;max-width:520px;max-height:85vh;border-radius:16px 16px 0 0;display:flex;flex-direction:column;overflow:hidden;">
+        <div style="background:#0B3B2B;color:#fff;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:18px;">👥</span>
+                <h2 style="font-size:16px;font-weight:700;margin:0;">Equivalências amigo ↔ conta</h2>
+            </div>
+            <button onclick="fecharEquivalencias()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;border-radius:8px;width:32px;height:32px;font-size:18px;cursor:pointer;line-height:1;">✕</button>
+        </div>
+        <p style="font-size:12px;color:#5B6661;margin:0;padding:12px 16px 0;">Associa cada amigo da divisão de contas à conta de utilizador (email) correspondente. Só o admin pode alterar.</p>
+        <div id="equiv-lista" style="padding:14px 16px;overflow-y:auto;"></div>
     </div>
 </div>
 
@@ -1457,10 +1473,25 @@
             <span id="historico-toggle-label">📚 Histórico (0 eventos)</span>
             <span id="historico-toggle-arrow" style="font-size:10px;opacity:0.6;transition:transform 0.2s;">▼</span>
         </button>
-        <button onclick="novoEvento()">＋ Novo</button>
+        <button id="btn-novo-evento" onclick="novoEvento()">＋ Novo</button>
     </div>
     <div class="historico-panel" id="historico-panel"></div>
+    <div id="substituto-box" style="display:none;"></div>
 </div>
+
+<style>
+#substituto-box { margin-top: 10px; }
+.subst-box { background:#FBF4DC; border:1px solid #E8DCAE; border-radius:10px; padding:10px 12px; }
+.subst-label { display:block; font-size:12px; font-weight:700; color:#8A6D12; margin-bottom:6px; }
+.subst-row { display:flex; gap:8px; }
+.subst-row select { flex:1; min-width:0; max-width:100%; box-sizing:border-box; -webkit-appearance:none; appearance:none; padding:8px 10px; border:1px solid #DDD3A8; border-radius:8px; font-size:13px; background:#fff; }
+.subst-row button { background:#0E7A4F; color:#fff; border:none; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; }
+.subst-hint { display:block; font-size:11px; color:#8A7D52; margin-top:6px; line-height:1.3; }
+.subst-info { background:#E2EFE8; border-radius:8px; padding:8px 12px; font-size:12px; color:#0E5C3F; }
+.equiv-item { display:flex; align-items:center; gap:8px; background:#fff; border-radius:10px; padding:10px 12px; margin-bottom:8px; box-shadow:0 1px 4px rgba(0,0,0,0.06); }
+.equiv-nome { font-weight:600; font-size:14px; flex:0 0 38%; word-break:break-word; }
+.equiv-item select { flex:1; min-width:0; max-width:100%; box-sizing:border-box; -webkit-appearance:none; appearance:none; padding:7px 9px; border:1px solid #ddd; border-radius:8px; font-size:13px; background:#fafafa; }
+</style>
 
 <!-- Custom confirm modal -->
 <div class="modal-overlay" id="modal-overlay" onclick="fecharModal(event)">
@@ -1831,7 +1862,9 @@ function carregarEvento(ev) {
     estado.pagador = ev.pagador || '';
     estado.dividas = ev.dividas ? JSON.parse(JSON.stringify(ev.dividas)) : {};
     amigos = ev.amigos ? JSON.parse(JSON.stringify(ev.amigos)) : [];
-    menu = ev.menu ? JSON.parse(JSON.stringify(ev.menu)) : {};
+    // O menu não é persistido na BD; se vier vazio, reconstrói-se a partir de
+    // todos os eventos (preço mais recente) para o dropdown de artigos funcionar.
+    menu = (ev.menu && Object.keys(ev.menu).length) ? JSON.parse(JSON.stringify(ev.menu)) : menuAgregadoGlobal();
     modoReadOnly = !!ev.totalFatura;
     document.getElementById('descricao-evento').value = estado.descricaoEvento;
     document.getElementById('total-fatura').value = estado.totalFatura || '';
@@ -2322,7 +2355,7 @@ function renderHistoricoDropdown() {
             <div class="historico-card${isAtual ? ' ativo' : ''}" onclick="${isAtual ? '' : 'navegarHistorico(' + ev.id + ')'}">
                 <div class="historico-card-nome">${ev.descricao || 'Sem nome'}${indicador}</div>
                 <span class="historico-card-data">${ev.data || '—'}</span>
-                <button class="historico-card-del" onclick="apagarEvento(${ev.id}, event)" title="Apagar evento">🗑️</button>
+                ${isAdmin() ? `<button class="historico-card-del" onclick="apagarEvento(${ev.id}, event)" title="Apagar evento">🗑️</button>` : ''}
             </div>`;
     }).join('');
 }
@@ -2397,6 +2430,7 @@ async function navegarHistorico(id) {
 
 async function apagarEvento(id, ev_) {
     if (ev_ && ev_.stopPropagation) ev_.stopPropagation();
+    if (!isAdmin()) { mostrarMensagem('⚠️ Apenas o administrador pode apagar eventos', false); return; }
     const ev = historico.find(e => e.id == id);
     if (!ev) return;
 
@@ -2461,14 +2495,11 @@ async function apagarEvento(id, ev_) {
 }
 
 async function novoEvento() {
-    // Inherit amigos and menu from most recent event
-    let novosAmigos = [];
-    let novoMenu = {};
-    if (historico.length > 0) {
-        const ultimo = historico[historico.length - 1];
-        novosAmigos = ultimo.amigos ? JSON.parse(JSON.stringify(ultimo.amigos)) : [];
-        novoMenu = ultimo.menu ? JSON.parse(JSON.stringify(ultimo.menu)) : {};
-    }
+    if (!isAdmin()) { mostrarMensagem('⚠️ Apenas o administrador pode criar eventos', false); return; }
+    // Por defeito: todos os amigos de eventos anteriores e todos os artigos
+    // (nos repetidos fica o preço mais recente).
+    const novosAmigos = amigosAgregadoGlobal();
+    const novoMenu = menuAgregadoGlobal();
 
     const novoId = Date.now();
     const novoEvt = {
@@ -2888,6 +2919,7 @@ function exportarPDFDivisao() {
 }
 
 async function fecharComFatura() {
+    if (!podeEditarEventoAtual()) { mostrarMensagem('⚠️ Sem permissão para fechar este evento', false); return; }
     const fatura = parseFloat(document.getElementById('total-fatura').value);
     if (!fatura || fatura <= 0) { mostrarMensagem('⚠️ Introduz o valor da fatura', false); return; }
     const pagador = document.getElementById('pagador-select').value;
@@ -2970,6 +3002,7 @@ function calcularContaFinalPorPessoa() {
 }
 
 async function reabrirEvento() {
+    if (!podeEditarEventoAtual()) { mostrarMensagem('⚠️ Sem permissão para reabrir este evento', false); return; }
     const pgtosEvento = pagamentos.filter(p => p.eventoId === eventoAtualId);
     let manterPagamentos = false;
 
@@ -3160,9 +3193,100 @@ function atualizarReadOnly() {
         document.getElementById('total-fatura').disabled = false;
     }
     aplicarColapsosSecoes();
+    aplicarPermissoesEdicao();
+}
+
+// Aplica as restrições de edição em função do utilizador (admin vs substituto vs consulta).
+function aplicarPermissoesEdicao() {
+    const ev = historico.find(h => h.id === eventoAtualId);
+    const admin = isAdmin();
+    const editavel = podeEditarEvento(ev);
+    const banner = document.getElementById('readonly-banner');
+    const bSpan = banner ? banner.querySelector('span') : null;
+    const bBtn = banner ? banner.querySelector('button') : null;
+
+    // Criar evento — só admin
+    const btnNovo = document.getElementById('btn-novo-evento');
+    if (btnNovo) btnNovo.style.display = admin ? '' : 'none';
+
+    // Caixa de nomeação de substituto (só admin)
+    renderSubstitutoBox(ev);
+
+    if (!editavel) {
+        // Consulta total na página de eventos
+        ['section-adicionar', 'section-ofertas', 'section-config'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.classList.add('readonly-overlay');
+            el.querySelectorAll('button, input, select, textarea').forEach(c => c.disabled = true);
+        });
+        const desc = document.getElementById('descricao-evento');
+        if (desc) desc.disabled = true;
+        ['btn-fechar-evento', 'btn-reabrir-evento'].forEach(id => {
+            const b = document.getElementById(id); if (b) b.style.display = 'none';
+        });
+        if (banner) {
+            banner.style.display = (_paginaAtual === 'eventos') ? 'flex' : 'none';
+            if (bSpan) bSpan.textContent = '👁️ Apenas consulta';
+            if (bBtn) bBtn.style.display = 'none';
+        }
+    } else {
+        // Editável: repor o texto/botão do banner para o comportamento normal de evento fechado
+        if (banner) {
+            if (modoReadOnly && _paginaAtual === 'eventos') {
+                banner.style.display = 'flex';
+                if (bSpan) bSpan.textContent = '👁️ Evento fechado — modo leitura';
+                if (bBtn) bBtn.style.display = '';
+            } else {
+                banner.style.display = 'none';
+            }
+        }
+    }
+}
+
+// Caixa (só admin) para nomear/remover o substituto de um evento em aberto.
+function renderSubstitutoBox(ev) {
+    const box = document.getElementById('substituto-box');
+    if (!box) return;
+    if (!isAdmin() || !ev) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    const aberto = !ev.totalFatura;
+    if (!aberto) {
+        if (ev.substituto) {
+            box.style.display = '';
+            box.innerHTML = `<div class="subst-info">👤 Substituto: <strong>${ev.substituto}</strong> · evento fechado</div>`;
+        } else { box.style.display = 'none'; box.innerHTML = ''; }
+        return;
+    }
+    box.style.display = '';
+    const emails = _allowedUsersCache.filter(e => e.toLowerCase() !== ADMIN_EMAIL.toLowerCase());
+    const opts = ['<option value="">— sem substituto (só admin edita) —</option>']
+        .concat(emails.map(e => `<option value="${e}" ${ev.substituto === e ? 'selected' : ''}>${e}</option>`))
+        .join('');
+    box.innerHTML = `<div class="subst-box">
+        <span class="subst-label">👤 Substituto para este evento</span>
+        <div class="subst-row">
+            <select id="subst-select">${opts}</select>
+            <button onclick="definirSubstituto()">Definir</button>
+        </div>
+        <span class="subst-hint">O substituto pode registar a conta e os pagamentos deste evento enquanto não estiveres presente.</span>
+    </div>`;
+}
+
+async function definirSubstituto() {
+    if (!isAdmin()) return;
+    const ev = historico.find(h => h.id === eventoAtualId);
+    if (!ev) return;
+    const sel = document.getElementById('subst-select');
+    const email = sel ? (sel.value || null) : null;
+    ev.substituto = email;
+    salvarHistoricoLocal();
+    await sbDefinirSubstituto(ev.id, email);
+    renderSubstitutoBox(ev);
+    mostrarMensagem(email ? ('✓ Substituto definido: ' + email) : '✓ Substituto removido', true);
 }
 
 async function desbloquearEvento() {
+    if (!podeEditarEventoAtual()) { mostrarMensagem('⚠️ Sem permissão para editar este evento', false); return; }
     const ok = await mostrarModal({
         icon: '🔓',
         title: 'Desbloquear evento',
@@ -3256,10 +3380,11 @@ function mudarPagina(pagina) {
     }
     document.getElementById('nav-eventos').classList.toggle('active', pagina === 'eventos');
     document.getElementById('nav-pagamentos').classList.toggle('active', pagina === 'pagamentos');
-    // FAB visibility: only on pagamentos page + token
+    // FAB visibility: only on pagamentos page + permissão
     const fab = document.getElementById('fab-pgto');
     fab.style.display = (pagina === 'pagamentos' && ghHasToken()) ? 'block' : 'none';
     if (pagina === 'pagamentos') renderContas();
+    aplicarPermissoesEdicao();
 }
 
 function atualizarNavBadge() {
@@ -3485,7 +3610,7 @@ function renderContasSaldos(lista, resumo) {
                     return (Number.isInteger(qtd) ? qtd : qtd.toFixed(1)) + '\u00d7 ' + item;
                 }).join(', ');
             }
-            const hasToken = ghHasToken();
+            const hasToken = podeEditarPagamentoDoEvento(e.eventoId);
             return '<div class="saldo-evento-row"' + (hasToken ? ' style="cursor:pointer;" onclick="abrirPagamentoPrePreenchido(\'' + pessoa.replace(/'/g, "\\'") + '\',' + e.eventoId + ')" title="Clica para registar pagamento"' : '') + '>'
                 + '<div class="saldo-evento-info">'
                 + '<span class="saldo-evento-nome">\u26BD ' + e.descricao + '</span>'
@@ -3511,7 +3636,7 @@ function renderContasSaldos(lista, resumo) {
 
         return '<div class="saldo-pessoa-card">'
             + '<div class="saldo-pessoa-header">'
-            + '<span class="saldo-pessoa-nome">\uD83D\uDC64 ' + pessoa + '</span>'
+            + '<span class="saldo-pessoa-nome">\uD83D\uDC64 ' + pessoa + (ehEu(pessoa) ? ' <span style="font-size:10px;color:#0E7A4F;font-weight:600;">(tu)</span>' : '') + '</span>'
             + '<span class="saldo-pessoa-total">\u20ac' + s.saldo.toFixed(2) + '</span>'
             + '</div>'
             + blocosHtml
@@ -3732,7 +3857,7 @@ function renderContasPagamentos(lista, resumo) {
             }
         }
 
-        var acoes = hasToken ? '<button class="pgto-edit" onclick="editarPagamento(' + p.id + ')" title="Editar data">\u270e</button><button class="pgto-delete" onclick="removerPagamento(' + p.id + ')" title="Remover">\u00d7</button>' : '';
+        var acoes = podeEditarPagamentoDoEvento(p.eventoId) ? '<button class="pgto-edit" onclick="editarPagamento(' + p.id + ')" title="Editar data">\u270e</button><button class="pgto-delete" onclick="removerPagamento(' + p.id + ')" title="Remover">\u00d7</button>' : '';
         return '<div class="pgto-hist-item" id="pgto-item-' + p.id + '" style="flex-wrap:wrap;">'
             + '<div class="pgto-info-col">'
             + '<div class="pgto-nome">' + p.pessoa + '</div>'
@@ -3830,6 +3955,7 @@ function renderPgtoEventoSelect() {
         return dB.localeCompare(dA);
     });
     eventosOrdenados.forEach(e => {
+        if (!podeEditarPagamentoDoEvento(e.eventoId)) return;
         const ev = historico.find(h => h.id === e.eventoId);
         const dataStr = ev && ev.data ? ' · ' + ev.data : '';
         const opt = document.createElement('option');
@@ -3870,6 +3996,7 @@ async function registarPagamento() {
         const selEvento = document.getElementById('pgto-evento');
         eventoId = selEvento.value;
         if (!eventoId) { mostrarPgtoMsg('⚠️ Seleciona o evento', false); return; }
+        if (!podeEditarPagamentoDoEvento(eventoId)) { mostrarPgtoMsg('⚠️ Sem permissão para registar pagamentos deste evento', false); return; }
         valor = parseFloat(selEvento.selectedOptions[0].dataset.valor);
 
         // Check for duplicate: same pessoa + same eventoId already paid in full
@@ -3879,6 +4006,7 @@ async function registarPagamento() {
             return;
         }
     } else {
+        if (!isAdmin()) { mostrarPgtoMsg('⚠️ Apenas o administrador pode registar pagamentos livres', false); return; }
         valor = parseFloat(document.getElementById('pgto-valor-livre').value);
         if (!valor || valor <= 0) { mostrarPgtoMsg('⚠️ Introduz um valor válido', false); return; }
     }
@@ -3889,15 +4017,17 @@ async function registarPagamento() {
         ? dataInput.value.trim()
         : new Date().toLocaleDateString('pt-PT', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
 
-    pagamentos.push({
+    const novoPgto = {
         id: Date.now(),
         pessoa,
         valor,
         tipo,
         eventoId: tipo === 'evento' ? parseInt(eventoId) : null,
         data: dataPgto
-    });
+    };
+    pagamentos.push(novoPgto);
     salvarPagamentos();
+    sbGuardarPagamento(novoPgto);
 
     document.getElementById('pgto-evento').value = '';
     document.getElementById('pgto-valor-livre').value = '';
@@ -3915,12 +4045,16 @@ function guardarEdicaoPgto(id) {
     if (!input) return;
     const p = pagamentos.find(pg => pg.id === id);
     if (!p) return;
+    if (!podeEditarPagamentoDoEvento(p.eventoId)) { mostrarMensagem('⚠️ Sem permissão para editar este pagamento', false); return; }
     p.data = input.value.trim() || p.data;
     salvarPagamentos();
+    sbGuardarPagamento(p);
     renderContas();
 }
 
 async function removerPagamento(id) {
+    const p = pagamentos.find(pg => pg.id === id);
+    if (p && !podeEditarPagamentoDoEvento(p.eventoId)) { mostrarMensagem('⚠️ Sem permissão para remover este pagamento', false); return; }
     const ok = await mostrarModal({
         icon: '💸',
         title: 'Remover pagamento',
@@ -3932,6 +4066,7 @@ async function removerPagamento(id) {
     if (!ok) return;
     pagamentos = pagamentos.filter(p => p.id !== id);
     salvarPagamentos();
+    sbApagarPagamento(id);
     renderContas();
     renderHistoricoDropdown();
 }
@@ -4146,7 +4281,7 @@ function renderConfigAmigos() {
         const editId = `edit-amigo-${i}`;
         return `
         <div class="config-item" id="cfg-amigo-${i}">
-            <span>${a}</span>
+            <span>${a}${ehEu(a) ? ' <span style="font-size:10px;color:#0E7A4F;font-weight:600;">(tu)</span>' : ''}${(isAdmin() && amigoUsers[a]) ? ` <span style="font-size:10px;color:#7C8782;">· ${amigoUsers[a]}</span>` : ''}</span>
             <button class="secondary" style="padding:4px 8px;font-size:12px;" onclick="toggleEditAmigo(${i})">✏️</button>
             ${!usado ? `<button class="danger" style="padding:4px 8px;font-size:12px;" onclick="removerAmigo(${i})">×</button>` : ''}
         </div>
@@ -4380,6 +4515,70 @@ const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const ADMIN_EMAIL = 'diogo.andre.f.silva@gmail.com';
 
 let _sbSession = null;
+let amigoUsers = {};          // equivalência { nomeAmigo: email }  (gerida só pelo admin)
+let _allowedUsersCache = [];  // emails com acesso (para dropdowns do admin)
+
+/* ── PERMISSÕES ──────────────────────────────── */
+function emailAtual() {
+    return (_sbSession && _sbSession.user && _sbSession.user.email)
+        ? _sbSession.user.email.toLowerCase() : null;
+}
+function isAdmin() { return emailAtual() === ADMIN_EMAIL.toLowerCase(); }
+
+// É o utilizador o substituto nomeado para este evento?
+function ehSubstitutoDe(ev) {
+    const e = emailAtual();
+    return !!(ev && ev.substituto && e && ev.substituto.toLowerCase() === e);
+}
+// Pode editar este evento (ordens, ofertas, fatura)?
+function podeEditarEvento(ev) { return isAdmin() || ehSubstitutoDe(ev); }
+function podeEditarEventoAtual() {
+    return podeEditarEvento(historico.find(h => h.id === eventoAtualId));
+}
+// Eventos delegados a este utilizador
+function eventosDelegados() {
+    const e = emailAtual();
+    if (!e) return [];
+    return historico.filter(ev => (ev.substituto || '').toLowerCase() === e);
+}
+// Pode registar/editar pagamentos de um dado evento?
+function podeEditarPagamentoDoEvento(eventoId) {
+    if (isAdmin()) return true;
+    const ev = historico.find(h => String(h.id) === String(eventoId));
+    return ehSubstitutoDe(ev);
+}
+// Tem permissão para registar algum pagamento (admin ou tem eventos delegados)?
+function podeRegistarPagamentos() { return isAdmin() || eventosDelegados().length > 0; }
+// É a conta do utilizador atual equivalente a este amigo?
+function ehEu(amigo) {
+    const e = emailAtual();
+    return !!(e && amigoUsers[amigo] && amigoUsers[amigo].toLowerCase() === e);
+}
+
+/* ── AGREGAÇÃO GLOBAL (menu e amigos de todos os eventos) ── */
+// Menu por defeito = todos os artigos de todos os eventos (ordem cronológica),
+// mantendo, nos repetidos, o preço do evento mais recente.
+function menuAgregadoGlobal() {
+    const m = {};
+    historico.forEach(ev => {
+        (ev.ordens || []).forEach(o => { if (o.item && o.precoUnitario > 0) m[o.item] = o.precoUnitario; });
+        (ev.ofertas || []).forEach(o => { if (o.item && o.precoUnitario > 0) m[o.item] = o.precoUnitario; });
+        if (ev.menu) Object.keys(ev.menu).forEach(it => { if (ev.menu[it] > 0) m[it] = ev.menu[it]; });
+    });
+    return m;
+}
+// Amigos por defeito = todos os que existam em algum evento anterior.
+function amigosAgregadoGlobal() {
+    const vistos = new Set(); const lista = [];
+    const add = a => { if (a && !vistos.has(a)) { vistos.add(a); lista.push(a); } };
+    historico.forEach(ev => {
+        (ev.amigos || []).forEach(add);
+        add(ev.pagador);
+        (ev.ordens || []).forEach(o => (o.amigos || []).forEach(add));
+        (ev.ofertas || []).forEach(o => { add(o.quem); (o.para || []).forEach(add); });
+    });
+    return lista;
+}
 
 function sbHeaders(extra = {}) {
     const h = { 'Content-Type': 'application/json', 'apikey': SB_KEY, 'Authorization': `Bearer ${_sbSession?.access_token || SB_KEY}`, 'Accept-Profile': 'splitbill', 'Content-Profile': 'splitbill' };
@@ -4467,6 +4666,7 @@ async function sbAposLogin() {
     document.getElementById('page-sem-acesso').style.display = 'none';
     if (email === ADMIN_EMAIL) { document.getElementById('btn-admin').style.display = ''; sbVerificarPedidos(); }
 
+    await sbCarregarConfigAcesso();
     await sbCarregarDados();
     init();
 }
@@ -4522,7 +4722,8 @@ async function sbCarregarDados() {
                 ofertas: evOfertas,
                 amigos: [...new Set(evOrdens.flatMap(o => o.amigos))],
                 menu: {},
-                dividas: evDividas
+                dividas: evDividas,
+                substituto: ev.substituto_email || null
             };
         });
 
@@ -4546,12 +4747,21 @@ async function sbCarregarDados() {
 async function sbGuardarEvento(ev) {
     if (!_sbSession) return;
     try {
-        // Upsert evento
-        await fetch(`${SB_URL}/rest/v1/eventos`, {
-            method: 'POST',
-            headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
-            body: JSON.stringify({ id: ev.id, descricao: ev.descricao, data: ev.data, total_fatura: ev.totalFatura, pagador: ev.pagador })
-        });
+        // Upsert evento — admin cria/atualiza; substituto apenas atualiza (nunca cria
+        // nem mexe no campo substituto_email, protegido também por RLS/trigger).
+        if (isAdmin()) {
+            await fetch(`${SB_URL}/rest/v1/eventos`, {
+                method: 'POST',
+                headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
+                body: JSON.stringify({ id: ev.id, descricao: ev.descricao, data: ev.data, total_fatura: ev.totalFatura, pagador: ev.pagador, substituto_email: ev.substituto ?? null })
+            });
+        } else {
+            await fetch(`${SB_URL}/rest/v1/eventos?id=eq.${ev.id}`, {
+                method: 'PATCH',
+                headers: sbHeaders(),
+                body: JSON.stringify({ descricao: ev.descricao, data: ev.data, total_fatura: ev.totalFatura, pagador: ev.pagador })
+            });
+        }
 
         // Apagar ordens/ofertas antigas e reinserir
         await fetch(`${SB_URL}/rest/v1/ordens?evento_id=eq.${ev.id}`, { method: 'DELETE', headers: sbHeaders() });
@@ -4595,6 +4805,57 @@ async function sbApagarEvento(id) {
     try {
         await fetch(`${SB_URL}/rest/v1/eventos?id=eq.${id}`, { method: 'DELETE', headers: sbHeaders() });
     } catch(e) { console.error('Erro ao apagar evento no Supabase:', e); }
+}
+
+// Define/remove o substituto de um evento (só admin). PATCH direto para não mexer nas ordens.
+async function sbDefinirSubstituto(eventoId, email) {
+    if (!_sbSession) return;
+    try {
+        await fetch(`${SB_URL}/rest/v1/eventos?id=eq.${eventoId}`, {
+            method: 'PATCH', headers: sbHeaders(),
+            body: JSON.stringify({ substituto_email: email || null })
+        });
+    } catch(e) { console.error('Erro ao definir substituto:', e); }
+}
+
+// Carrega lista de utilizadores autorizados (só admin) + equivalências amigo↔conta (todos).
+async function sbCarregarConfigAcesso() {
+    // Equivalências amigo ↔ conta (visíveis a todos para mostrar "tu")
+    try {
+        const r = await fetch(`${SB_URL}/rest/v1/amigo_users?select=amigo,email`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        if (r.ok) {
+            const data = await r.json();
+            amigoUsers = {};
+            if (Array.isArray(data)) data.forEach(row => { if (row.amigo) amigoUsers[row.amigo] = row.email; });
+        }
+    } catch(e) { console.error('Erro ao carregar equivalências:', e); }
+    // Utilizadores autorizados — só o admin precisa (para os dropdowns)
+    if (isAdmin()) {
+        try {
+            const r = await fetch(`${SB_URL}/rest/v1/allowed_users?select=email&order=email.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+            if (r.ok) {
+                const data = await r.json();
+                _allowedUsersCache = Array.isArray(data) ? data.map(u => u.email).filter(Boolean) : [];
+            }
+        } catch(e) { console.error('Erro ao carregar utilizadores:', e); }
+    }
+}
+
+// Grava (ou remove, se email vazio) uma equivalência amigo↔conta. Só admin.
+async function sbGuardarAmigoUser(amigo, email) {
+    if (!_sbSession || !isAdmin()) return;
+    try {
+        if (email) {
+            await fetch(`${SB_URL}/rest/v1/amigo_users`, {
+                method: 'POST', headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
+                body: JSON.stringify({ amigo, email })
+            });
+            amigoUsers[amigo] = email;
+        } else {
+            await fetch(`${SB_URL}/rest/v1/amigo_users?amigo=eq.${encodeURIComponent(amigo)}`, { method: 'DELETE', headers: sbHeaders() });
+            delete amigoUsers[amigo];
+        }
+    } catch(e) { console.error('Erro ao guardar equivalência:', e); }
 }
 
 // Auto-save debounced
@@ -4723,10 +4984,48 @@ function fecharAdmin() {
     document.getElementById('page-admin').style.display = 'none';
 }
 
+// ── Equivalências amigo ↔ conta (só admin) ──
+function abrirEquivalencias() {
+    if (!isAdmin()) return;
+    document.getElementById('page-equivalencias').style.display = 'flex';
+    renderEquivalencias();
+}
+function fecharEquivalencias() {
+    document.getElementById('page-equivalencias').style.display = 'none';
+}
+function renderEquivalencias() {
+    const lista = document.getElementById('equiv-lista');
+    if (!lista) return;
+    const todos = amigosAgregadoGlobal();
+    if (!todos.length) {
+        lista.innerHTML = '<p style="color:#999;font-size:14px;text-align:center;padding:20px;">Ainda não há amigos registados.</p>';
+        return;
+    }
+    const emails = _allowedUsersCache.slice();
+    Object.values(amigoUsers).forEach(e => { if (e && !emails.includes(e)) emails.push(e); });
+    emails.sort();
+    lista.innerHTML = todos.map((a, i) => {
+        const sel = amigoUsers[a] || '';
+        const opts = ['<option value="">— sem conta —</option>']
+            .concat(emails.map(e => `<option value="${e}" ${sel === e ? 'selected' : ''}>${e}</option>`))
+            .join('');
+        const aEsc = a.replace(/'/g, "\\'");
+        return `<div class="equiv-item">
+            <span class="equiv-nome">${a}</span>
+            <select id="equiv-sel-${i}" onchange="guardarEquivalencia('${aEsc}', this.value)">${opts}</select>
+        </div>`;
+    }).join('');
+}
+async function guardarEquivalencia(amigo, email) {
+    if (!isAdmin()) return;
+    await sbGuardarAmigoUser(amigo, email);
+    mostrarMensagem(email ? ('✓ ' + amigo + ' ↔ ' + email) : ('✓ Equivalência de ' + amigo + ' removida'), true);
+}
+
 /* ── FIM SUPABASE ───────────────────────────── */
 
 // Compatibilidade: funções GitHub que ainda são referenciadas no HTML
-function ghHasToken() { return !!_sbSession; }
+function ghHasToken() { return podeRegistarPagamentos(); }
 function ghScheduleAutoSave() { sbScheduleAutoSave(); }
 function ghUpdateSyncBtn() {}
 function ghLoadCfg() {}
@@ -4746,6 +5045,7 @@ if (document.readyState === 'loading') {
 <script>
 // Apagar evento selecionado
 async function apagarEventoAtual() {
+    if (!isAdmin()) { mostrarMensagem('⚠️ Apenas o administrador pode apagar eventos', false); return; }
     if (!eventoAtualId) { mostrarMensagem('Nenhum evento selecionado.', false); return; }
     const ok = await mostrarModal({
         icon: '🗑️',
