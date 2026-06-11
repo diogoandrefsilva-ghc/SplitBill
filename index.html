@@ -3383,14 +3383,48 @@ function mudarPagina(pagina) {
 
 function atualizarNavBadge() {
     const saldos = calcularSaldos();
-    let total = 0;
-    Object.values(saldos).forEach(s => total += s.saldo);
     const badge = document.getElementById('nav-pgto-badge');
-    if (total > 0.005) {
-        badge.textContent = '€' + total.toFixed(2);
-        badge.style.display = 'inline';
+
+    if (isAdmin()) {
+        // Admin: total global pendente (comportamento anterior)
+        let total = 0;
+        Object.values(saldos).forEach(s => total += s.saldo);
+        if (total > 0.005) {
+            badge.textContent = '€' + total.toFixed(2);
+            badge.style.background = 'var(--rubro)';
+            badge.style.display = 'inline';
+        } else {
+            badge.style.display = 'none';
+        }
     } else {
-        badge.style.display = 'none';
+        // Não-admin: separar "o que devo" (vermelho) de "o que me devem" (amarelo)
+        let aDevo = 0;   // sou devedor
+        let aReceber = 0; // sou credor (outros devem-me)
+        Object.entries(saldos).forEach(([pessoa, s]) => {
+            s.eventos.forEach(e => {
+                if (e.restante < 0.01) return;
+                if (ehEu(pessoa)) {
+                    aDevo += e.restante;          // eu devo ao pagador
+                } else if (ehEu(e.pagador)) {
+                    aReceber += e.restante;        // alguém me deve a mim
+                }
+            });
+        });
+        aDevo = Math.round(aDevo * 100) / 100;
+        aReceber = Math.round(aReceber * 100) / 100;
+
+        if (aDevo < 0.01 && aReceber < 0.01) {
+            badge.style.display = 'none';
+            badge.innerHTML = '';
+            return;
+        }
+        badge.style.display = 'inline';
+        badge.style.background = 'transparent';
+        // Construir conteúdo com spans coloridos
+        const partes = [];
+        if (aReceber >= 0.01) partes.push('<span style="color:#F5C842;">€' + aReceber.toFixed(2) + '</span>');
+        if (aDevo >= 0.01)    partes.push('<span style="color:#E07060;">€' + aDevo.toFixed(2) + '</span>');
+        badge.innerHTML = partes.join('<span style="color:rgba(255,255,255,0.5);margin:0 2px;">·</span>');
     }
 }
 
@@ -3629,26 +3663,52 @@ function renderContasSaldos(lista, resumo) {
             + '</div>';
     }).join('');
 
-    let totalPendente = 0;
     if (isAdmin()) {
+        // Admin: total global de todas as dívidas pendentes
+        let totalPendente = 0;
         Object.values(saldos).forEach(s => totalPendente += s.saldo);
+        if (totalPendente > 0.005) {
+            resumo.innerHTML = `
+            <div class="contas-resumo-total">
+                <span class="label">💰 Total pendente</span>
+                <span class="valor">€${totalPendente.toFixed(2)}</span>
+            </div>`;
+        } else {
+            resumo.innerHTML = '<div style="text-align:center;font-size:13px;color:#0E7A4F;padding:10px;font-weight:600;">✅ Tudo liquidado!</div>';
+        }
     } else {
-        // Somar apenas o que está visível: as minhas dívidas + o que me devem
+        // Não-admin: separar "o que devo" vs "o que me devem"
+        let aDevo = 0;
+        let aReceber = 0;
         pessoas.forEach(p => {
             saldos[p].eventos.forEach(e => {
                 if (e.restante < 0.01) return;
-                if (ehEu(p) || ehEu(e.pagador)) totalPendente += e.restante;
+                if (ehEu(p)) {
+                    aDevo += e.restante;
+                } else if (ehEu(e.pagador)) {
+                    aReceber += e.restante;
+                }
             });
         });
-    }
-    if (totalPendente > 0.005) {
-        resumo.innerHTML = `
-        <div class="contas-resumo-total">
-            <span class="label">💰 Total pendente</span>
-            <span class="valor">€${totalPendente.toFixed(2)}</span>
-        </div>`;
-    } else {
-        resumo.innerHTML = '<div style="text-align:center;font-size:13px;color:#0E7A4F;padding:10px;font-weight:600;">✅ Tudo liquidado!</div>';
+        aDevo = Math.round(aDevo * 100) / 100;
+        aReceber = Math.round(aReceber * 100) / 100;
+
+        if (aDevo < 0.01 && aReceber < 0.01) {
+            resumo.innerHTML = '<div style="text-align:center;font-size:13px;color:#0E7A4F;padding:10px;font-weight:600;">✅ Tudo liquidado!</div>';
+        } else {
+            const linhas = [];
+            if (aReceber >= 0.01) linhas.push(`
+                <div class="contas-resumo-total" style="background:#FBF4DC;border-color:#D9B53A;">
+                    <span class="label" style="color:#79610F;">📥 A receber</span>
+                    <span class="valor" style="color:#79610F;">€${aReceber.toFixed(2)}</span>
+                </div>`);
+            if (aDevo >= 0.01) linhas.push(`
+                <div class="contas-resumo-total" style="margin-top:6px;">
+                    <span class="label">💸 A pagar</span>
+                    <span class="valor">€${aDevo.toFixed(2)}</span>
+                </div>`);
+            resumo.innerHTML = linhas.join('');
+        }
     }
 }
 
