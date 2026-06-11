@@ -5116,13 +5116,14 @@ function renderEquivalencias() {
         lista.innerHTML = '<p style="color:#999;font-size:14px;text-align:center;padding:20px;">Ainda não há amigos registados.</p>';
         return;
     }
-    const emails = _allowedUsersCache.slice();
-    Object.values(amigoUsers).forEach(e => { if (e && !emails.includes(e)) emails.push(e); });
-    emails.sort();
+    const todosEmails = _allowedUsersCache.slice();
+    Object.values(amigoUsers).forEach(e => { if (e && !todosEmails.includes(e)) todosEmails.push(e); });
+    todosEmails.sort();
+    const emailsJaMapeados = new Set(Object.values(amigoUsers).filter(Boolean));
     lista.innerHTML = todos.map((a, i) => {
         const sel = amigoUsers[a] || '';
         const opts = ['<option value="">— sem conta —</option>']
-            .concat(emails.map(e => `<option value="${e}" ${sel === e ? 'selected' : ''}>${e}</option>`))
+            .concat(todosEmails.filter(e => !emailsJaMapeados.has(e) || e === sel).map(e => `<option value="${e}" ${sel === e ? 'selected' : ''}>${e}</option>`))
             .join('');
         const aEsc = a.replace(/'/g, "\\'");
         return `<div class="equiv-item">
