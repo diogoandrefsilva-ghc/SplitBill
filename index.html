@@ -1407,8 +1407,9 @@
         <h2 style="font-size:18px;font-weight:700;margin:0 0 8px;">Acesso não autorizado</h2>
         <p style="color:#666;font-size:14px;margin:0 0 24px;" id="sem-acesso-email"></p>
         <button onclick="sbSolicitarAcesso()" id="btn-solicitar" style="width:100%;padding:11px;background:#0E7A4F;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:10px;">Solicitar acesso</button>
-        <button onclick="sbLogout()" style="width:100%;padding:10px;background:transparent;color:#666;border:1.5px solid #ddd;border-radius:8px;font-size:14px;cursor:pointer;">Sair</button>
+        <button onclick="sbVerificarAcesso()" id="btn-verificar" style="display:none;width:100%;padding:11px;background:#0E7A4F;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:10px;">🔄 Verificar acesso</button>
         <div id="solicitar-status" style="margin-top:10px;font-size:13px;display:none;"></div>
+        <button onclick="sbLogout()" style="width:100%;padding:10px;background:transparent;color:#666;border:1.5px solid #ddd;border-radius:8px;font-size:14px;cursor:pointer;margin-top:10px;">Sair</button>
     </div>
 </div>
 
@@ -4985,17 +4986,47 @@ async function sbRegistarEmail() {
 async function sbSolicitarAcesso() {
     if (!_sbSession) return;
     const btn = document.getElementById('btn-solicitar');
+    const btnV = document.getElementById('btn-verificar');
     const status = document.getElementById('solicitar-status');
     btn.disabled = true; btn.textContent = 'A enviar…';
     try {
-        await sbFetch(`${SB_URL}/rest/v1/access_requests`, {
+        // INSERT simples (sem merge-duplicates: ON CONFLICT DO UPDATE seria
+        // recusado pela RLS — access_requests não tem policy de UPDATE).
+        // 409 = pedido já registado anteriormente → também é sucesso.
+        const r = await sbFetch(`${SB_URL}/rest/v1/access_requests`, {
             method: 'POST',
-            headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
+            headers: sbHeaders({ 'Prefer': 'return=minimal' }),
             body: JSON.stringify({ email: _sbSession.user.email })
         });
-        status.style.display = 'block'; status.style.color = '#0E7A4F'; status.textContent = '✓ Pedido enviado! Aguarda aprovação.';
-        btn.style.display = 'none';
-    } catch(e) { status.style.display = 'block'; status.style.color = '#B3402F'; status.textContent = 'Erro ao enviar pedido.'; btn.disabled = false; btn.textContent = 'Solicitar acesso'; }
+        if (r.ok || r.status === 409) {
+            status.style.display = 'block'; status.style.color = '#0E7A4F';
+            status.textContent = r.status === 409 ? '✓ O pedido já estava registado. Aguarda aprovação.' : '✓ Pedido enviado! Aguarda aprovação.';
+            btn.style.display = 'none';
+            btnV.style.display = '';
+            return;
+        }
+        let msg = 'HTTP ' + r.status;
+        try { const j = await r.json(); msg = j.message || msg; } catch(_) {}
+        if (r.status === 401) msg = 'Sessão expirada — sai e volta a entrar.';
+        status.style.display = 'block'; status.style.color = '#B3402F';
+        status.textContent = 'Erro ao enviar pedido: ' + msg;
+        btn.disabled = false; btn.textContent = 'Solicitar acesso';
+    } catch(e) {
+        status.style.display = 'block'; status.style.color = '#B3402F';
+        status.textContent = 'Erro de ligação — tenta novamente.';
+        btn.disabled = false; btn.textContent = 'Solicitar acesso';
+    }
+}
+
+async function sbVerificarAcesso() {
+    const btn = document.getElementById('btn-verificar');
+    const status = document.getElementById('solicitar-status');
+    btn.disabled = true; btn.textContent = 'A verificar…';
+    await sbAposLogin();
+    // Se chegou aqui ainda está no ecrã sem-acesso — acesso ainda não aprovado
+    btn.disabled = false; btn.textContent = '🔄 Verificar acesso';
+    status.style.display = 'block'; status.style.color = '#666';
+    status.textContent = 'Acesso ainda não aprovado. Tenta mais tarde.';
 }
 
 function sbLogout() {
