@@ -1687,18 +1687,11 @@
         <select id="pgto-pessoa" style="flex:1;min-width:100px;padding:8px;border:1px solid #C8D0C8;border-radius:4px;font-size:13px;" onchange="atualizarPgtoForm()">
             <option value="">Quem pagou?</option>
         </select>
-        <select id="pgto-tipo" style="flex:1;min-width:120px;padding:8px;border:1px solid #C8D0C8;border-radius:4px;font-size:13px;" onchange="atualizarPgtoForm()">
-            <option value="evento">Pagar evento</option>
-            <option value="livre">Pagamento livre</option>
-        </select>
     </div>
     <div id="pgto-evento-row" style="display:flex;gap:8px;margin-bottom:8px;">
         <select id="pgto-evento" style="flex:1;padding:8px;border:1px solid #C8D0C8;border-radius:4px;font-size:11px;" onchange="atualizarPgtoValorEvento()">
             <option value="">-- Seleciona evento --</option>
         </select>
-    </div>
-    <div id="pgto-livre-row" style="display:none;gap:8px;margin-bottom:8px;">
-        <input type="number" id="pgto-valor-livre" placeholder="Valor (€)" min="0" step="0.01" style="flex:1;padding:8px;border:1px solid #C8D0C8;border-radius:4px;font-size:13px;">
     </div>
     <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">
         <label style="font-size:12px;color:#5B6661;white-space:nowrap;">📅 Data:</label>
@@ -3438,10 +3431,6 @@ function abrirPagamentoPrePreenchido(pessoa, eventoId) {
         selPessoa.value = pessoa;
     }
 
-    // Set type to evento
-    const selTipo = document.getElementById('pgto-tipo');
-    if (selTipo) selTipo.value = 'evento';
-
     atualizarPgtoForm();
 
     // Pre-fill evento after the dropdown is rendered
@@ -3498,27 +3487,14 @@ function calcularSaldos() {
         let totalDivida = eventos.reduce((s, e) => s + e.valor, 0);
         let totalPago = 0;
 
-        // Event-specific payments first
-        pgtos.filter(p => p.tipo === 'evento').forEach(p => {
+        // Cada pagamento abate a dívida do seu evento concreto
+        pgtos.filter(p => p.tipo === 'evento' || p.eventoId).forEach(p => {
             const ev = eventos.find(e => e.eventoId === p.eventoId);
             if (ev) {
                 const abate = Math.min(ev.restante, p.valor);
                 ev.restante -= abate;
             }
             totalPago += p.valor;
-        });
-
-        // Free payments FIFO
-        pgtos.filter(p => p.tipo === 'livre').forEach(p => {
-            let restante = p.valor;
-            totalPago += p.valor;
-            for (const ev of eventos) {
-                if (restante <= 0.005) break;
-                if (ev.restante <= 0.005) continue;
-                const abate = Math.min(ev.restante, restante);
-                ev.restante -= abate;
-                restante -= abate;
-            }
         });
 
         saldos[pessoa] = {
@@ -3568,10 +3544,17 @@ function renderContas() {
 
 function renderContasSaldos(lista, resumo) {
     const saldos = calcularSaldos();
+    // Não-admin sem nome associado: avisar em vez de mostrar lista vazia
+    if (!isAdmin() && meusAmigos().length === 0) { lista.innerHTML = _avisoSemAmigo(); resumo.innerHTML = ''; return; }
     // Only show people with outstanding balance
-    const pessoas = Object.keys(saldos)
+    let pessoas = Object.keys(saldos)
         .filter(p => saldos[p].saldo >= 0.01)
         .sort((a, b) => saldos[b].saldo - saldos[a].saldo);
+
+    // Não-admin: só dívidas próprias (sou o devedor) ou valores a receber por mim (sou o credor de algum evento pendente)
+    if (!isAdmin()) {
+        pessoas = pessoas.filter(p => ehEu(p) || saldos[p].eventos.some(e => e.restante >= 0.01 && ehEu(e.pagador)));
+    }
 
     if (pessoas.length === 0) {
         lista.innerHTML = '<div class="contas-vazio">✅ Não há dívidas pendentes</div>';
@@ -3591,7 +3574,9 @@ function renderContasSaldos(lista, resumo) {
             (porCredor[c] = porCredor[c] || []).push(e);
         });
         const subtotalDe = c => porCredor[c].reduce((t, e) => t + e.restante, 0);
-        const credores = Object.keys(porCredor).sort((a, b) => subtotalDe(b) - subtotalDe(a));
+        let credores = Object.keys(porCredor).sort((a, b) => subtotalDe(b) - subtotalDe(a));
+        // Não-admin a ver dívida de outra pessoa: só os montantes que essa pessoa me deve a mim
+        if (!isAdmin() && !ehEu(pessoa)) credores = credores.filter(c => ehEu(c));
 
         const renderEvento = e => {
             // Get consumption detail for this person in this event
@@ -3644,7 +3629,17 @@ function renderContasSaldos(lista, resumo) {
     }).join('');
 
     let totalPendente = 0;
-    Object.values(saldos).forEach(s => totalPendente += s.saldo);
+    if (isAdmin()) {
+        Object.values(saldos).forEach(s => totalPendente += s.saldo);
+    } else {
+        // Somar apenas o que está visível: as minhas dívidas + o que me devem
+        pessoas.forEach(p => {
+            saldos[p].eventos.forEach(e => {
+                if (e.restante < 0.01) return;
+                if (ehEu(p) || ehEu(e.pagador)) totalPendente += e.restante;
+            });
+        });
+    }
     if (totalPendente > 0.005) {
         resumo.innerHTML = `
         <div class="contas-resumo-total">
@@ -3657,7 +3652,13 @@ function renderContasSaldos(lista, resumo) {
 }
 
 function renderContasEventos(lista, resumo) {
-    const eventosFechados = historico.filter(ev => ev.totalFatura && ev.pagador);
+    let eventosFechados = historico.filter(ev => ev.totalFatura && ev.pagador);
+    // Não-admin sem nome associado: avisar
+    if (!isAdmin() && meusAmigos().length === 0) { lista.innerHTML = _avisoSemAmigo(); resumo.innerHTML = ''; return; }
+    // Não-admin: só eventos onde estou envolvido (paguei eu, ou devo nesse evento)
+    if (!isAdmin()) {
+        eventosFechados = eventosFechados.filter(ev => ehEu(ev.pagador) || Object.keys(ev.dividas || {}).some(p => ehEu(p)));
+    }
     if (eventosFechados.length === 0) {
         lista.innerHTML = '<div class="contas-vazio">Nenhuma conta fechada ainda</div>';
         resumo.innerHTML = '';
@@ -3693,6 +3694,8 @@ function renderContasEventos(lista, resumo) {
         const dividas = ev.dividas || {};
         let pessoas = Object.keys(dividas).sort();
         if (_evtFilterPessoa) pessoas = pessoas.filter(p => p === _evtFilterPessoa);
+        // Não-admin que não pagou este evento: só vê a sua própria dívida (não as dos outros)
+        if (!isAdmin() && !ehEu(ev.pagador)) pessoas = pessoas.filter(p => ehEu(p));
         if (pessoas.length === 0) return '';
 
         const dividasHtml = pessoas.map(p => {
@@ -3774,12 +3777,26 @@ function _parsePgtoData(str) {
 }
 
 function renderContasPagamentos(lista, resumo) {
+    // Não-admin sem nome associado: avisar
+    if (!isAdmin() && meusAmigos().length === 0) { lista.innerHTML = _avisoSemAmigo(); resumo.innerHTML = ''; return; }
+    // Universo de pagamentos visíveis. Não-admin: só os feitos por mim ou recebidos por mim.
+    var basePagamentos = pagamentos;
+    if (!isAdmin()) {
+        basePagamentos = pagamentos.filter(function(p) {
+            if (ehEu(p.pessoa)) return true;                       // pagamento feito por mim
+            if (p.tipo === 'evento' && p.eventoId) {
+                var evp = historico.find(function(e) { return e.id === p.eventoId; });
+                if (evp && ehEu(evp.pagador)) return true;         // pagamento recebido por mim
+            }
+            return false;
+        });
+    }
     // Build filter combo options
     var allPessoas = [];
     var allEventosMap = {};
     var allEventos = [];
     var _seen = {};
-    pagamentos.forEach(function(p) {
+    basePagamentos.forEach(function(p) {
         if (!_seen[p.pessoa]) { allPessoas.push(p.pessoa); _seen[p.pessoa] = true; }
         if (p.tipo === 'evento' && p.eventoId && !allEventosMap[p.eventoId]) {
             var ev = historico.find(function(e) { return e.id === p.eventoId; });
@@ -3810,10 +3827,9 @@ function renderContasPagamentos(lista, resumo) {
         + '<option value="">\uD83D\uDC64 Todos</option>' + pessoaOpts + '</select>'
         + '<select class="pgto-search" style="flex:1;font-size:11px;" onchange="_pgtoFilterEvento=this.value;renderContasPagamentos(document.getElementById(\'contas-lista\'),document.getElementById(\'contas-resumo\'))">'
         + '<option value="">\u26BD Todos os jogos</option>'
-        + '<option value="livre"' + (_pgtoFilterEvento === 'livre' ? ' selected' : '') + '>\uD83D\uDCB8 Livres</option>'
         + eventoOpts + '</select></div>';
 
-    if (pagamentos.length === 0) {
+    if (basePagamentos.length === 0) {
         lista.innerHTML = filtersHtml + '<div class="contas-vazio">Nenhum pagamento registado</div>';
         resumo.innerHTML = '';
         return;
@@ -3821,21 +3837,18 @@ function renderContasPagamentos(lista, resumo) {
 
     var hasToken = ghHasToken();
 
-    var filtrados = pagamentos.slice().sort(function(a, b) {
+    var filtrados = basePagamentos.slice().sort(function(a, b) {
         return _parsePgtoData(b.data) - _parsePgtoData(a.data);
     }).filter(function(p) {
         if (_pgtoFilterPessoa && p.pessoa !== _pgtoFilterPessoa) return false;
         if (_pgtoFilterEvento) {
-            if (_pgtoFilterEvento === 'livre') { if (p.tipo !== 'livre') return false; }
-            else { if (String(p.eventoId) !== _pgtoFilterEvento) return false; }
+            if (String(p.eventoId) !== _pgtoFilterEvento) return false;
         }
         return true;
     });
 
     var itemsHtml = filtrados.map(function(p) {
-        var eventoDesc = p.tipo === 'evento'
-            ? (function() { var ev = historico.find(function(e) { return e.id === p.eventoId; }); return ev ? (ev.descricao || 'Sem nome') : 'Evento removido'; })()
-            : 'Pagamento livre (FIFO)';
+        var eventoDesc = (function() { var ev = historico.find(function(e) { return e.id === p.eventoId; }); return ev ? (ev.descricao || 'Sem nome') : 'Evento removido'; })();
 
         // Consumption detail
         var consumoStr = '';
@@ -3874,10 +3887,10 @@ function renderContasPagamentos(lista, resumo) {
         : itemsHtml);
 
     var totalFiltrado = filtrados.reduce(function(s, p) { return s + p.valor; }, 0);
-    var totalGeral = pagamentos.reduce(function(s, p) { return s + p.valor; }, 0);
+    var totalGeral = basePagamentos.reduce(function(s, p) { return s + p.valor; }, 0);
     var isFiltered = _pgtoFilterPessoa || _pgtoFilterEvento;
     var showTotal = isFiltered ? totalFiltrado : totalGeral;
-    var showCount = isFiltered ? filtrados.length : pagamentos.length;
+    var showCount = isFiltered ? filtrados.length : basePagamentos.length;
     resumo.innerHTML = '<div style="text-align:right;font-size:13px;color:#0E7A4F;padding:8px 0;font-weight:600;">Total' + (isFiltered ? ' filtrado' : ' recebido') + ': \u20ac' + showTotal.toFixed(2) + ' (' + showCount + ' pagamento' + (showCount !== 1 ? 's' : '') + ')</div>';
 }
 
@@ -3920,20 +3933,11 @@ function renderPgtoForm() {
 }
 
 function atualizarPgtoForm() {
-    const tipo = document.getElementById('pgto-tipo');
-    if (!tipo) return;
     const eventoRow = document.getElementById('pgto-evento-row');
-    const livreRow = document.getElementById('pgto-livre-row');
+    if (!eventoRow) return;
     const info = document.getElementById('pgto-info');
-
-    if (tipo.value === 'evento') {
-        eventoRow.style.display = 'flex';
-        livreRow.style.display = 'none';
-        renderPgtoEventoSelect();
-    } else {
-        eventoRow.style.display = 'none';
-        livreRow.style.display = 'flex';
-    }
+    eventoRow.style.display = 'flex';
+    renderPgtoEventoSelect();
     if (info) info.style.display = 'none';
 }
 
@@ -3986,29 +3990,20 @@ function atualizarPgtoValorEvento() {
 
 async function registarPagamento() {
     const pessoa = document.getElementById('pgto-pessoa').value;
-    const tipo = document.getElementById('pgto-tipo').value;
 
     if (!pessoa) { mostrarPgtoMsg('⚠️ Seleciona quem pagou', false); return; }
 
-    let valor, eventoId;
+    const selEvento = document.getElementById('pgto-evento');
+    const eventoId = selEvento.value;
+    if (!eventoId) { mostrarPgtoMsg('⚠️ Seleciona o evento', false); return; }
+    if (!podeEditarPagamentoDoEvento(eventoId)) { mostrarPgtoMsg('⚠️ Sem permissão para registar pagamentos deste evento', false); return; }
+    const valor = parseFloat(selEvento.selectedOptions[0].dataset.valor);
 
-    if (tipo === 'evento') {
-        const selEvento = document.getElementById('pgto-evento');
-        eventoId = selEvento.value;
-        if (!eventoId) { mostrarPgtoMsg('⚠️ Seleciona o evento', false); return; }
-        if (!podeEditarPagamentoDoEvento(eventoId)) { mostrarPgtoMsg('⚠️ Sem permissão para registar pagamentos deste evento', false); return; }
-        valor = parseFloat(selEvento.selectedOptions[0].dataset.valor);
-
-        // Check for duplicate: same pessoa + same eventoId already paid in full
-        const existente = pagamentos.find(p => p.pessoa === pessoa && p.tipo === 'evento' && String(p.eventoId) === String(eventoId));
-        if (existente) {
-            mostrarPgtoMsg('⚠️ ' + pessoa + ' já tem um pagamento registado para este evento', false);
-            return;
-        }
-    } else {
-        if (!isAdmin()) { mostrarPgtoMsg('⚠️ Apenas o administrador pode registar pagamentos livres', false); return; }
-        valor = parseFloat(document.getElementById('pgto-valor-livre').value);
-        if (!valor || valor <= 0) { mostrarPgtoMsg('⚠️ Introduz um valor válido', false); return; }
+    // Check for duplicate: same pessoa + same eventoId already paid
+    const existente = pagamentos.find(p => p.pessoa === pessoa && String(p.eventoId) === String(eventoId));
+    if (existente) {
+        mostrarPgtoMsg('⚠️ ' + pessoa + ' já tem um pagamento registado para este evento', false);
+        return;
     }
 
     // Use user-provided date, fallback to now
@@ -4021,8 +4016,8 @@ async function registarPagamento() {
         id: Date.now(),
         pessoa,
         valor,
-        tipo,
-        eventoId: tipo === 'evento' ? parseInt(eventoId) : null,
+        tipo: 'evento',
+        eventoId: parseInt(eventoId),
         data: dataPgto
     };
     pagamentos.push(novoPgto);
@@ -4030,7 +4025,6 @@ async function registarPagamento() {
     sbGuardarPagamento(novoPgto);
 
     document.getElementById('pgto-evento').value = '';
-    document.getElementById('pgto-valor-livre').value = '';
     document.getElementById('pgto-data').value = '';
     document.getElementById('pgto-info').style.display = 'none';
 
@@ -4518,6 +4512,66 @@ let _sbSession = null;
 let amigoUsers = {};          // equivalência { nomeAmigo: email }  (gerida só pelo admin)
 let _allowedUsersCache = [];  // emails com acesso (para dropdowns do admin)
 
+/* ── SESSÃO: refresh automático do token (o access_token expira em ~1h) ──
+   Sem isto a app voltava a pedir login a cada hora. Padrão portado da FestasBV. */
+const SESSION_KEY = 'sb_session';
+let _refreshing = null;       // evita refreshes concorrentes (refresh_token é de uso único)
+
+function sbSaveSession(s) {
+    _sbSession = s;
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); } catch(e) {}
+}
+function tokenQuaseExpirado() {
+    if (!_sbSession) return false;
+    if (!_sbSession.expires_at) return true;   // sessões antigas sem expires_at: assumir que pode estar expirado
+    return (_sbSession.expires_at - Date.now() / 1000) < 120;
+}
+async function sbRefresh() {
+    if (!_sbSession || !_sbSession.refresh_token) return false;
+    if (_refreshing) return _refreshing;
+    _refreshing = (async () => {
+        try {
+            const r = await fetch(`${SB_URL}/auth/v1/token?grant_type=refresh_token`, {
+                method: 'POST',
+                headers: { 'apikey': SB_KEY, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refresh_token: _sbSession.refresh_token })
+            });
+            if (!r.ok) return false;
+            const d = await r.json();
+            sbSaveSession({
+                access_token: d.access_token,
+                refresh_token: d.refresh_token || _sbSession.refresh_token,
+                expires_at: d.expires_at || Math.floor(Date.now() / 1000) + (d.expires_in || 3600),
+                user: d.user || _sbSession.user
+            });
+            return true;
+        } catch(e) { return false; }
+    })();
+    const ok = await _refreshing;
+    _refreshing = null;
+    return ok;
+}
+async function sbEnsureFresh() {
+    if (_sbSession && _sbSession.refresh_token && tokenQuaseExpirado()) await sbRefresh();
+}
+// fetch para o REST: garante token fresco e, se ainda assim vier 401, faz refresh + 1 retry
+async function sbFetch(url, opt) {
+    await sbEnsureFresh();
+    opt = opt || {};
+    opt.headers = Object.assign({}, opt.headers, { 'Authorization': `Bearer ${_sbSession?.access_token || SB_KEY}` });
+    let r = await fetch(url, opt);
+    if (r.status === 401 && _sbSession && _sbSession.refresh_token) {
+        if (await sbRefresh()) {
+            opt.headers['Authorization'] = `Bearer ${_sbSession.access_token}`;
+            r = await fetch(url, opt);
+        }
+    }
+    return r;
+}
+// Refresh preventivo: a cada 10 min e sempre que a PWA volta ao ecrã
+setInterval(() => { sbEnsureFresh(); }, 10 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) sbEnsureFresh(); });
+
 /* ── PERMISSÕES ──────────────────────────────── */
 function emailAtual() {
     return (_sbSession && _sbSession.user && _sbSession.user.email)
@@ -4554,6 +4608,16 @@ function ehEu(amigo) {
     const e = emailAtual();
     return !!(e && amigoUsers[amigo] && amigoUsers[amigo].toLowerCase() === e);
 }
+// Todos os nomes de amigo associados à conta atual (próprio + eventuais nomes extra mapeados ao mesmo email)
+function meusAmigos() {
+    const e = emailAtual();
+    if (!e) return [];
+    return Object.keys(amigoUsers).filter(a => (amigoUsers[a] || '').toLowerCase() === e);
+}
+// Aviso quando um não-admin ainda não tem nome associado (senão veria tudo vazio sem perceber porquê)
+function _avisoSemAmigo() {
+    return '<div class="contas-vazio">A tua conta ainda não está associada a nenhum nome. Pede ao administrador para te associar nas Configurações.</div>';
+}
 
 /* ── AGREGAÇÃO GLOBAL (menu e amigos de todos os eventos) ── */
 // Menu por defeito = todos os artigos de todos os eventos (ordem cronológica),
@@ -4587,21 +4651,32 @@ function sbHeaders(extra = {}) {
 
 async function sbInit() {
     // Verificar sessão em localStorage
-    const stored = localStorage.getItem('sb_session');
+    const stored = localStorage.getItem(SESSION_KEY);
     if (stored) {
         try {
             const s = JSON.parse(stored);
-            const r = await fetch(`${SB_URL}/auth/v1/user`, {
-                headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${s.access_token}` }
+            _sbSession = s;
+            // Token expirado ou quase? Renovar com o refresh_token antes de validar
+            if (tokenQuaseExpirado()) await sbRefresh();
+            let r = await fetch(`${SB_URL}/auth/v1/user`, {
+                headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${_sbSession.access_token}` }
             });
+            if (!r.ok && _sbSession.refresh_token) {
+                // Última tentativa: refresh + revalidar (sessões antigas sem expires_at caem aqui)
+                if (await sbRefresh())
+                    r = await fetch(`${SB_URL}/auth/v1/user`, {
+                        headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${_sbSession.access_token}` }
+                    });
+            }
             if (r.ok) {
                 const u = await r.json();
-                _sbSession = { ...s, user: u };
+                sbSaveSession({ ..._sbSession, user: u });
                 await sbAposLogin();
                 return;
             }
         } catch(e) {}
-        localStorage.removeItem('sb_session');
+        _sbSession = null;
+        localStorage.removeItem(SESSION_KEY);
     }
 
     // Verificar OAuth callback na URL
@@ -4610,14 +4685,14 @@ async function sbInit() {
         const params = new URLSearchParams(hash.substring(1));
         const access_token = params.get('access_token');
         const refresh_token = params.get('refresh_token');
+        const expires_at = parseInt(params.get('expires_at')) || Math.floor(Date.now() / 1000) + (parseInt(params.get('expires_in')) || 3600);
         if (access_token) {
             const r = await fetch(`${SB_URL}/auth/v1/user`, {
                 headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${access_token}` }
             });
             if (r.ok) {
                 const u = await r.json();
-                _sbSession = { access_token, refresh_token, user: u };
-                localStorage.setItem('sb_session', JSON.stringify(_sbSession));
+                sbSaveSession({ access_token, refresh_token, expires_at, user: u });
                 window.history.replaceState({}, document.title, window.location.pathname);
                 await sbAposLogin();
                 return;
@@ -4642,7 +4717,7 @@ async function sbAposLogin() {
     // Verificar se tem acesso
     let data, rawText = '', statusInfo = '';
     try {
-        const r = await fetch(`${SB_URL}/rest/v1/allowed_users?email=eq.${encodeURIComponent(email)}&select=email`, {
+        const r = await sbFetch(`${SB_URL}/rest/v1/allowed_users?email=eq.${encodeURIComponent(email)}&select=email`, {
             headers: sbHeaders({ 'Accept': 'application/json' })
         });
         statusInfo = `HTTP ${r.status}`;
@@ -4674,19 +4749,19 @@ async function sbAposLogin() {
 async function sbCarregarDados() {
     try {
         // Carregar eventos
-        const evRes = await fetch(`${SB_URL}/rest/v1/eventos?select=*&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const evRes = await sbFetch(`${SB_URL}/rest/v1/eventos?select=*&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
         const eventos = await evRes.json();
 
         // Carregar ordens + ordem_amigos
-        const ordRes = await fetch(`${SB_URL}/rest/v1/ordens?select=*,ordem_amigos(amigo)&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const ordRes = await sbFetch(`${SB_URL}/rest/v1/ordens?select=*,ordem_amigos(amigo)&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
         const ordens = await ordRes.json();
 
         // Carregar ofertas + oferta_para
-        const ofRes = await fetch(`${SB_URL}/rest/v1/ofertas?select=*,oferta_para(amigo)&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const ofRes = await sbFetch(`${SB_URL}/rest/v1/ofertas?select=*,oferta_para(amigo)&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
         const ofertas = await ofRes.json();
 
         // Carregar pagamentos
-        const pgRes = await fetch(`${SB_URL}/rest/v1/pagamentos?select=*&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const pgRes = await sbFetch(`${SB_URL}/rest/v1/pagamentos?select=*&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
         const pags = await pgRes.json();
 
         // Reconstruir historico no formato esperado pela app
@@ -4750,13 +4825,13 @@ async function sbGuardarEvento(ev) {
         // Upsert evento — admin cria/atualiza; substituto apenas atualiza (nunca cria
         // nem mexe no campo substituto_email, protegido também por RLS/trigger).
         if (isAdmin()) {
-            await fetch(`${SB_URL}/rest/v1/eventos`, {
+            await sbFetch(`${SB_URL}/rest/v1/eventos`, {
                 method: 'POST',
                 headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
                 body: JSON.stringify({ id: ev.id, descricao: ev.descricao, data: ev.data, total_fatura: ev.totalFatura, pagador: ev.pagador, substituto_email: ev.substituto ?? null })
             });
         } else {
-            await fetch(`${SB_URL}/rest/v1/eventos?id=eq.${ev.id}`, {
+            await sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${ev.id}`, {
                 method: 'PATCH',
                 headers: sbHeaders(),
                 body: JSON.stringify({ descricao: ev.descricao, data: ev.data, total_fatura: ev.totalFatura, pagador: ev.pagador })
@@ -4764,20 +4839,20 @@ async function sbGuardarEvento(ev) {
         }
 
         // Apagar ordens/ofertas antigas e reinserir
-        await fetch(`${SB_URL}/rest/v1/ordens?evento_id=eq.${ev.id}`, { method: 'DELETE', headers: sbHeaders() });
+        await sbFetch(`${SB_URL}/rest/v1/ordens?evento_id=eq.${ev.id}`, { method: 'DELETE', headers: sbHeaders() });
         if (ev.ordens && ev.ordens.length > 0) {
             const ordens = ev.ordens.map(o => ({ id: o.id, evento_id: ev.id, item: o.item, quantidade: o.quantidade, preco_unitario: o.precoUnitario, preco_total: o.precoTotal, hora: o.hora }));
-            await fetch(`${SB_URL}/rest/v1/ordens`, { method: 'POST', headers: sbHeaders({ 'Prefer': 'return=representation' }), body: JSON.stringify(ordens) });
+            await sbFetch(`${SB_URL}/rest/v1/ordens`, { method: 'POST', headers: sbHeaders({ 'Prefer': 'return=representation' }), body: JSON.stringify(ordens) });
             const ordemAmigos = ev.ordens.flatMap(o => (o.amigos || []).map(a => ({ ordem_id: o.id, amigo: a })));
-            if (ordemAmigos.length > 0) await fetch(`${SB_URL}/rest/v1/ordem_amigos`, { method: 'POST', headers: sbHeaders(), body: JSON.stringify(ordemAmigos) });
+            if (ordemAmigos.length > 0) await sbFetch(`${SB_URL}/rest/v1/ordem_amigos`, { method: 'POST', headers: sbHeaders(), body: JSON.stringify(ordemAmigos) });
         }
 
-        await fetch(`${SB_URL}/rest/v1/ofertas?evento_id=eq.${ev.id}`, { method: 'DELETE', headers: sbHeaders() });
+        await sbFetch(`${SB_URL}/rest/v1/ofertas?evento_id=eq.${ev.id}`, { method: 'DELETE', headers: sbHeaders() });
         if (ev.ofertas && ev.ofertas.length > 0) {
             const ofertas = ev.ofertas.map(o => ({ id: o.id, evento_id: ev.id, quem: o.quem, item: o.item, quantidade: o.quantidade, preco_unitario: o.precoUnitario, preco_total: o.precoTotal, hora: o.hora }));
-            await fetch(`${SB_URL}/rest/v1/ofertas`, { method: 'POST', headers: sbHeaders({ 'Prefer': 'return=representation' }), body: JSON.stringify(ofertas) });
+            await sbFetch(`${SB_URL}/rest/v1/ofertas`, { method: 'POST', headers: sbHeaders({ 'Prefer': 'return=representation' }), body: JSON.stringify(ofertas) });
             const ofertaPara = ev.ofertas.flatMap(o => (o.para || []).map(a => ({ oferta_id: o.id, amigo: a })));
-            if (ofertaPara.length > 0) await fetch(`${SB_URL}/rest/v1/oferta_para`, { method: 'POST', headers: sbHeaders(), body: JSON.stringify(ofertaPara) });
+            if (ofertaPara.length > 0) await sbFetch(`${SB_URL}/rest/v1/oferta_para`, { method: 'POST', headers: sbHeaders(), body: JSON.stringify(ofertaPara) });
         }
     } catch(e) { console.error('Erro ao guardar evento no Supabase:', e); }
 }
@@ -4785,7 +4860,7 @@ async function sbGuardarEvento(ev) {
 async function sbGuardarPagamento(p) {
     if (!_sbSession) return;
     try {
-        await fetch(`${SB_URL}/rest/v1/pagamentos`, {
+        await sbFetch(`${SB_URL}/rest/v1/pagamentos`, {
             method: 'POST',
             headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
             body: JSON.stringify({ id: p.id, evento_id: p.eventoId, pessoa: p.pessoa, valor: p.valor, tipo: p.tipo, data: p.data })
@@ -4796,14 +4871,14 @@ async function sbGuardarPagamento(p) {
 async function sbApagarPagamento(id) {
     if (!_sbSession) return;
     try {
-        await fetch(`${SB_URL}/rest/v1/pagamentos?id=eq.${id}`, { method: 'DELETE', headers: sbHeaders() });
+        await sbFetch(`${SB_URL}/rest/v1/pagamentos?id=eq.${id}`, { method: 'DELETE', headers: sbHeaders() });
     } catch(e) { console.error('Erro ao apagar pagamento no Supabase:', e); }
 }
 
 async function sbApagarEvento(id) {
     if (!_sbSession) return;
     try {
-        await fetch(`${SB_URL}/rest/v1/eventos?id=eq.${id}`, { method: 'DELETE', headers: sbHeaders() });
+        await sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${id}`, { method: 'DELETE', headers: sbHeaders() });
     } catch(e) { console.error('Erro ao apagar evento no Supabase:', e); }
 }
 
@@ -4811,7 +4886,7 @@ async function sbApagarEvento(id) {
 async function sbDefinirSubstituto(eventoId, email) {
     if (!_sbSession) return;
     try {
-        await fetch(`${SB_URL}/rest/v1/eventos?id=eq.${eventoId}`, {
+        await sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${eventoId}`, {
             method: 'PATCH', headers: sbHeaders(),
             body: JSON.stringify({ substituto_email: email || null })
         });
@@ -4822,7 +4897,7 @@ async function sbDefinirSubstituto(eventoId, email) {
 async function sbCarregarConfigAcesso() {
     // Equivalências amigo ↔ conta (visíveis a todos para mostrar "tu")
     try {
-        const r = await fetch(`${SB_URL}/rest/v1/amigo_users?select=amigo,email`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const r = await sbFetch(`${SB_URL}/rest/v1/amigo_users?select=amigo,email`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
         if (r.ok) {
             const data = await r.json();
             amigoUsers = {};
@@ -4832,7 +4907,7 @@ async function sbCarregarConfigAcesso() {
     // Utilizadores autorizados — só o admin precisa (para os dropdowns)
     if (isAdmin()) {
         try {
-            const r = await fetch(`${SB_URL}/rest/v1/allowed_users?select=email&order=email.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+            const r = await sbFetch(`${SB_URL}/rest/v1/allowed_users?select=email&order=email.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
             if (r.ok) {
                 const data = await r.json();
                 _allowedUsersCache = Array.isArray(data) ? data.map(u => u.email).filter(Boolean) : [];
@@ -4846,13 +4921,13 @@ async function sbGuardarAmigoUser(amigo, email) {
     if (!_sbSession || !isAdmin()) return;
     try {
         if (email) {
-            await fetch(`${SB_URL}/rest/v1/amigo_users`, {
+            await sbFetch(`${SB_URL}/rest/v1/amigo_users`, {
                 method: 'POST', headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
                 body: JSON.stringify({ amigo, email })
             });
             amigoUsers[amigo] = email;
         } else {
-            await fetch(`${SB_URL}/rest/v1/amigo_users?amigo=eq.${encodeURIComponent(amigo)}`, { method: 'DELETE', headers: sbHeaders() });
+            await sbFetch(`${SB_URL}/rest/v1/amigo_users?amigo=eq.${encodeURIComponent(amigo)}`, { method: 'DELETE', headers: sbHeaders() });
             delete amigoUsers[amigo];
         }
     } catch(e) { console.error('Erro ao guardar equivalência:', e); }
@@ -4871,7 +4946,7 @@ function sbScheduleAutoSave() {
 
 // Auth helpers
 async function sbLoginGoogle() {
-    window.location.href = `${SB_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.href)}`;
+    window.location.href = `${SB_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.href.split('#')[0])}`;
 }
 
 async function sbLoginEmail() {
@@ -4886,8 +4961,7 @@ async function sbLoginEmail() {
         });
         const d = await r.json();
         if (!r.ok) { status.style.color = '#B3402F'; status.textContent = d.error_description || d.msg || 'Erro ao entrar.'; return; }
-        _sbSession = { access_token: d.access_token, refresh_token: d.refresh_token, user: d.user };
-        localStorage.setItem('sb_session', JSON.stringify(_sbSession));
+        sbSaveSession({ access_token: d.access_token, refresh_token: d.refresh_token, expires_at: d.expires_at || Math.floor(Date.now() / 1000) + (d.expires_in || 3600), user: d.user });
         await sbAposLogin();
     } catch(e) { status.style.color = '#B3402F'; status.textContent = 'Erro de ligação.'; }
 }
@@ -4914,7 +4988,7 @@ async function sbSolicitarAcesso() {
     const status = document.getElementById('solicitar-status');
     btn.disabled = true; btn.textContent = 'A enviar…';
     try {
-        await fetch(`${SB_URL}/rest/v1/access_requests`, {
+        await sbFetch(`${SB_URL}/rest/v1/access_requests`, {
             method: 'POST',
             headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
             body: JSON.stringify({ email: _sbSession.user.email })
@@ -4925,7 +4999,7 @@ async function sbSolicitarAcesso() {
 }
 
 function sbLogout() {
-    localStorage.removeItem('sb_session');
+    localStorage.removeItem(SESSION_KEY);
     _sbSession = null;
     window.location.reload();
 }
@@ -4936,7 +5010,7 @@ async function abrirAdmin() {
     const lista = document.getElementById('admin-lista');
     lista.innerHTML = '<p style="color:#999;font-size:14px;text-align:center;padding:20px;">A carregar…</p>';
     try {
-        const r = await fetch(`${SB_URL}/rest/v1/access_requests?select=*&order=requested_at.desc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const r = await sbFetch(`${SB_URL}/rest/v1/access_requests?select=*&order=requested_at.desc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
         const data = await r.json();
         sbAtualizarBadge(Array.isArray(data) ? data.length : 0);
         if (!data.length) { lista.innerHTML = '<p style="color:#999;font-size:14px;text-align:center;padding:24px 0;">✓ Sem pedidos pendentes</p>'; return; }
@@ -4962,7 +5036,7 @@ function sbAtualizarBadge(n) {
 // Verifica pedidos pendentes em segundo plano (chamado após login do admin)
 async function sbVerificarPedidos() {
     try {
-        const r = await fetch(`${SB_URL}/rest/v1/access_requests?select=email`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const r = await sbFetch(`${SB_URL}/rest/v1/access_requests?select=email`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
         const data = await r.json();
         sbAtualizarBadge(Array.isArray(data) ? data.length : 0);
     } catch(e) {}
@@ -4970,11 +5044,11 @@ async function sbVerificarPedidos() {
 
 async function sbAprovarAcesso(email) {
     try {
-        await fetch(`${SB_URL}/rest/v1/allowed_users`, {
+        await sbFetch(`${SB_URL}/rest/v1/allowed_users`, {
             method: 'POST', headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
             body: JSON.stringify({ email })
         });
-        await fetch(`${SB_URL}/rest/v1/access_requests?email=eq.${encodeURIComponent(email)}`, { method: 'DELETE', headers: sbHeaders() });
+        await sbFetch(`${SB_URL}/rest/v1/access_requests?email=eq.${encodeURIComponent(email)}`, { method: 'DELETE', headers: sbHeaders() });
         mostrarMensagem(`✓ ${email} aprovado!`, true);
         abrirAdmin();
     } catch(e) { mostrarMensagem('Erro ao aprovar.', false); }
