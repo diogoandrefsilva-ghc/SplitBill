@@ -3994,9 +3994,18 @@ function renderContasPagamentos(lista, resumo) {
         }
 
         var acoes = podeEditarPagamentoDoEvento(p.eventoId) ? '<button class="pgto-edit" onclick="editarPagamento(' + p.id + ')" title="Editar data">\u270e</button><button class="pgto-delete" onclick="removerPagamento(' + p.id + ')" title="Remover">\u00d7</button>' : '';
+        var recebedorStr = (function() {
+            if (p.tipo === 'evento' && p.eventoId) {
+                var evr = historico.find(function(e) { return e.id === p.eventoId; });
+                if (evr && evr.pagador && evr.pagador !== p.pessoa) {
+                    return ' <span style="font-size:10.5px;font-weight:400;color:#9AA5A0;">(pagou ao ' + evr.pagador + ')</span>';
+                }
+            }
+            return '';
+        })();
         return '<div class="pgto-hist-item" id="pgto-item-' + p.id + '" style="flex-wrap:wrap;">'
             + '<div class="pgto-info-col">'
-            + '<div class="pgto-nome">' + p.pessoa + '</div>'
+            + '<div class="pgto-nome">' + p.pessoa + recebedorStr + '</div>'
             + '<div class="pgto-detalhe">' + eventoDesc + ' \u00b7 ' + p.data + '</div>'
             + (consumoStr ? '<div style="font-size:11px;color:#7C8782;margin-top:2px;">' + consumoStr + '</div>' : '')
             + '</div>'
