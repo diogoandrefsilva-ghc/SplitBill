@@ -4158,7 +4158,7 @@ async function registarPagamento() {
     };
     pagamentos.push(novoPgto);
     salvarPagamentos();
-    sbGuardarPagamento(novoPgto);
+    const okSb = await sbGuardarPagamento(novoPgto);
 
     document.getElementById('pgto-evento').value = '';
     document.getElementById('pgto-data').value = '';
@@ -4167,7 +4167,7 @@ async function registarPagamento() {
     fecharFabPanel();
     renderContas();
     renderHistoricoDropdown();
-    mostrarPgtoMsg('✅ Pagamento de €' + valor.toFixed(2) + ' registado para ' + pessoa, true);
+    if (okSb) mostrarPgtoMsg('✅ Pagamento de €' + valor.toFixed(2) + ' registado para ' + pessoa, true);
 }
 
 function guardarEdicaoPgto(id) {
@@ -4994,21 +4994,44 @@ async function sbGuardarEvento(ev) {
 }
 
 async function sbGuardarPagamento(p) {
-    if (!_sbSession) return;
+    if (!_sbSession) { mostrarMensagem('⚠️ Sem sessão — pagamento NÃO gravado na BD', false); return false; }
     try {
-        await sbFetch(`${SB_URL}/rest/v1/pagamentos`, {
+        const r = await sbFetch(`${SB_URL}/rest/v1/pagamentos`, {
             method: 'POST',
             headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
             body: JSON.stringify({ id: p.id, evento_id: p.eventoId, pessoa: p.pessoa, valor: p.valor, tipo: p.tipo, data: p.data })
         });
-    } catch(e) { console.error('Erro ao guardar pagamento no Supabase:', e); }
+        if (!r.ok) {
+            let msg = 'HTTP ' + r.status;
+            try { const j = await r.json(); msg = (j.message || msg) + (j.details ? ' · ' + j.details : '') + (j.hint ? ' · ' + j.hint : ''); } catch(_) {}
+            console.error('Erro ao guardar pagamento no Supabase:', msg);
+            mostrarMensagem('⚠️ Pagamento NÃO gravado na BD: ' + msg, false);
+            return false;
+        }
+        return true;
+    } catch(e) {
+        console.error('Erro ao guardar pagamento no Supabase:', e);
+        mostrarMensagem('⚠️ Pagamento NÃO gravado na BD (erro de ligação)', false);
+        return false;
+    }
 }
 
 async function sbApagarPagamento(id) {
-    if (!_sbSession) return;
+    if (!_sbSession) return false;
     try {
-        await sbFetch(`${SB_URL}/rest/v1/pagamentos?id=eq.${id}`, { method: 'DELETE', headers: sbHeaders() });
-    } catch(e) { console.error('Erro ao apagar pagamento no Supabase:', e); }
+        const r = await sbFetch(`${SB_URL}/rest/v1/pagamentos?id=eq.${id}`, { method: 'DELETE', headers: sbHeaders() });
+        if (!r.ok) {
+            let msg = 'HTTP ' + r.status;
+            try { const j = await r.json(); msg = j.message || msg; } catch(_) {}
+            mostrarMensagem('⚠️ Pagamento NÃO removido da BD: ' + msg, false);
+            return false;
+        }
+        return true;
+    } catch(e) {
+        console.error('Erro ao apagar pagamento no Supabase:', e);
+        mostrarMensagem('⚠️ Pagamento NÃO removido da BD (erro de ligação)', false);
+        return false;
+    }
 }
 
 async function sbApagarEvento(id) {
