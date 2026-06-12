@@ -2988,14 +2988,14 @@ async function fecharComFatura() {
     estado.pagador = pagador;
     modoReadOnly = true;
 
-    // Calcular dívidas — quanto cada pessoa deve ao pagador
+    // Calcular dívidas com Hamilton (determinístico; sobra fica no pagador)
     const contaFinal = calcularContaFinalPorPessoa();
+    const divisaoHamilton = calcularDivisaoHamilton(contaFinal, pagador);
     estado.dividas = {};
-    Object.keys(contaFinal).forEach(pessoa => {
-        if (pessoa !== pagador && contaFinal[pessoa] > 0.005) {
-            estado.dividas[pessoa] = { valor: Math.round(contaFinal[pessoa] * 100) / 100 };
-        }
+    Object.entries(divisaoHamilton).forEach(([pessoa, valor]) => {
+        estado.dividas[pessoa] = { valor };
     });
+    divisoes[eventoAtualId] = divisaoHamilton;
 
     // Adjust kept payments proportionally if fatura changed
     if (estado._manterPagamentos && estado._faturaAnterior && estado._faturaAnterior > 0) {
@@ -3019,6 +3019,7 @@ async function fecharComFatura() {
     salvarNoLocalStorage();
     atualizarReadOnly();
     renderContas();
+    sbGuardarDivisao(eventoAtualId, divisaoHamilton);  // fire-and-forget, não bloqueia UI
     mostrarMensagem('✓ Conta fechada — €' + fatura.toFixed(2) + ' (paga por ' + pagador + ')', true);
 }
 
@@ -3088,6 +3089,9 @@ async function reabrirEvento() {
         pagamentos = pagamentos.filter(p => p.eventoId !== eventoAtualId);
         salvarPagamentos();
     }
+    // Apagar divisão fixada — será recalculada no novo fecho
+    delete divisoes[eventoAtualId];
+    sbApagarDivisao(eventoAtualId);
     // Store old fatura value for proportional adjustment later
     estado._faturaAnterior = estado.totalFatura;
     estado.totalFatura = null;
@@ -3391,6 +3395,7 @@ function atualizarPagador() {
 
 let _contasTabAtual = 'saldos';
 let pagamentos = [];
+let divisoes = {};   // {eventoId: {pessoa: quota}} — gravado na BD, imutável após fecho
 let _paginaAtual = 'eventos';
 let _pgtoSearchQuery = '';
 let _pgtoFilterPessoa = '';
@@ -3552,14 +3557,19 @@ function getDividasPorPessoaPorEvento() {
     const result = {};
     historico.forEach(ev => {
         if (!ev.totalFatura || !ev.pagador) return;
-        const dividas = ev.dividas || {};
-        Object.keys(dividas).forEach(pessoa => {
+        // Preferir divisoes da BD (fixados no fecho); fallback para ev.dividas (legacy)
+        const div = divisoes[ev.id];
+        const fonte = div
+            ? Object.entries(div)
+            : Object.entries(ev.dividas || {}).map(([p, d]) => [p, typeof d === 'object' ? d.valor : d]);
+        fonte.forEach(([pessoa, valor]) => {
+            if (!valor || valor <= 0.005) return;
             if (!result[pessoa]) result[pessoa] = [];
             result[pessoa].push({
                 eventoId: ev.id,
                 descricao: ev.descricao || 'Sem nome',
                 data: ev.data || '—',
-                valor: dividas[pessoa].valor,
+                valor: parseFloat(valor),
                 pagador: ev.pagador
             });
         });
@@ -4210,6 +4220,34 @@ function mostrarPgtoMsg(msg, ok) {
 }
 
 // Calculate final amounts for any event
+// Distribui o total pelos não-pagadores usando o método Hamilton (maior resto).
+// Resultado: soma dos valores == Math.round(sum_bruta * 100)/100
+// Determinístico: mesmos dados → mesmo resultado sempre.
+function calcularDivisaoHamilton(contaFinalRaw, pagador) {
+    const entries = Object.entries(contaFinalRaw)
+        .filter(([p, v]) => p !== pagador && v > 0.005);
+    if (!entries.length) return {};
+
+    // Total em cêntimos — arredondamento da soma, não soma dos arredondamentos
+    const totalCents = Math.round(entries.reduce((s, [, v]) => s + v, 0) * 100);
+
+    const items = entries.map(([pessoa, valor]) => {
+        const cents = valor * 100;
+        const base  = Math.floor(cents);
+        return { pessoa, base, frac: cents - base };
+    });
+
+    let resto = totalCents - items.reduce((s, x) => s + x.base, 0);
+
+    // Maior fração primeiro; desempate alfabético → determinístico
+    items.sort((a, b) => b.frac - a.frac || a.pessoa.localeCompare(b.pessoa));
+    for (let i = 0; i < items.length && resto > 0; i++, resto--) items[i].base++;
+
+    const result = {};
+    items.forEach(x => { result[x.pessoa] = x.base / 100; });
+    return result;
+}
+
 function calcularContaFinalEvento(ev) {
     const totalMesa = (ev.ordens || []).reduce((sum, o) => sum + o.precoTotal, 0);
     const fatura = ev.totalFatura || totalMesa;
@@ -4947,6 +4985,26 @@ async function sbCarregarDados() {
             data: p.data
         }));
 
+        // Carregar divisões fixadas
+        const divRes = await sbFetch(`${SB_URL}/rest/v1/eventos_divisao?select=*&order=evento_id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const divRows = await divRes.json();
+        divisoes = {};
+        if (Array.isArray(divRows)) {
+            divRows.forEach(r => {
+                if (!divisoes[r.evento_id]) divisoes[r.evento_id] = {};
+                divisoes[r.evento_id][r.pessoa] = parseFloat(r.quota);
+            });
+        }
+
+        // Migração lazy: eventos fechados sem divisão → calcular Hamilton e guardar
+        const semDivisao = historico.filter(ev => ev.totalFatura && ev.pagador && !divisoes[ev.id]);
+        for (const ev of semDivisao) {
+            const contaFinal = calcularContaFinalEvento(ev);
+            const d = calcularDivisaoHamilton(contaFinal, ev.pagador);
+            divisoes[ev.id] = d;
+            sbGuardarDivisao(ev.id, d);  // fire-and-forget por evento
+        }
+
         salvarHistoricoLocal();
         salvarPagamentos();
     } catch(e) {
@@ -5032,6 +5090,35 @@ async function sbApagarPagamento(id) {
         mostrarMensagem('⚠️ Pagamento NÃO removido da BD (erro de ligação)', false);
         return false;
     }
+}
+
+async function sbGuardarDivisao(eventoId, divisaoObj) {
+    if (!_sbSession) return false;
+    try {
+        // Limpar registos anteriores deste evento
+        await sbFetch(`${SB_URL}/rest/v1/eventos_divisao?evento_id=eq.${eventoId}`, { method: 'DELETE', headers: sbHeaders() });
+        const rows = Object.entries(divisaoObj).map(([pessoa, quota]) => ({ evento_id: eventoId, pessoa, quota }));
+        if (!rows.length) return true;
+        const r = await sbFetch(`${SB_URL}/rest/v1/eventos_divisao`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Prefer': 'return=minimal' }),
+            body: JSON.stringify(rows)
+        });
+        if (!r.ok) {
+            let msg = 'HTTP ' + r.status;
+            try { const j = await r.json(); msg = j.message || msg; } catch(_) {}
+            console.error('Erro ao guardar divisão Supabase:', msg);
+            return false;
+        }
+        return true;
+    } catch(e) { console.error('Erro ao guardar divisão:', e); return false; }
+}
+
+async function sbApagarDivisao(eventoId) {
+    if (!_sbSession) return;
+    try {
+        await sbFetch(`${SB_URL}/rest/v1/eventos_divisao?evento_id=eq.${eventoId}`, { method: 'DELETE', headers: sbHeaders() });
+    } catch(e) { console.error('Erro ao apagar divisão:', e); }
 }
 
 async function sbApagarEvento(id) {
