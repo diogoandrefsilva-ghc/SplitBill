@@ -3606,7 +3606,7 @@ function calcularSaldos() {
         saldos[pessoa] = {
             divida: totalDivida,
             pago: totalPago,
-            saldo: Math.max(0, Math.round((totalDivida - totalPago) * 100) / 100),
+            saldo: Math.max(0, Math.round(eventos.reduce((s, e) => s + e.restante, 0) * 100) / 100),
             eventos
         };
     });
