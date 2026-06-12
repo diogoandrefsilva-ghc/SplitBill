@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = `splitbill-${CACHE_VERSION}`;
 
 // Assets to cache on install
@@ -52,7 +52,9 @@ self.addEventListener('fetch', (e) => {
   }
 
   // Network-first for index.html (check for updates)
-  if (url.pathname === '/' || url.pathname === '/index.html') {
+  // Nota: em GitHub Pages (project page) o caminho é /SplitBill/…,
+  // por isso comparamos por sufixo e por modo de navegação.
+  if (e.request.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('/index.html')) {
     e.respondWith(
       fetch(e.request)
         .then((response) => {
