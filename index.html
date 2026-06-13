@@ -1879,10 +1879,14 @@ function init() {
     ghLoadCfg();
     ghUpdateSyncBtn();
 
-    // Load the most recent event, or start fresh
+    // Load saved event (where the user was), or the most recent, or start fresh
     if (historico.length > 0) {
-        const ultimo = historico[historico.length - 1];
-        carregarEvento(ultimo);
+        let alvo = null;
+        try {
+            const savedEv = localStorage.getItem('sb_evento');
+            if (savedEv != null) alvo = historico.find(e => String(e.id) === String(savedEv));
+        } catch(e) {}
+        carregarEvento(alvo || historico[historico.length - 1]);
     } else {
         // No history at all — blank state, no event created yet
         amigos = [];
@@ -1905,6 +1909,11 @@ function init() {
     atualizarUI();
     atualizarNavBadge();
 
+    // Restaurar o separador onde o utilizador estava (sobrevive ao reload do PWA)
+    let savedPag = null;
+    try { savedPag = localStorage.getItem('sb_pagina'); } catch(e) {}
+    if (['eventos', 'pagamentos', 'geral'].includes(savedPag)) mudarPagina(savedPag);
+
     document.getElementById('item').addEventListener('change', atualizarPreco);
     document.getElementById('quantidade').addEventListener('change', atualizarPreco);
 
@@ -1915,6 +1924,7 @@ function init() {
 // Helper: load an event's data into the working state
 function carregarEvento(ev) {
     eventoAtualId = ev.id;
+    try { if (ev.id != null) localStorage.setItem('sb_evento', String(ev.id)); } catch(e) {}
     estado.ordens = ev.ordens ? JSON.parse(JSON.stringify(ev.ordens)) : [];
     estado.ofertas = ev.ofertas ? JSON.parse(JSON.stringify(ev.ofertas)) : [];
     estado.totalFatura = ev.totalFatura || null;
@@ -3429,6 +3439,7 @@ function salvarPagamentos() {
 
 function mudarPagina(pagina) {
     _paginaAtual = pagina;
+    try { localStorage.setItem('sb_pagina', pagina); } catch(e) {}
     document.getElementById('page-eventos').style.display = pagina === 'eventos' ? '' : 'none';
     document.getElementById('page-pagamentos').style.display = pagina === 'pagamentos' ? '' : 'none';
     document.getElementById('page-geral').style.display = pagina === 'geral' ? '' : 'none';
