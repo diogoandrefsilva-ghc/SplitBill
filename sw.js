@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = `splitbill-${CACHE_VERSION}`;
 
 // Assets to cache on install
@@ -56,7 +56,7 @@ self.addEventListener('fetch', (e) => {
   // por isso comparamos por sufixo e por modo de navegação.
   if (e.request.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('/index.html')) {
     e.respondWith(
-      fetch(e.request)
+      fetch(e.request.url, { cache: 'no-store' }) // no-store: nao reusa HTML stale do CDN/browser
         .then((response) => {
           // Check if response is valid
           if (!response || response.status !== 200 || response.type === 'error') {
