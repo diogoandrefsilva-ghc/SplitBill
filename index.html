@@ -1517,7 +1517,7 @@ html,body{touch-action:pan-x pan-y}
 <div class="header" style="display:flex;align-items:center;justify-content:space-between;">
     <h1>SplitBill<small>Divisão de contas · dia de jogo</small></h1>
     <div style="display:flex;align-items:center;gap:8px;">
-        <button id="btn-admin" onclick="abrirAdmin()" style="display:none;position:relative;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:6px;padding:5px 9px;font-size:14px;cursor:pointer;">🔔<span id="admin-badge" style="display:none;position:absolute;top:-6px;right:-6px;background:#B3402F;color:#fff;border-radius:10px;min-width:18px;height:18px;font-size:11px;font-weight:700;line-height:18px;text-align:center;padding:0 4px;box-sizing:border-box;">0</span></button>
+        <button id="sbi-voltar-hdr" onclick="mudarPagina('inicio')" style="display:none;align-items:center;gap:6px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:6px;padding:5px 11px;font-size:13px;cursor:pointer;font-family:var(--display);font-weight:600;letter-spacing:.05em;text-transform:uppercase;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Início</button>
         <button onclick="sbLogout()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:6px;padding:5px 9px;font-size:12px;cursor:pointer;">Sair</button>
     </div>
 </div>
@@ -1528,8 +1528,6 @@ html,body{touch-action:pan-x pan-y}
     <button class="top-nav-btn" id="nav-pagamentos" onclick="mudarPagina('pagamentos')">Pagamentos<span id="nav-pgto-badge" class="top-nav-badge" style="display:none;"></span></button>
 </div>
 
-<button id="sbi-voltar" class="sbi-voltar" onclick="mudarPagina('inicio')" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg><span>Voltar ao início</span></button>
-
 <!-- Event context bar (only visible on Eventos tab) -->
 <div id="header-evento-context">
     <input type="text" id="descricao-evento" placeholder="Descrição do evento (ex: Almoço Sá 19 Abril)" maxlength="80"
@@ -1538,14 +1536,10 @@ html,body{touch-action:pan-x pan-y}
         <select id="historico-select" onchange="navegarHistorico(this.value)" style="display:none;">
             <option value="">📚 Histórico de eventos</option>
         </select>
-        <button class="historico-toggle-btn" onclick="toggleHistoricoPanel()">
-            <span id="historico-toggle-label">📚 Histórico (0 eventos)</span>
-            <span id="historico-toggle-arrow" style="font-size:10px;opacity:0.6;transition:transform 0.2s;">▼</span>
-        </button>
-        <button id="btn-novo-evento" onclick="novoEvento()">＋ Novo</button>
+        <button id="btn-eliminar-evento" onclick="apagarEventoAtual()" style="display:none;background:#fff;border:1.5px solid #B3402F;color:#B3402F;">🗑️ Eliminar evento</button>
     </div>
     <div class="historico-panel" id="historico-panel"></div>
-    <div id="substituto-box" style="display:none;"></div>
+
 </div>
 
 <style>
@@ -1707,6 +1701,7 @@ html,body{touch-action:pan-x pan-y}
         <span id="config-arrow" style="font-size:18px;color:#7C8782;">▼</span>
     </div>
     <div class="config-body" id="config-body" style="display:none;">
+        <div id="substituto-box"></div>
         <div class="config-section-label">👥 Amigos</div>
         <div id="config-amigos-lista"></div>
         <div class="config-add-row">
@@ -3284,9 +3279,9 @@ function aplicarPermissoesEdicao() {
     const bSpan = banner ? banner.querySelector('span') : null;
     const bBtn = banner ? banner.querySelector('button') : null;
 
-    // Criar evento — só admin
-    const btnNovo = document.getElementById('btn-novo-evento');
-    if (btnNovo) btnNovo.style.display = admin ? '' : 'none';
+    // Eliminar evento — só admin e com evento carregado
+    const btnEliminar = document.getElementById('btn-eliminar-evento');
+    if (btnEliminar) btnEliminar.style.display = (admin && ev) ? '' : 'none';
 
     // Caixa de nomeação de substituto (só admin)
     renderSubstitutoBox(ev);
@@ -3449,7 +3444,7 @@ function mudarPagina(pagina) {
     if (_pi) _pi.style.display = pagina === 'inicio' ? '' : 'none';
     var _tn = document.querySelector('.top-nav');
     if (_tn) _tn.style.display = 'none';
-    var _bv = document.getElementById('sbi-voltar');
+    var _bv = document.getElementById('sbi-voltar-hdr');
     if (_bv) _bv.style.display = pagina === 'inicio' ? 'none' : 'inline-flex';
     if (pagina === 'inicio' && typeof renderInicio === 'function') renderInicio();
     document.getElementById('page-eventos').style.display = pagina === 'eventos' ? '' : 'none';
@@ -4936,7 +4931,7 @@ async function sbAposLogin() {
 
     // Tem acesso — mostrar app
     document.getElementById('page-sem-acesso').style.display = 'none';
-    if (email === ADMIN_EMAIL) { document.getElementById('btn-admin').style.display = ''; sbVerificarPedidos(); }
+    if (email === ADMIN_EMAIL) { sbVerificarPedidos(); }
 
     await sbCarregarConfigAcesso();
     await sbCarregarDados();
@@ -5326,10 +5321,10 @@ async function abrirAdmin() {
 
 // Atualiza o contador (badge) de pedidos pendentes no sino
 function sbAtualizarBadge(n) {
+    window._pedidosPendentes = n || 0;
     const badge = document.getElementById('admin-badge');
-    if (!badge) return;
-    if (n > 0) { badge.textContent = n; badge.style.display = ''; }
-    else { badge.style.display = 'none'; }
+    if (badge) { if (n > 0) { badge.textContent = n; badge.style.display = ''; } else { badge.style.display = 'none'; } }
+    try { var _pi = document.getElementById('page-inicio'); if (_pi && _pi.style.display !== 'none' && typeof renderInicio === 'function') renderInicio(); } catch(e) {}
 }
 
 // Verifica pedidos pendentes em segundo plano (chamado após login do admin)
@@ -5667,7 +5662,6 @@ if ('serviceWorker' in navigator) {
   function eventosAbertos(){ return getHist().filter(function(ev){ return !ev.totalFatura; }); }
   function nFechados(){ return getHist().filter(function(ev){ return !!ev.totalFatura; }).length; }
 
-  // Pagamentos: usa a mesma fonte do badge de navegação (calcularSaldos / ehEu)
   function pagInfo(){
     var saldos = {};
     try { if (typeof calcularSaldos==='function') saldos = calcularSaldos() || {}; } catch(e){ saldos = {}; }
@@ -5688,8 +5682,7 @@ if ('serviceWorker' in navigator) {
         else if (typeof ehEu==='function' && ehEu(e.pagador)) aReceber += e.restante;
       });
     });
-    aReceber = Math.round(aReceber*100)/100;
-    aDevo = Math.round(aDevo*100)/100;
+    aReceber = Math.round(aReceber*100)/100; aDevo = Math.round(aDevo*100)/100;
     return { admin:false, aReceber:aReceber, aDevo:aDevo };
   }
 
@@ -5727,10 +5720,16 @@ if ('serviceWorker' in navigator) {
        + '<span class="sbi-ico g">'+ICO.pag+'</span>'
        + '<span class="sbi-rtext"><span class="sbi-rname">Pagamentos</span><span class="sbi-rdesc">'+(ehAdmin()?'Todos os pagamentos do grupo':'A receber e a pagar')+'</span></span>'
        + pagTrailing()+'</button>';
-    if (ehAdmin()) s += '<button class="sbi-tap sbi-row" onclick="sbiDefinicoes()" aria-label="Definições">'
-       + '<span class="sbi-ico g">'+ICO.def+'</span>'
-       + '<span class="sbi-rtext"><span class="sbi-rname">Definições</span><span class="sbi-rdesc">Utilizadores e acesso</span></span>'
-       + '<span class="sbi-chev green">'+CHEV+'</span></button>';
+    if (ehAdmin()){
+      var pend = (typeof window!=='undefined' && window._pedidosPendentes) ? window._pedidosPendentes : 0;
+      var defTrail = pend>0
+        ? '<span class="sbi-pill sbi-neg">'+pend+(pend===1?' pedido':' pedidos')+'</span>'
+        : '<span class="sbi-chev green">'+CHEV+'</span>';
+      s += '<button class="sbi-tap sbi-row" onclick="sbiDefinicoes()" aria-label="Definições">'
+         + '<span class="sbi-ico g">'+ICO.def+'</span>'
+         + '<span class="sbi-rtext"><span class="sbi-rname">Definições</span><span class="sbi-rdesc">Utilizadores e acesso</span></span>'
+         + defTrail+'</button>';
+    }
     return s;
   }
 
@@ -5753,7 +5752,6 @@ if ('serviceWorker' in navigator) {
     el.innerHTML = h;
   };
 
-  // ===== Ações =====
   window.sbiNovo = function(){
     if (typeof novoEvento==='function') novoEvento();
     if (typeof mudarPagina==='function') mudarPagina('eventos');
