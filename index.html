@@ -1517,7 +1517,6 @@ html,body{touch-action:pan-x pan-y}
 <div class="header" style="display:flex;align-items:center;justify-content:space-between;">
     <h1>SplitBill<small>Divisão de contas · dia de jogo</small></h1>
     <div style="display:flex;align-items:center;gap:8px;">
-        <button id="btn-inicio" onclick="mudarPagina('inicio')" title="Início" style="display:none;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:6px;padding:5px 9px;font-size:14px;cursor:pointer;line-height:1;">🏠</button>
         <button id="btn-admin" onclick="abrirAdmin()" style="display:none;position:relative;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:6px;padding:5px 9px;font-size:14px;cursor:pointer;">🔔<span id="admin-badge" style="display:none;position:absolute;top:-6px;right:-6px;background:#B3402F;color:#fff;border-radius:10px;min-width:18px;height:18px;font-size:11px;font-weight:700;line-height:18px;text-align:center;padding:0 4px;box-sizing:border-box;">0</span></button>
         <button onclick="sbLogout()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:6px;padding:5px 9px;font-size:12px;cursor:pointer;">Sair</button>
     </div>
@@ -1528,6 +1527,8 @@ html,body{touch-action:pan-x pan-y}
     <button class="top-nav-btn active" id="nav-eventos" onclick="mudarPagina('eventos')">Eventos</button>
     <button class="top-nav-btn" id="nav-pagamentos" onclick="mudarPagina('pagamentos')">Pagamentos<span id="nav-pgto-badge" class="top-nav-badge" style="display:none;"></span></button>
 </div>
+
+<button id="sbi-voltar" class="sbi-voltar" onclick="mudarPagina('inicio')" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg><span>Voltar ao início</span></button>
 
 <!-- Event context bar (only visible on Eventos tab) -->
 <div id="header-evento-context">
@@ -3448,8 +3449,8 @@ function mudarPagina(pagina) {
     if (_pi) _pi.style.display = pagina === 'inicio' ? '' : 'none';
     var _tn = document.querySelector('.top-nav');
     if (_tn) _tn.style.display = 'none';
-    var _bi = document.getElementById('btn-inicio');
-    if (_bi) _bi.style.display = pagina === 'inicio' ? 'none' : 'inline-flex';
+    var _bv = document.getElementById('sbi-voltar');
+    if (_bv) _bv.style.display = pagina === 'inicio' ? 'none' : 'inline-flex';
     if (pagina === 'inicio' && typeof renderInicio === 'function') renderInicio();
     document.getElementById('page-eventos').style.display = pagina === 'eventos' ? '' : 'none';
     document.getElementById('page-pagamentos').style.display = pagina === 'pagamentos' ? '' : 'none';
@@ -5638,6 +5639,11 @@ if ('serviceWorker' in navigator) {
 .sbi-calm{background:#EEF1ED;color:var(--ink-soft,#5B6661);}
 .sbi-pill-stack{display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex:0 0 auto;}
 
+/* Botão voltar ao início (páginas internas) */
+.sbi-voltar{display:none;align-items:center;gap:8px;margin:12px 0 6px;background:#fff;border:1.5px solid var(--verde,#0E7A4F);color:var(--verde-tinta,#0E5C3F);border-radius:10px;padding:10px 15px;font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:15px;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;box-shadow:0 2px 8px -4px rgba(11,59,43,.35);width:auto;transition:transform .12s;}
+.sbi-voltar svg{width:18px;height:18px;}
+.sbi-voltar:active{transform:scale(.98);}
+
 </style>
 <script>
 /* ===== Ecrã inicial (hub) — SplitBill ===== */
@@ -5757,9 +5763,11 @@ if ('serviceWorker' in navigator) {
     if (ev && typeof carregarEvento==='function'){ carregarEvento(ev); if (typeof mudarPagina==='function') mudarPagina('eventos'); }
   };
   window.sbiHistorico = function(){
+    var fechados = getHist().filter(function(ev){ return !!ev.totalFatura; });
+    if (fechados.length && typeof carregarEvento==='function') carregarEvento(fechados[fechados.length-1]);
     if (typeof mudarPagina==='function') mudarPagina('eventos');
     var p = document.getElementById('historico-panel');
-    if (p && !p.classList.contains('open') && typeof toggleHistoricoPanel==='function') toggleHistoricoPanel();
+    if (p && p.classList.contains('open') && typeof toggleHistoricoPanel==='function') toggleHistoricoPanel();
   };
   window.sbiPagamentos = function(){ if (typeof mudarPagina==='function') mudarPagina('pagamentos'); };
   window.sbiDefinicoes = function(){ if (typeof abrirAdmin==='function') abrirAdmin(); };
