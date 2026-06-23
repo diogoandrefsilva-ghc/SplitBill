@@ -1569,7 +1569,7 @@ html,body{touch-action:pan-x pan-y}
 </div>
 
 <div id="readonly-banner">
-    <span>👁️ Evento fechado — modo leitura</span>
+    <span>Modo leitura</span>
     <button onclick="desbloquearEvento()">🔓 Desbloquear para editar</button>
 </div>
 
@@ -3240,7 +3240,7 @@ function atualizarReadOnly() {
     if (ofertaForm) ofertaForm.style.display = modoReadOnly ? 'none' : '';
 
     if (modoReadOnly) {
-        banner.style.display = _paginaAtual === 'eventos' ? 'flex' : 'none';
+        banner.style.display = (_paginaAtual === 'eventos' && isAdmin()) ? 'flex' : 'none';
         dimSections.forEach(id => {
             const el = document.getElementById(id);
             if (el) el.classList.add('readonly-overlay');
@@ -3300,16 +3300,15 @@ function aplicarPermissoesEdicao() {
             const b = document.getElementById(id); if (b) b.style.display = 'none';
         });
         if (banner) {
-            banner.style.display = (_paginaAtual === 'eventos') ? 'flex' : 'none';
-            if (bSpan) bSpan.textContent = '👁️ Apenas consulta';
-            if (bBtn) bBtn.style.display = 'none';
+            // Não-admin está sempre em leitura — não vale a pena mostrar o aviso
+            banner.style.display = 'none';
         }
     } else {
         // Editável: repor o texto/botão do banner para o comportamento normal de evento fechado
         if (banner) {
-            if (modoReadOnly && _paginaAtual === 'eventos') {
+            if (modoReadOnly && _paginaAtual === 'eventos' && isAdmin()) {
                 banner.style.display = 'flex';
-                if (bSpan) bSpan.textContent = '👁️ Evento fechado — modo leitura';
+                if (bSpan) bSpan.textContent = 'Modo leitura';
                 if (bBtn) bBtn.style.display = '';
             } else {
                 banner.style.display = 'none';
@@ -3450,7 +3449,7 @@ function mudarPagina(pagina) {
     document.getElementById('page-eventos').style.display = pagina === 'eventos' ? '' : 'none';
     document.getElementById('page-pagamentos').style.display = pagina === 'pagamentos' ? '' : 'none';
     document.getElementById('page-geral').style.display = pagina === 'geral' ? '' : 'none';
-    document.getElementById('readonly-banner').style.display = pagina === 'eventos' && modoReadOnly ? '' : 'none';
+    document.getElementById('readonly-banner').style.display = (pagina === 'eventos' && modoReadOnly && isAdmin()) ? '' : 'none';
     document.getElementById('header-evento-context').style.display = pagina === 'eventos' ? '' : 'none';
     // Adjust top-nav bottom style based on whether event context is visible
     const topNav = document.querySelector('.top-nav');
