@@ -599,19 +599,28 @@ if ('serviceWorker' in navigator) {
 /* Cards de consumo (quota do utilizador) */
 .sbi-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px;}
 .sbi-stat{background:var(--card,#fff);border:1px solid var(--linha,#DDE3DD);border-radius:14px;padding:13px 14px 11px;display:flex;flex-direction:column;gap:5px;box-shadow:0 1px 3px rgba(11,59,43,.05);min-width:0;}
-.sbi-stat-label{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft,#5B6661);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sbi-stat-head{display:flex;align-items:center;gap:6px;}
+.sbi-stat-label{flex:1 1 auto;min-width:0;text-align:center;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft,#5B6661);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sbi-stat-val{font-family:var(--mono,'IBM Plex Mono',monospace);font-size:20px;font-weight:600;color:var(--verde-tinta,#0E5C3F);letter-spacing:-.01em;}
 
-/* Cards de consumo tocáveis (detalhe de movimentos) */
-.sbi-stat-tap{cursor:pointer;text-align:left;font:inherit;transition:transform .12s,border-color .12s,box-shadow .12s;}
-/* Mantém o fundo branco do card: a regra global button:hover (verde) não deve sobrepor-se e tornar o montante ilegível. */
-.sbi-stat-tap:hover,.sbi-stat-tap:focus,.sbi-stat-tap:active,.sbi-stat-tap.aberto{background:var(--card,#fff);}
+/* Setas de navegação entre períodos (mês a mês / época a época) */
+.sbi-nav{flex:0 0 auto;width:26px;height:26px;padding:0;border:none;border-radius:8px;background:transparent;color:var(--ink-soft,#5B6661);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .12s,color .12s;}
+.sbi-nav svg{width:16px;height:16px;}
+.sbi-nav:hover{background:var(--verde-claro,#E2EFE8);color:var(--verde-tinta,#0E5C3F);}
+.sbi-nav:disabled{opacity:.28;cursor:default;background:transparent;color:var(--ink-soft,#5B6661);}
+
+/* Área tocável do card (detalhe de movimentos). Fundo transparente: a regra
+   global button:hover (verde) não deve sobrepor-se e tornar o montante ilegível. */
+.sbi-stat-tap{display:flex;flex-direction:column;gap:5px;width:100%;padding:0;border:none;background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer;transition:transform .12s;}
+.sbi-stat-tap:hover,.sbi-stat-tap:focus,.sbi-stat-tap:active{background:transparent;}
 .sbi-stat-tap:active{transform:scale(.985);}
+.sbi-stat-tap:disabled{cursor:default;opacity:.55;}
 @media (prefers-reduced-motion:reduce){.sbi-stat-tap:active{transform:none;}}
-.sbi-stat-tap.aberto{border-color:var(--verde,#0E7A4F);box-shadow:0 0 0 1px var(--verde,#0E7A4F),0 1px 3px rgba(11,59,43,.06);}
+.sbi-stat-card{transition:border-color .12s,box-shadow .12s;}
+.sbi-stat-card.aberto{border-color:var(--verde,#0E7A4F);box-shadow:0 0 0 1px var(--verde,#0E7A4F),0 1px 3px rgba(11,59,43,.06);}
 .sbi-stat-hint{margin-top:3px;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-soft,#5B6661);display:flex;align-items:center;gap:4px;}
 .sbi-stat-hint svg{width:12px;height:12px;transition:transform .15s;}
-.sbi-stat-tap.aberto .sbi-stat-hint svg{transform:rotate(90deg);}
+.sbi-stat-card.aberto .sbi-stat-hint svg{transform:rotate(90deg);}
 .sbi-mov-panel{margin:-2px 0 6px;background:var(--card,#fff);border:1px solid var(--linha,#DDE3DD);border-radius:14px;padding:4px 4px;box-shadow:0 1px 3px rgba(11,59,43,.05);animation:sbiMovIn .18s ease;}
 @keyframes sbiMovIn{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:none;}}
 .sbi-mov-list{display:flex;flex-direction:column;}
@@ -656,6 +665,8 @@ if ('serviceWorker' in navigator) {
     down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 10 12 16 18 10"/></svg>'
   };
   var CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>';
+  var NAVL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>';
+  var NAVR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>';
   var CHK  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12 10 17 19 7"/></svg>';
   var CIRC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><circle cx="12" cy="12" r="8"/></svg>';
   var HALF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" stroke="none"/></svg>';
@@ -668,16 +679,38 @@ if ('serviceWorker' in navigator) {
   function eventosAbertos(){ return getHist().filter(function(ev){ return !ev.totalFatura; }); }
   function nFechados(){ return getHist().filter(function(ev){ return !!ev.totalFatura; }).length; }
 
-  // Consumo (quota) do utilizador: mês civil corrente e época (início 15/jul)
-  // Devolve também o detalhe dos movimentos (jogo + a minha despesa + estado pago) por período.
+  function pad2(n){ n = String(n); return n.length<2 ? '0'+n : n; }
+
+  // Janela [ini, fim) e rótulo de um mês civil, deslocado `off` meses face ao atual.
+  function periodoMes(off){
+    var hoje = new Date();
+    var d = new Date(hoje.getFullYear(), hoje.getMonth() + (off||0), 1);
+    var ini = d.getTime();
+    var fim = new Date(d.getFullYear(), d.getMonth()+1, 1).getTime();
+    var nome = 'mês';
+    try { nome = d.toLocaleDateString('pt-PT', { month:'long' }); } catch(e){}
+    nome = nome.charAt(0).toUpperCase() + nome.slice(1);
+    if (d.getFullYear() !== hoje.getFullYear()) nome += ' ' + pad2(d.getFullYear()%100);
+    return { ini: ini, fim: fim, label: nome };
+  }
+
+  // Janela [ini, fim) e rótulo de uma época (início 15/jul), deslocada `off` épocas.
+  function periodoEpoca(off){
+    var hoje = new Date();
+    var anoEp = hoje.getFullYear();
+    if (hoje.getTime() < new Date(anoEp, 6, 15).getTime()) anoEp -= 1;
+    anoEp += (off||0);
+    var ini = new Date(anoEp, 6, 15).getTime();
+    var fim = new Date(anoEp+1, 6, 15).getTime();
+    return { ini: ini, fim: fim, label: 'Época ' + pad2(anoEp%100) + '/' + pad2((anoEp+1)%100) };
+  }
+
+  // Consumo (quota) do utilizador: lista completa dos movimentos (jogo + a minha
+  // despesa + estado pago), ordenada do mais recente para o mais antigo.
+  // O fatiamento por mês/época é feito depois, conforme a navegação.
   function consumoUtilizador(){
     var mine = [];
     try { if (typeof meusAmigos==='function') mine = meusAmigos() || []; } catch(e){ mine = []; }
-    var hoje = new Date();
-    var inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).getTime();
-    var anoEp = hoje.getFullYear();
-    if (hoje.getTime() < new Date(anoEp, 6, 15).getTime()) anoEp -= 1;
-    var inicioEpoca = new Date(anoEp, 6, 15).getTime();
 
     // Restante por pagar (dívida) por evento, para os amigos do utilizador.
     // Se o utilizador foi o pagador, não há dívida — fica como pago.
@@ -695,8 +728,7 @@ if ('serviceWorker' in navigator) {
       }
     } catch(e){}
 
-    var somaMes = 0, somaEpoca = 0;
-    var movsMes = [], movsEpoca = [];
+    var movs = [];
     getHist().forEach(function(ev){
       if (!ev.totalFatura) return;
       var ts = (typeof _parsePgtoData==='function') ? _parsePgtoData(ev.data) : 0;
@@ -707,31 +739,25 @@ if ('serviceWorker' in navigator) {
       mine.forEach(function(a){ if (cf[a]) meu += cf[a]; });
       if (meu <= 0.005) return;
       var rest = restPorEvento[ev.id] || 0;
-      var mov = {
+      movs.push({
         nome: ev.descricao || 'Sem nome',
         data: ev.data || '',
         valor: Math.round(meu*100)/100,
         pago: rest <= 0.005,
         parcial: rest > 0.005 && rest < meu - 0.005,
         ts: ts
-      };
-      if (ts >= inicioEpoca){ somaEpoca += meu; movsEpoca.push(mov); }
-      if (ts >= inicioMes){ somaMes += meu; movsMes.push(mov); }
+      });
     });
-    movsMes.sort(function(a,b){ return b.ts - a.ts; });
-    movsEpoca.sort(function(a,b){ return b.ts - a.ts; });
-
-    var nomeMes = 'mês';
-    try { nomeMes = hoje.toLocaleDateString('pt-PT', { month:'long' }); } catch(e){}
-    nomeMes = nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1);
-    function pad2(n){ n = String(n); return n.length<2 ? '0'+n : n; }
-    var labelEpoca = pad2(anoEp%100) + '/' + pad2((anoEp+1)%100);
-    return { mes: Math.round(somaMes*100)/100, epoca: Math.round(somaEpoca*100)/100,
-             temAmigo: mine.length>0, labelMes: nomeMes, labelEpoca: labelEpoca,
-             movsMes: movsMes, movsEpoca: movsEpoca };
+    movs.sort(function(a,b){ return b.ts - a.ts; });
+    return { temAmigo: mine.length>0, movs: movs };
   }
 
-  // Detalhe dos movimentos guardado para o toggle dos cards
+  // Estado dos cards de consumo:
+  //  _consumoTodos — lista completa de movimentos (calculada uma vez por render)
+  //  _consumoOff   — deslocamento de navegação por período (0 = atual, -1 = anterior…)
+  //  _consumoMovs  — movimentos do período atualmente mostrado, para o toggle do painel
+  var _consumoTodos = [];
+  var _consumoOff = { mes: 0, epoca: 0 };
   var _consumoMovs = { mes: [], epoca: [] };
 
   function movItem(m){
@@ -748,37 +774,81 @@ if ('serviceWorker' in navigator) {
       + st + '</div>';
   }
 
+  // Fatia + estado de navegação do período mostrado num card.
+  function cardData(periodo){
+    var off = _consumoOff[periodo] || 0;
+    var p = periodo==='mes' ? periodoMes(off) : periodoEpoca(off);
+    var movs = [], soma = 0;
+    _consumoTodos.forEach(function(m){ if (m.ts >= p.ini && m.ts < p.fim){ movs.push(m); soma += m.valor; } });
+    var temAntes = _consumoTodos.some(function(m){ return m.ts < p.ini; });
+    return { label: p.label, soma: Math.round(soma*100)/100, movs: movs,
+             prevOff: !temAntes, nextOff: off >= 0 };
+  }
+
+  // Conteúdo interior de um card (cabeçalho com setas + área tocável). Atualiza
+  // também _consumoMovs[periodo] para o painel de detalhe.
+  function cardInner(periodo){
+    var d = cardData(periodo);
+    _consumoMovs[periodo] = d.movs;
+    var n = d.movs.length;
+    var hint = n ? n + (n===1?' movimento ':' movimentos ') + CHEV : 'Sem movimentos';
+    return '<div class="sbi-stat-head">'
+      + '<button type="button" class="sbi-nav" onclick="sbiNavConsumo(\''+periodo+'\',-1)" aria-label="Período anterior"'+(d.prevOff?' disabled':'')+'>' + NAVL + '</button>'
+      + '<span class="sbi-stat-label">' + esc(d.label) + '</span>'
+      + '<button type="button" class="sbi-nav" onclick="sbiNavConsumo(\''+periodo+'\',1)" aria-label="Período seguinte"'+(d.nextOff?' disabled':'')+'>' + NAVR + '</button>'
+      + '</div>'
+      + '<button type="button" class="sbi-stat-tap" onclick="sbiToggleConsumo(\''+periodo+'\')" aria-expanded="false"'+(n?'':' disabled')+'>'
+      + '<span class="sbi-stat-val">' + eur(d.soma) + '</span>'
+      + '<span class="sbi-stat-hint">' + hint + '</span>'
+      + '</button>';
+  }
+
   function statsConsumo(){
     var c = consumoUtilizador();
     if (!c.temAmigo) return '';
-    _consumoMovs = { mes: c.movsMes, epoca: c.movsEpoca };
-    function card(periodo, label, val, n){
-      var hint = n
-        ? n + (n===1?' movimento ':' movimentos ') + CHEV
-        : 'Sem movimentos';
-      return '<button type="button" class="sbi-stat sbi-stat-tap" data-periodo="'+periodo+'"'
-        + ' onclick="sbiToggleConsumo(\''+periodo+'\')" aria-expanded="false"'+(n?'':' disabled')+'>'
-        + '<span class="sbi-stat-label">' + esc(label) + '</span>'
-        + '<span class="sbi-stat-val">' + eur(val) + '</span>'
-        + '<span class="sbi-stat-hint">' + hint + '</span>'
-        + '</button>';
-    }
+    _consumoTodos = c.movs;
+    _consumoOff = { mes: 0, epoca: 0 };
+    _consumoMovs = { mes: [], epoca: [] };
     return '<div class="sbi-eyebrow">O teu consumo</div>'
       + '<div class="sbi-stats">'
-      + card('mes', c.labelMes, c.mes, c.movsMes.length)
-      + card('epoca', 'Época ' + c.labelEpoca, c.epoca, c.movsEpoca.length)
+      + '<div class="sbi-stat sbi-stat-card" id="sbi-card-mes" data-periodo="mes">' + cardInner('mes') + '</div>'
+      + '<div class="sbi-stat sbi-stat-card" id="sbi-card-epoca" data-periodo="epoca">' + cardInner('epoca') + '</div>'
       + '</div>'
       + '<div class="sbi-mov-panel" id="sbi-mov-panel" data-open="" hidden></div>';
   }
 
+  // Navega para o período anterior/seguinte de um card e volta a desenhá-lo.
+  window.sbiNavConsumo = function(periodo, dir){
+    var off = (_consumoOff[periodo] || 0) + dir;
+    if (off > 0) off = 0;
+    _consumoOff[periodo] = off;
+    var cont = document.getElementById('sbi-card-'+periodo);
+    if (!cont) return;
+    cont.innerHTML = cardInner(periodo); // re-render + atualiza _consumoMovs[periodo]
+    // Se o painel de detalhe estiver aberto para este card, acompanha a navegação.
+    var panel = document.getElementById('sbi-mov-panel');
+    if (panel && panel.getAttribute('data-open') === periodo){
+      var movs = _consumoMovs[periodo] || [];
+      if (movs.length){
+        panel.innerHTML = '<div class="sbi-mov-list">' + movs.map(movItem).join('') + '</div>';
+        var tap = cont.querySelector('.sbi-stat-tap');
+        if (tap) tap.setAttribute('aria-expanded','true');
+      } else {
+        panel.hidden = true;
+        panel.setAttribute('data-open','');
+        cont.classList.remove('aberto');
+      }
+    }
+  };
+
   window.sbiToggleConsumo = function(periodo){
     var panel = document.getElementById('sbi-mov-panel');
     if (!panel) return;
-    var btns = document.querySelectorAll('.sbi-stat-tap');
+    var cards = document.querySelectorAll('.sbi-stat-card');
     if (panel.getAttribute('data-open') === periodo){
       panel.hidden = true;
       panel.setAttribute('data-open','');
-      btns.forEach(function(b){ b.classList.remove('aberto'); b.setAttribute('aria-expanded','false'); });
+      cards.forEach(function(b){ b.classList.remove('aberto'); var t=b.querySelector('.sbi-stat-tap'); if(t) t.setAttribute('aria-expanded','false'); });
       return;
     }
     var movs = _consumoMovs[periodo] || [];
@@ -787,10 +857,11 @@ if ('serviceWorker' in navigator) {
       : '<div class="sbi-mov-vazio">Sem movimentos neste período.</div>';
     panel.hidden = false;
     panel.setAttribute('data-open', periodo);
-    btns.forEach(function(b){
+    cards.forEach(function(b){
       var on = b.getAttribute('data-periodo') === periodo;
       b.classList.toggle('aberto', on);
-      b.setAttribute('aria-expanded', on ? 'true' : 'false');
+      var t = b.querySelector('.sbi-stat-tap');
+      if (t) t.setAttribute('aria-expanded', on ? 'true' : 'false');
     });
   };
 
