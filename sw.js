@@ -1,10 +1,12 @@
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5';
 const CACHE_NAME = `splitbill-${CACHE_VERSION}`;
 
 // Assets to cache on install
 const ASSETS = [
   '/',
   '/index.html',
+  '/style.css',
+  '/app.js',
   '/apple-touch-icon.png'
 ];
 
@@ -52,7 +54,7 @@ self.addEventListener('fetch', (e) => {
   // Network-first for index.html (check for updates)
   // Nota: em GitHub Pages (project page) o caminho é /SplitBill/…,
   // por isso comparamos por sufixo e por modo de navegação.
-  if (e.request.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('/index.html')) {
+  if (e.request.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('/index.html') || url.pathname.endsWith('/style.css') || url.pathname.endsWith('/app.js')) {
     e.respondWith(
       fetch(e.request.url, { cache: 'no-store' }) // no-store: nao reusa HTML stale do CDN/browser
         .then((response) => {
