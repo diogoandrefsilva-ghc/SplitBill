@@ -179,14 +179,43 @@ function atualizarPreco() {
     }
 }
 
+// Abrevia o primeiro nome ("Paulo Conceição" -> "P. Conceição").
+// Nomes simples (uma palavra) ficam inalterados.
+function abreviarPrimeiroNome(nome) {
+    const partes = String(nome).trim().split(/\s+/);
+    if (partes.length < 2) return nome;
+    return partes[0].charAt(0).toUpperCase() + '. ' + partes.slice(1).join(' ');
+}
+let _medirCanvasCtx = null;
+function _larguraTexto(txt, font) {
+    if (!_medirCanvasCtx) _medirCanvasCtx = document.createElement('canvas').getContext('2d');
+    _medirCanvasCtx.font = font;
+    return _medirCanvasCtx.measureText(txt).width;
+}
+// Texto a mostrar num botão de amigo: usa o nome completo se couber numa
+// linha da caixa, senão abrevia o primeiro nome. (btn deve já estar no DOM.)
+function nomeBotaoAmigo(nome, btn) {
+    const abreviado = abreviarPrimeiroNome(nome);
+    if (abreviado === nome) return nome;
+    if (btn && btn.clientWidth) {
+        const cs = getComputedStyle(btn);
+        const avail = btn.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+        const font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+        return _larguraTexto(nome, font) <= avail ? nome : abreviado;
+    }
+    // Sem layout disponível (caixa escondida): heurística por nº de caracteres.
+    return nome.length > 13 ? abreviado : nome;
+}
+
 function renderAmigosBotoes() {
     const grid = document.getElementById('amigos-grid');
     grid.innerHTML = '';
     amigos.forEach(amigo => {
         const btn = document.createElement('button');
         btn.className = 'amigo-btn';
-        btn.textContent = amigo;
         btn.type = 'button';
+        grid.appendChild(btn);
+        btn.textContent = nomeBotaoAmigo(amigo, btn);
         btn.onclick = (e) => {
             e.preventDefault();
             btn.classList.toggle('selected');
@@ -201,7 +230,6 @@ function renderAmigosBotoes() {
             sel.value = Math.min(n, 20);
             atualizarBotaoOrdem();
         };
-        grid.appendChild(btn);
     });
 }
 
@@ -457,8 +485,9 @@ function renderOfertaAmigos() {
     amigos.forEach(amigo => {
         const btn = document.createElement('button');
         btn.className = 'amigo-btn';
-        btn.textContent = amigo;
         btn.type = 'button';
+        grid.appendChild(btn);
+        btn.textContent = nomeBotaoAmigo(amigo, btn);
         btn.onclick = (e) => {
             e.preventDefault();
             btn.classList.toggle('selected');
@@ -473,7 +502,6 @@ function renderOfertaAmigos() {
             sel.value = Math.min(n, 20);
             atualizarBotaoOferta();
         };
-        grid.appendChild(btn);
     });
 }
 
@@ -767,7 +795,7 @@ async function novoEvento() {
     if (!isAdmin()) { mostrarMensagem('⚠️ Apenas o administrador pode criar eventos', false); return; }
     // Por defeito: todos os amigos de eventos anteriores e todos os artigos
     // (nos repetidos fica o preço mais recente).
-    const novosAmigos = amigosAgregadoGlobal();
+    const novosAmigos = amigosPorDefeito();
     const novoMenu = menuAgregadoGlobal();
 
     const novoId = Date.now();
@@ -3057,6 +3085,27 @@ function amigosAgregadoGlobal() {
         (ev.ofertas || []).forEach(o => { add(o.quem); (o.para || []).forEach(add); });
     });
     return lista;
+}
+// Quem efetivamente "veio" a um evento = participou em ordens/ofertas ou pagou.
+// (Não usamos ev.amigos porque essa é só a lista de candidatos pré-preenchida.)
+function presentesNoEvento(ev) {
+    const s = new Set();
+    (ev.ordens || []).forEach(o => (o.amigos || []).forEach(a => { if (a) s.add(a); }));
+    (ev.ofertas || []).forEach(o => { if (o.quem) s.add(o.quem); (o.para || []).forEach(a => { if (a) s.add(a); }); });
+    if (ev.pagador) s.add(ev.pagador);
+    return s;
+}
+// Amigos sugeridos por defeito num novo evento:
+// só quem veio em >= 3 dos últimos 10 eventos, ordenados por quem mais veio.
+function amigosPorDefeito() {
+    const ultimos = historico.slice(-10);
+    const contagem = {};
+    ultimos.forEach(ev => {
+        presentesNoEvento(ev).forEach(a => { contagem[a] = (contagem[a] || 0) + 1; });
+    });
+    return Object.keys(contagem)
+        .filter(a => contagem[a] >= 3)
+        .sort((a, b) => contagem[b] - contagem[a] || a.localeCompare(b, 'pt'));
 }
 
 function sbHeaders(extra = {}) {
