@@ -2392,8 +2392,7 @@ function renderHistoricoDropdown() {
     [...historico].reverse().forEach(ev => {
         const opt = document.createElement('option');
         opt.value = ev.id;
-        const marker = ev.id === eventoAtualId ? ' ✓' : '';
-        opt.textContent = (ev.descricao || 'Sem nome') + ' — ' + ev.data + marker;
+        opt.textContent = (ev.descricao || 'Sem nome') + ' — ' + ev.data;
         sel.appendChild(opt);
     });
 
@@ -2412,23 +2411,12 @@ function renderHistoricoDropdown() {
     const saldosForCards = calcularSaldos();
     panel.innerHTML = [...historico].reverse().map(ev => {
         const isAtual = ev.id === eventoAtualId;
-        let temPendentes = false;
-        if (ev.totalFatura && ev.dividas) {
-            Object.keys(ev.dividas).forEach(p => {
-                const pessoaSaldo = saldosForCards[p];
-                if (pessoaSaldo) {
-                    const evInfo = pessoaSaldo.eventos.find(e => e.eventoId === ev.id);
-                    if (evInfo && evInfo.restante > 0.005) temPendentes = true;
-                }
-            });
-        }
-        const indicador = ev.totalFatura
-            ? (temPendentes ? '<span style="font-size:10px;color:#B3402F;margin-left:6px;">⏳</span>' : '<span style="font-size:10px;color:#0E7A4F;margin-left:6px;">✅</span>')
-            : '<span style="font-size:10px;color:#7C8782;margin-left:6px;">📝</span>';
+        const _ep = (typeof _epocaLabel === 'function') ? _epocaLabel(ev.data) : '';
+        const _dataEp = (ev.data || '—') + (_ep ? ' · ' + _ep : '');
         return `
             <div class="historico-card${isAtual ? ' ativo' : ''}" onclick="${isAtual ? '' : 'navegarHistorico(' + ev.id + ')'}">
-                <div class="historico-card-nome">${ev.descricao || 'Sem nome'}${indicador}</div>
-                <span class="historico-card-data">${ev.data || '—'}</span>
+                <div class="historico-card-nome">${ev.descricao || 'Sem nome'}</div>
+                <span class="historico-card-data">${_dataEp}</span>
                 ${isAdmin() ? `<button class="historico-card-del" onclick="apagarEvento(${ev.id}, event)" title="Apagar evento">🗑️</button>` : ''}
             </div>`;
     }).join('');
@@ -5681,6 +5669,11 @@ if ('serviceWorker' in navigator) {
 #btn-eliminar-evento{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:6px 0 10px;background:#fff;border:1.5px solid var(--rubro,#B3402F);color:var(--rubro,#B3402F);border-radius:12px;padding:13px;font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:15px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;}
 #btn-eliminar-evento:active{transform:scale(.99);background:#FDF2F0;}
 
+/* Novo Evento — botão primário no fundo do hub */
+.sbi-newbottom{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;margin-top:18px;background:var(--verde,#0E7A4F);border:none;color:#fff;border-radius:14px;padding:15px;font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:16px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;box-shadow:0 5px 16px -7px rgba(14,122,79,.65);}
+.sbi-newbottom svg{width:20px;height:20px;}
+.sbi-newbottom:active{transform:scale(.99);}
+
 </style>
 <script>
 /* ===== Ecrã inicial (hub) — SplitBill ===== */
@@ -5826,13 +5819,12 @@ if ('serviceWorker' in navigator) {
     if (abertos.length){
       h += '<div class="sbi-eyebrow">Em aberto <span class="sbi-count">'+abertos.length+'</span></div>';
       h += '<div class="sbi-list">'+abertos.map(cardAberto).join('')+'</div>';
-      if (admin) h += '<button class="sbi-tap sbi-newquiet" onclick="sbiNovo()" aria-label="Novo Evento">'+ICO.novo+'<span>Novo evento</span></button>';
       h += '<div class="sbi-eyebrow">Mais</div>';
     } else {
-      if (admin) h += '<button class="sbi-tap sbi-hero" onclick="sbiNovo()" aria-label="Novo Evento"><span class="sbi-ico">'+ICO.novo+'</span><span><span class="sbi-hname">Novo Evento</span><span class="sbi-hdesc">Criar almoço, jantar ou convívio</span></span></button>';
       h += '<div class="sbi-eyebrow">Atalhos</div>';
     }
     h += '<div class="sbi-list">'+atalhos()+'</div>';
+    if (admin) h += '<button class="sbi-tap sbi-newbottom" onclick="sbiNovo()" aria-label="Novo Evento">'+ICO.novo+'<span>Novo Evento</span></button>';
     el.innerHTML = h;
   };
 
