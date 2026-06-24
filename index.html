@@ -2048,7 +2048,7 @@ function adicionarOrdem() {
     const precoTotal = precoUnitario * quantidade;
 
     const ordem = {
-        id: Date.now(),
+        id: nextId(),
         item: item,
         quantidade: quantidade,
         precoUnitario: precoUnitario,
@@ -2305,7 +2305,7 @@ function adicionarOferta() {
     const precoTotal = menu[item] * qtd;
 
     estado.ofertas.push({
-        id: Date.now(),
+        id: nextId(),
         quem,
         item,
         quantidade: qtd,
@@ -4206,7 +4206,7 @@ async function registarPagamento() {
         : new Date().toLocaleDateString('pt-PT', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
 
     const novoPgto = {
-        id: Date.now(),
+        id: nextId(),
         pessoa,
         valor,
         tipo: 'evento',
@@ -5061,6 +5061,63 @@ async function sbCarregarDados() {
     }
 }
 
+// ── IDs únicos e monotónicos ────────────────────────────────────────────────
+// Date.now() pode repetir-se no mesmo milissegundo (duas ordens em toques
+// rápidos). Com UPSERT, dois ids iguais fundem-se numa só linha → perda
+// silenciosa. nextId() garante ids estritamente crescentes dentro da sessão.
+let _lastId = 0;
+function nextId() {
+    let id = Date.now();
+    if (id <= _lastId) id = _lastId + 1;
+    _lastId = id;
+    return id;
+}
+
+// Lança em caso de resposta não-OK do PostgREST, para a gravação ABORTAR antes
+// de apagar seja o que for (em vez de continuar e perder dados em silêncio).
+async function sbOk(res, ctx) {
+    if (res && res.ok) return res;
+    let det = '';
+    try { det = JSON.stringify(await res.json()); } catch(_) {}
+    throw new Error(`${ctx} → HTTP ${res ? res.status : '?'} ${det}`);
+}
+
+// Sincroniza uma tabela-pai (ordens/ofertas) + a tabela-filho respetiva
+// (ordem_amigos/oferta_para) com o padrão UPSERT + PRUNE: insere/atualiza tudo
+// PRIMEIRO e só DEPOIS remove o que sobra. Nunca apaga linhas-pai antes de a
+// inserção das novas estar confirmada — elimina a perda do bug DELETE→INSERT.
+async function sbSyncFilhos(tabelaPai, tabelaFilho, fkFilho, eventoId, itens) {
+    const ids = itens.map(i => i.row.id);
+    if (itens.length > 0) {
+        // 1) UPSERT das linhas-pai (cria/atualiza pela PK id)
+        await sbOk(await sbFetch(`${SB_URL}/rest/v1/${tabelaPai}`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+            body: JSON.stringify(itens.map(i => i.row))
+        }), `upsert ${tabelaPai}`);
+        // 2) Repor as linhas-filho destas linhas-pai (delete dirigido a estes ids + reinsert)
+        await sbOk(await sbFetch(`${SB_URL}/rest/v1/${tabelaFilho}?${fkFilho}=in.(${ids.join(',')})`, {
+            method: 'DELETE', headers: sbHeaders()
+        }), `limpar ${tabelaFilho}`);
+        const filhos = itens.flatMap(i => i.filhos);
+        if (filhos.length > 0) {
+            await sbOk(await sbFetch(`${SB_URL}/rest/v1/${tabelaFilho}`, {
+                method: 'POST', headers: sbHeaders({ 'Prefer': 'return=minimal' }),
+                body: JSON.stringify(filhos)
+            }), `inserir ${tabelaFilho}`);
+        }
+        // 3) PRUNE: remover linhas-pai deste evento que já não existem (só após upsert OK)
+        await sbOk(await sbFetch(`${SB_URL}/rest/v1/${tabelaPai}?evento_id=eq.${eventoId}&id=not.in.(${ids.join(',')})`, {
+            method: 'DELETE', headers: sbHeaders()
+        }), `prune ${tabelaPai}`);
+    } else {
+        // Sem itens = limpeza intencional (utilizador removeu tudo)
+        await sbOk(await sbFetch(`${SB_URL}/rest/v1/${tabelaPai}?evento_id=eq.${eventoId}`, {
+            method: 'DELETE', headers: sbHeaders()
+        }), `limpar ${tabelaPai}`);
+    }
+}
+
 async function sbGuardarEvento(ev) {
     if (!_sbSession) return;
     try {
@@ -5080,23 +5137,24 @@ async function sbGuardarEvento(ev) {
             });
         }
 
-        // Apagar ordens/ofertas antigas e reinserir
-        await sbFetch(`${SB_URL}/rest/v1/ordens?evento_id=eq.${ev.id}`, { method: 'DELETE', headers: sbHeaders() });
-        if (ev.ordens && ev.ordens.length > 0) {
-            const ordens = ev.ordens.map(o => ({ id: o.id, evento_id: ev.id, item: o.item, quantidade: o.quantidade, preco_unitario: o.precoUnitario, preco_total: o.precoTotal, hora: o.hora }));
-            await sbFetch(`${SB_URL}/rest/v1/ordens`, { method: 'POST', headers: sbHeaders({ 'Prefer': 'return=representation' }), body: JSON.stringify(ordens) });
-            const ordemAmigos = ev.ordens.flatMap(o => (o.amigos || []).map(a => ({ ordem_id: o.id, amigo: a })));
-            if (ordemAmigos.length > 0) await sbFetch(`${SB_URL}/rest/v1/ordem_amigos`, { method: 'POST', headers: sbHeaders(), body: JSON.stringify(ordemAmigos) });
-        }
-
-        await sbFetch(`${SB_URL}/rest/v1/ofertas?evento_id=eq.${ev.id}`, { method: 'DELETE', headers: sbHeaders() });
-        if (ev.ofertas && ev.ofertas.length > 0) {
-            const ofertas = ev.ofertas.map(o => ({ id: o.id, evento_id: ev.id, quem: o.quem, item: o.item, quantidade: o.quantidade, preco_unitario: o.precoUnitario, preco_total: o.precoTotal, hora: o.hora }));
-            await sbFetch(`${SB_URL}/rest/v1/ofertas`, { method: 'POST', headers: sbHeaders({ 'Prefer': 'return=representation' }), body: JSON.stringify(ofertas) });
-            const ofertaPara = ev.ofertas.flatMap(o => (o.para || []).map(a => ({ oferta_id: o.id, amigo: a })));
-            if (ofertaPara.length > 0) await sbFetch(`${SB_URL}/rest/v1/oferta_para`, { method: 'POST', headers: sbHeaders(), body: JSON.stringify(ofertaPara) });
-        }
-    } catch(e) { console.error('Erro ao guardar evento no Supabase:', e); }
+        // Sincronizar ordens e ofertas com UPSERT+PRUNE (nunca apaga antes de inserir)
+        await sbSyncFilhos('ordens', 'ordem_amigos', 'ordem_id', ev.id,
+            (ev.ordens || []).map(o => ({
+                row: { id: o.id, evento_id: ev.id, item: o.item, quantidade: o.quantidade, preco_unitario: o.precoUnitario, preco_total: o.precoTotal, hora: o.hora },
+                filhos: (o.amigos || []).map(a => ({ ordem_id: o.id, amigo: a }))
+            }))
+        );
+        await sbSyncFilhos('ofertas', 'oferta_para', 'oferta_id', ev.id,
+            (ev.ofertas || []).map(o => ({
+                row: { id: o.id, evento_id: ev.id, quem: o.quem, item: o.item, quantidade: o.quantidade, preco_unitario: o.precoUnitario, preco_total: o.precoTotal, hora: o.hora },
+                filhos: (o.para || []).map(a => ({ oferta_id: o.id, amigo: a }))
+            }))
+        );
+    } catch(e) {
+        console.error('Erro ao guardar evento no Supabase:', e);
+        mostrarMensagem('⚠️ Falha ao guardar no servidor — as alterações podem NÃO ter sido gravadas. Verifica a ligação e tenta de novo.', false);
+        throw e;
+    }
 }
 
 async function sbGuardarPagamento(p) {
