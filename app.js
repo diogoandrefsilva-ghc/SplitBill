@@ -2728,6 +2728,28 @@ function renderConfigAmigos() {
             <button class="secondary" onclick="toggleEditAmigo(${i})">✕</button>
         </div>`;
     }).join('');
+    renderSugestoesAmigos();
+}
+
+// Sugestões para o campo "adicionar amigo": amigos de eventos anteriores que
+// ainda não estão neste evento, com os que têm conta no topo. Mantém a grafia
+// canónica para evitar incoerências (ex.: "João Matias" em vez de "J Matias").
+function renderSugestoesAmigos() {
+    const dl = document.getElementById('amigos-sugeridos');
+    if (!dl) return;
+    const jaTem = new Set(amigos);
+    const candidatos = amigosAgregadoGlobal().filter(a => !jaTem.has(a));
+    candidatos.sort((a, b) => {
+        const ca = amigoUsers[a] ? 0 : 1, cb = amigoUsers[b] ? 0 : 1;
+        return ca - cb || a.localeCompare(b, 'pt');
+    });
+    const esc = s => String(s).replace(/"/g, '&quot;');
+    dl.innerHTML = candidatos.map(a => {
+        const lbl = amigoUsers[a]
+            ? (isAdmin() ? `✓ conta · ${amigoUsers[a]}` : '✓ tem conta')
+            : 'de eventos anteriores';
+        return `<option value="${esc(a)}" label="${esc(lbl)}"></option>`;
+    }).join('');
 }
 
 function toggleEditAmigo(i) {
@@ -2765,9 +2787,12 @@ function guardarEdicaoAmigo(i) {
 
 function adicionarAmigo() {
     const input = document.getElementById('novo-amigo');
-    const nome = input.value.trim();
+    let nome = input.value.trim();
     if (!nome) return;
-    if (amigos.includes(nome)) { alert('Amigo já existe'); return; }
+    // Reutilizar a grafia canónica de um amigo já conhecido (evita "samuel"/"Samuel").
+    const match = amigosAgregadoGlobal().find(a => a.toLowerCase() === nome.toLowerCase());
+    if (match) nome = match;
+    if (amigos.some(a => a.toLowerCase() === nome.toLowerCase())) { alert('Amigo já existe'); return; }
     amigos.push(nome);
     guardarConfigs();
     renderConfigAmigos();
