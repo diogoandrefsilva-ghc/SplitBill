@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const CACHE_NAME = `splitbill-${CACHE_VERSION}`;
 
 // Assets to cache on install
@@ -35,9 +35,7 @@ self.addEventListener('activate', (e) => {
       );
     })
   );
-  self.clients.matchAll().then((clients) => {
-    clients.forEach((client) => client.postMessage({ type: 'CLAIM' }));
-  });
+  self.clients.claim();
 });
 
 self.addEventListener('fetch', (e) => {
