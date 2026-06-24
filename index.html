@@ -312,7 +312,8 @@ window.sbEsconderSplash = function(){
         <div class="config-section-label">👥 Amigos</div>
         <div id="config-amigos-lista"></div>
         <div class="config-add-row">
-            <input type="text" id="novo-amigo" placeholder="Nome do amigo">
+            <input type="text" id="novo-amigo" placeholder="Nome do amigo" list="amigos-sugeridos" autocomplete="off">
+            <datalist id="amigos-sugeridos"></datalist>
             <button onclick="adicionarAmigo()">+ Adicionar</button>
         </div>
 
