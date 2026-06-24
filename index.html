@@ -602,6 +602,30 @@ if ('serviceWorker' in navigator) {
 .sbi-stat-label{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft,#5B6661);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sbi-stat-val{font-family:var(--mono,'IBM Plex Mono',monospace);font-size:20px;font-weight:600;color:var(--verde-tinta,#0E5C3F);letter-spacing:-.01em;}
 
+/* Cards de consumo tocáveis (detalhe de movimentos) */
+.sbi-stat-tap{cursor:pointer;text-align:left;font:inherit;transition:transform .12s,border-color .12s,box-shadow .12s;}
+.sbi-stat-tap:active{transform:scale(.985);}
+@media (prefers-reduced-motion:reduce){.sbi-stat-tap:active{transform:none;}}
+.sbi-stat-tap.aberto{border-color:var(--verde,#0E7A4F);box-shadow:0 0 0 1px var(--verde,#0E7A4F),0 1px 3px rgba(11,59,43,.06);}
+.sbi-stat-hint{margin-top:3px;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-soft,#5B6661);display:flex;align-items:center;gap:4px;}
+.sbi-stat-hint svg{width:12px;height:12px;transition:transform .15s;}
+.sbi-stat-tap.aberto .sbi-stat-hint svg{transform:rotate(90deg);}
+.sbi-mov-panel{margin:-2px 0 6px;background:var(--card,#fff);border:1px solid var(--linha,#DDE3DD);border-radius:14px;padding:4px 4px;box-shadow:0 1px 3px rgba(11,59,43,.05);animation:sbiMovIn .18s ease;}
+@keyframes sbiMovIn{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:none;}}
+.sbi-mov-list{display:flex;flex-direction:column;}
+.sbi-mov{display:flex;align-items:center;gap:10px;padding:9px 10px;border-bottom:1px solid #EDF0EC;}
+.sbi-mov:last-child{border-bottom:0;}
+.sbi-mov-info{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px;}
+.sbi-mov-nome{font-weight:600;font-size:14px;color:var(--ink,#1B231F);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sbi-mov-data{font-size:11px;color:var(--ink-soft,#5B6661);font-family:var(--mono,monospace);}
+.sbi-mov-val{flex:0 0 auto;font-family:var(--mono,'IBM Plex Mono',monospace);font-weight:600;font-size:14px;color:var(--verde-tinta,#0E5C3F);}
+.sbi-mov-st{flex:0 0 auto;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;}
+.sbi-mov-st svg{width:13px;height:13px;}
+.sbi-mov-st.pago{background:var(--verde-claro,#E2EFE8);color:var(--verde-tinta,#0E5C3F);}
+.sbi-mov-st.falta{background:rgba(179,64,47,.12);color:var(--rubro,#B3402F);}
+.sbi-mov-st.parcial{background:var(--dourado-claro,#FBF4DC);color:#8a6d12;}
+.sbi-mov-vazio{padding:13px;text-align:center;font-size:12px;color:var(--ink-soft,#5B6661);}
+
 
 /* Meta data/época do evento (sobre fundo verde) */
 #evento-meta{margin-top:8px;text-align:center;font-family:var(--mono,'IBM Plex Mono',monospace);font-size:12px;font-weight:500;color:rgba(255,255,255,0.7);letter-spacing:.04em;}
@@ -630,6 +654,9 @@ if ('serviceWorker' in navigator) {
     down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 10 12 16 18 10"/></svg>'
   };
   var CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>';
+  var CHK  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12 10 17 19 7"/></svg>';
+  var CIRC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><circle cx="12" cy="12" r="8"/></svg>';
+  var HALF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" stroke="none"/></svg>';
 
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function eur(v){ try { return new Intl.NumberFormat('pt-PT',{style:'currency',currency:'EUR'}).format(v||0); } catch(e){ return '\u20ac'+(Number(v)||0).toFixed(2); } }
@@ -640,6 +667,7 @@ if ('serviceWorker' in navigator) {
   function nFechados(){ return getHist().filter(function(ev){ return !!ev.totalFatura; }).length; }
 
   // Consumo (quota) do utilizador: mês civil corrente e época (início 15/jul)
+  // Devolve também o detalhe dos movimentos (jogo + a minha despesa + estado pago) por período.
   function consumoUtilizador(){
     var mine = [];
     try { if (typeof meusAmigos==='function') mine = meusAmigos() || []; } catch(e){ mine = []; }
@@ -648,7 +676,25 @@ if ('serviceWorker' in navigator) {
     var anoEp = hoje.getFullYear();
     if (hoje.getTime() < new Date(anoEp, 6, 15).getTime()) anoEp -= 1;
     var inicioEpoca = new Date(anoEp, 6, 15).getTime();
+
+    // Restante por pagar (dívida) por evento, para os amigos do utilizador.
+    // Se o utilizador foi o pagador, não há dívida — fica como pago.
+    var restPorEvento = {};
+    try {
+      if (typeof calcularSaldos==='function'){
+        var saldos = calcularSaldos() || {};
+        mine.forEach(function(a){
+          var s = saldos[a];
+          if (!s || !s.eventos) return;
+          s.eventos.forEach(function(e){
+            restPorEvento[e.eventoId] = (restPorEvento[e.eventoId]||0) + (e.restante||0);
+          });
+        });
+      }
+    } catch(e){}
+
     var somaMes = 0, somaEpoca = 0;
+    var movsMes = [], movsEpoca = [];
     getHist().forEach(function(ev){
       if (!ev.totalFatura) return;
       var ts = (typeof _parsePgtoData==='function') ? _parsePgtoData(ev.data) : 0;
@@ -658,27 +704,93 @@ if ('serviceWorker' in navigator) {
       var meu = 0;
       mine.forEach(function(a){ if (cf[a]) meu += cf[a]; });
       if (meu <= 0.005) return;
-      if (ts >= inicioEpoca) somaEpoca += meu;
-      if (ts >= inicioMes) somaMes += meu;
+      var rest = restPorEvento[ev.id] || 0;
+      var mov = {
+        nome: ev.descricao || 'Sem nome',
+        data: ev.data || '',
+        valor: Math.round(meu*100)/100,
+        pago: rest <= 0.005,
+        parcial: rest > 0.005 && rest < meu - 0.005,
+        ts: ts
+      };
+      if (ts >= inicioEpoca){ somaEpoca += meu; movsEpoca.push(mov); }
+      if (ts >= inicioMes){ somaMes += meu; movsMes.push(mov); }
     });
+    movsMes.sort(function(a,b){ return b.ts - a.ts; });
+    movsEpoca.sort(function(a,b){ return b.ts - a.ts; });
+
     var nomeMes = 'mês';
     try { nomeMes = hoje.toLocaleDateString('pt-PT', { month:'long' }); } catch(e){}
     nomeMes = nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1);
     function pad2(n){ n = String(n); return n.length<2 ? '0'+n : n; }
     var labelEpoca = pad2(anoEp%100) + '/' + pad2((anoEp+1)%100);
     return { mes: Math.round(somaMes*100)/100, epoca: Math.round(somaEpoca*100)/100,
-             temAmigo: mine.length>0, labelMes: nomeMes, labelEpoca: labelEpoca };
+             temAmigo: mine.length>0, labelMes: nomeMes, labelEpoca: labelEpoca,
+             movsMes: movsMes, movsEpoca: movsEpoca };
+  }
+
+  // Detalhe dos movimentos guardado para o toggle dos cards
+  var _consumoMovs = { mes: [], epoca: [] };
+
+  function movItem(m){
+    var st = m.pago
+      ? '<span class="sbi-mov-st pago" title="Pago">'+CHK+'</span>'
+      : (m.parcial
+          ? '<span class="sbi-mov-st parcial" title="Parcialmente pago">'+HALF+'</span>'
+          : '<span class="sbi-mov-st falta" title="Por pagar">'+CIRC+'</span>');
+    return '<div class="sbi-mov">'
+      + '<span class="sbi-mov-info"><span class="sbi-mov-nome">'+esc(m.nome)+'</span>'
+      + (m.data ? '<span class="sbi-mov-data">'+esc(m.data)+'</span>' : '')
+      + '</span>'
+      + '<span class="sbi-mov-val">'+eur(m.valor)+'</span>'
+      + st + '</div>';
   }
 
   function statsConsumo(){
     var c = consumoUtilizador();
     if (!c.temAmigo) return '';
+    _consumoMovs = { mes: c.movsMes, epoca: c.movsEpoca };
+    function card(periodo, label, val, n){
+      var hint = n
+        ? n + (n===1?' movimento ':' movimentos ') + CHEV
+        : 'Sem movimentos';
+      return '<button type="button" class="sbi-stat sbi-stat-tap" data-periodo="'+periodo+'"'
+        + ' onclick="sbiToggleConsumo(\''+periodo+'\')" aria-expanded="false"'+(n?'':' disabled')+'>'
+        + '<span class="sbi-stat-label">' + esc(label) + '</span>'
+        + '<span class="sbi-stat-val">' + eur(val) + '</span>'
+        + '<span class="sbi-stat-hint">' + hint + '</span>'
+        + '</button>';
+    }
     return '<div class="sbi-eyebrow">O teu consumo</div>'
       + '<div class="sbi-stats">'
-      + '<div class="sbi-stat"><span class="sbi-stat-label">' + esc(c.labelMes) + '</span><span class="sbi-stat-val">' + eur(c.mes) + '</span></div>'
-      + '<div class="sbi-stat"><span class="sbi-stat-label">Época ' + esc(c.labelEpoca) + '</span><span class="sbi-stat-val">' + eur(c.epoca) + '</span></div>'
-      + '</div>';
+      + card('mes', c.labelMes, c.mes, c.movsMes.length)
+      + card('epoca', 'Época ' + c.labelEpoca, c.epoca, c.movsEpoca.length)
+      + '</div>'
+      + '<div class="sbi-mov-panel" id="sbi-mov-panel" data-open="" hidden></div>';
   }
+
+  window.sbiToggleConsumo = function(periodo){
+    var panel = document.getElementById('sbi-mov-panel');
+    if (!panel) return;
+    var btns = document.querySelectorAll('.sbi-stat-tap');
+    if (panel.getAttribute('data-open') === periodo){
+      panel.hidden = true;
+      panel.setAttribute('data-open','');
+      btns.forEach(function(b){ b.classList.remove('aberto'); b.setAttribute('aria-expanded','false'); });
+      return;
+    }
+    var movs = _consumoMovs[periodo] || [];
+    panel.innerHTML = movs.length
+      ? '<div class="sbi-mov-list">' + movs.map(movItem).join('') + '</div>'
+      : '<div class="sbi-mov-vazio">Sem movimentos neste período.</div>';
+    panel.hidden = false;
+    panel.setAttribute('data-open', periodo);
+    btns.forEach(function(b){
+      var on = b.getAttribute('data-periodo') === periodo;
+      b.classList.toggle('aberto', on);
+      b.setAttribute('aria-expanded', on ? 'true' : 'false');
+    });
+  };
 
   function pagInfo(){
     var saldos = {};
