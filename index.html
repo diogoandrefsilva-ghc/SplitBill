@@ -599,7 +599,7 @@ if ('serviceWorker' in navigator) {
 
 /* Cards de consumo (quota do utilizador) */
 .sbi-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px;}
-.sbi-stat{background:var(--card,#fff);border:1px solid var(--linha,#DDE3DD);border-radius:14px;padding:13px 14px 11px;display:flex;flex-direction:column;gap:5px;box-shadow:0 1px 3px rgba(11,59,43,.05);min-width:0;}
+.sbi-stat{background:var(--verde-claro,#E2EFE8);border:1px solid var(--linha,#DDE3DD);border-radius:14px;padding:13px 14px 11px;display:flex;flex-direction:column;gap:5px;box-shadow:0 1px 3px rgba(11,59,43,.05);min-width:0;}
 .sbi-stat-head{display:flex;align-items:center;gap:6px;}
 .sbi-stat-label{flex:1 1 auto;min-width:0;text-align:center;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft,#5B6661);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sbi-stat-val{font-family:var(--mono,'IBM Plex Mono',monospace);font-size:20px;font-weight:600;color:var(--verde-tinta,#0E5C3F);letter-spacing:-.01em;}
@@ -624,10 +624,10 @@ if ('serviceWorker' in navigator) {
 .sbi-stat-card.aberto .sbi-stat-hint svg{transform:rotate(90deg);}
 /* Top 3 itens mais consumidos do período (por baixo da despesa) */
 .sbi-stat-top{margin-top:9px;padding-top:8px;border-top:1px solid var(--linha,#DDE3DD);display:flex;flex-direction:column;gap:4px;}
-.sbi-stat-top-head{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft,#5B6661);}
-.sbi-stat-top-soma{font-family:var(--mono,'IBM Plex Mono',monospace);font-size:11px;font-weight:600;color:var(--verde-tinta,#0E5C3F);letter-spacing:-.01em;}
+.sbi-stat-top-head{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft,#5B6661);}
 .sbi-stat-top-row{display:flex;align-items:baseline;justify-content:space-between;gap:8px;}
 .sbi-stat-top-nome{flex:1 1 auto;min-width:0;font-size:12px;font-weight:500;color:var(--ink,#1B231F);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sbi-stat-top-qtd{margin-left:5px;font-size:10px;font-weight:500;color:#9AA39E;}
 .sbi-stat-top-val{flex:0 0 auto;font-family:var(--mono,'IBM Plex Mono',monospace);font-size:11.5px;font-weight:600;color:var(--ink-soft,#5B6661);}
 .sbi-mov-panel{margin:-2px 0 6px;background:var(--card,#fff);border:1px solid var(--linha,#DDE3DD);border-radius:14px;padding:4px 4px;box-shadow:0 1px 3px rgba(11,59,43,.05);animation:sbiMovIn .18s ease;}
 @keyframes sbiMovIn{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:none;}}
@@ -681,6 +681,8 @@ if ('serviceWorker' in navigator) {
 
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function eur(v){ try { return new Intl.NumberFormat('pt-PT',{style:'currency',currency:'EUR'}).format(v||0); } catch(e){ return '\u20ac'+(Number(v)||0).toFixed(2); } }
+  // Quantidade consumida (pode ser fracionada por partilha): inteiro sem casas, sen\u00e3o 1 casa.
+  function fmtQtd(q){ var r = Math.round((Number(q)||0)*10)/10; return (r % 1 === 0) ? String(r) : r.toFixed(1).replace('.', ','); }
   function ehAdmin(){ return (typeof isAdmin==='function') && isAdmin(); }
   function getHist(){ try { return (typeof historico!=='undefined' && Array.isArray(historico)) ? historico : []; } catch(e){ return []; } }
 
@@ -754,9 +756,11 @@ if ('serviceWorker' in navigator) {
         var meusNaOrdem = 0;
         o.amigos.forEach(function(a){ if (mine.indexOf(a) !== -1) meusNaOrdem++; });
         if (!meusNaOrdem) return;
-        var v = (o.precoTotal / o.amigos.length) * meusNaOrdem;
+        var frac = meusNaOrdem / o.amigos.length;
         var nome = o.item || 'Item';
-        itens[nome] = (itens[nome] || 0) + v;
+        if (!itens[nome]) itens[nome] = { valor: 0, qtd: 0 };
+        itens[nome].valor += o.precoTotal * frac;
+        itens[nome].qtd += (o.quantidade || 0) * frac;
       });
       var rest = restPorEvento[ev.id] || 0;
       movs.push({
@@ -803,18 +807,21 @@ if ('serviceWorker' in navigator) {
     _consumoTodos.forEach(function(m){
       if (m.ts >= p.ini && m.ts < p.fim){
         movs.push(m); soma += m.valor;
-        if (m.itens) Object.keys(m.itens).forEach(function(k){ itensAgg[k] = (itensAgg[k]||0) + m.itens[k]; });
+        if (m.itens) Object.keys(m.itens).forEach(function(k){
+          if (!itensAgg[k]) itensAgg[k] = { valor: 0, qtd: 0 };
+          itensAgg[k].valor += m.itens[k].valor;
+          itensAgg[k].qtd += m.itens[k].qtd;
+        });
       }
     });
-    // 3 itens mais consumidos (por valor) no período + total combinado.
+    // 3 itens mais consumidos (por valor) no período, com a quantidade.
     var top = Object.keys(itensAgg)
-      .map(function(k){ return { nome: k, valor: Math.round(itensAgg[k]*100)/100 }; })
+      .map(function(k){ return { nome: k, valor: Math.round(itensAgg[k].valor*100)/100, qtd: itensAgg[k].qtd }; })
       .sort(function(a,b){ return b.valor - a.valor; })
       .slice(0, 3);
-    var topSoma = Math.round(top.reduce(function(s,t){ return s + t.valor; }, 0) * 100) / 100;
     var temAntes = _consumoTodos.some(function(m){ return m.ts < p.ini; });
     return { label: p.label, soma: Math.round(soma*100)/100, movs: movs,
-             top: top, topSoma: topSoma,
+             top: top,
              prevOff: !temAntes, nextOff: off >= 0 };
   }
 
@@ -827,8 +834,8 @@ if ('serviceWorker' in navigator) {
     var hint = n ? n + (n===1?' evento ':' eventos ') + CHEV : 'Sem eventos';
     var top = (d.top && d.top.length)
       ? '<div class="sbi-stat-top">'
-        + '<div class="sbi-stat-top-head"><span>Top 3 itens</span><span class="sbi-stat-top-soma">'+eur(d.topSoma)+'</span></div>'
-        + d.top.map(function(t){ return '<div class="sbi-stat-top-row"><span class="sbi-stat-top-nome">'+esc(t.nome)+'</span><span class="sbi-stat-top-val">'+eur(t.valor)+'</span></div>'; }).join('')
+        + '<div class="sbi-stat-top-head">Top 3 itens</div>'
+        + d.top.map(function(t){ return '<div class="sbi-stat-top-row"><span class="sbi-stat-top-nome">'+esc(t.nome)+'<span class="sbi-stat-top-qtd">×'+fmtQtd(t.qtd)+'</span></span><span class="sbi-stat-top-val">'+eur(t.valor)+'</span></div>'; }).join('')
         + '</div>'
       : '';
     return '<div class="sbi-stat-head">'
