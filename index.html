@@ -1426,6 +1426,19 @@ html,body{touch-action:pan-x pan-y}
 </head>
 <body>
 
+<!-- Splash de arranque (tapa o estado cru do HTML enquanto o JS inicializa) -->
+<div id="sb-splash" style="position:fixed;inset:0;z-index:100000;background:#0B3B2B;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;transition:opacity .26s ease;">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:34px;letter-spacing:.14em;color:#fff;text-transform:uppercase;">SplitBill</div>
+    <div style="width:30px;height:30px;border:3px solid rgba(255,255,255,.22);border-top-color:#fff;border-radius:50%;animation:sbspin .8s linear infinite;"></div>
+</div>
+<style>@keyframes sbspin{to{transform:rotate(360deg)}}</style>
+<script>
+window.sbEsconderSplash = function(){
+    var s = document.getElementById('sb-splash');
+    if (s && s.style.display !== 'none') { s.style.opacity = '0'; setTimeout(function(){ if (s) s.style.display = 'none'; }, 280); }
+};
+</script>
+
 <!-- ═══ ECRÃ DE LOGIN ═══ -->
 <div id="page-login" style="display:none;position:fixed;inset:0;z-index:9999;flex-direction:column;overflow-y:auto;">
     <!-- Header igual à app -->
@@ -3454,6 +3467,7 @@ function salvarPagamentos() {
 
 function mudarPagina(pagina) {
     _paginaAtual = pagina;
+    if (window.sbEsconderSplash) window.sbEsconderSplash();
     try { localStorage.setItem('sb_pagina', pagina); } catch(e) {}
     var _pi = document.getElementById('page-inicio');
     if (_pi) _pi.style.display = pagina === 'inicio' ? '' : 'none';
@@ -4913,6 +4927,7 @@ async function sbInit() {
 
 function sbMostrarLogin() {
     document.getElementById('page-login').style.display = 'flex';
+    if (window.sbEsconderSplash) window.sbEsconderSplash();
     document.getElementById('page-sem-acesso').style.display = 'none';
     document.getElementById('page-admin').style.display = 'none';
 }
@@ -5434,6 +5449,7 @@ if (document.readyState === 'loading') {
 } else {
   sbInit();
 }
+setTimeout(function(){ if (window.sbEsconderSplash) window.sbEsconderSplash(); }, 6000);
 </script>
 
 <script>
