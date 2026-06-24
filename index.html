@@ -1530,14 +1530,15 @@ html,body{touch-action:pan-x pan-y}
 
 <!-- Event context bar (only visible on Eventos tab) -->
 <div id="header-evento-context">
-    <input type="text" id="descricao-evento" placeholder="Descrição do evento (ex: Almoço Sá 19 Abril)" maxlength="80"
-        oninput="estado.descricaoEvento=this.value;salvarNoLocalStorage()">
-    <div class="header-nav" style="margin-top:10px;">
-        <select id="historico-select" onchange="navegarHistorico(this.value)" style="display:none;">
-            <option value="">📚 Histórico de eventos</option>
-        </select>
-        <button id="btn-eliminar-evento" onclick="apagarEventoAtual()" style="display:none;background:#fff;border:1.5px solid #B3402F;color:#B3402F;">🗑️ Eliminar evento</button>
+    <div class="evt-title-row">
+        <input type="text" id="descricao-evento" placeholder="Descrição do evento (ex: Almoço Sá 19 Abril)" maxlength="80"
+            oninput="estado.descricaoEvento=this.value;salvarNoLocalStorage()">
+        <button id="btn-eliminar-evento" onclick="apagarEventoAtual()" title="Eliminar evento" style="display:none;">🗑️</button>
     </div>
+    <div id="evento-meta" style="display:none;"></div>
+    <select id="historico-select" onchange="navegarHistorico(this.value)" style="display:none;">
+        <option value="">📚 Histórico de eventos</option>
+    </select>
     <div class="historico-panel" id="historico-panel"></div>
 
 </div>
@@ -3270,6 +3271,18 @@ function atualizarReadOnly() {
     aplicarPermissoesEdicao();
 }
 
+// Devolve a etiqueta da época (ex.: "25/26") para uma data dd/mm/aaaa, com corte a 15/jul.
+function _epocaLabel(dataStr) {
+    const ts = (typeof _parsePgtoData === 'function') ? _parsePgtoData(dataStr) : 0;
+    if (!ts) return '';
+    const d = new Date(ts);
+    const ano = d.getFullYear();
+    const corte = new Date(ano, 6, 15).getTime();
+    const anoEp = (ts >= corte) ? ano : ano - 1;
+    function p2(n){ n = String(n); return n.length < 2 ? '0' + n : n; }
+    return p2(anoEp % 100) + '/' + p2((anoEp + 1) % 100);
+}
+
 // Aplica as restrições de edição em função do utilizador (admin vs substituto vs consulta).
 function aplicarPermissoesEdicao() {
     const ev = historico.find(h => h.id === eventoAtualId);
@@ -3279,9 +3292,22 @@ function aplicarPermissoesEdicao() {
     const bSpan = banner ? banner.querySelector('span') : null;
     const bBtn = banner ? banner.querySelector('button') : null;
 
-    // Eliminar evento — só admin e com evento carregado
+    // Eliminar evento — só admin e com o jogo ainda aberto (não fechado)
     const btnEliminar = document.getElementById('btn-eliminar-evento');
-    if (btnEliminar) btnEliminar.style.display = (admin && ev) ? '' : 'none';
+    if (btnEliminar) btnEliminar.style.display = (admin && ev && !ev.totalFatura) ? '' : 'none';
+    // Combo para alternar entre jogos — visível quando o jogo está fechado (histórico)
+    const _combo = document.getElementById('historico-select');
+    if (_combo) {
+        const _fechado = !!(ev && ev.totalFatura);
+        _combo.style.display = _fechado ? '' : 'none';
+        if (_fechado) _combo.value = String(ev.id);
+    }
+    // Meta do título: data + época (corte a 15/jul)
+    const _meta = document.getElementById('evento-meta');
+    if (_meta) {
+        if (ev && ev.data) { _meta.textContent = ev.data + ' · Época ' + _epocaLabel(ev.data); _meta.style.display = ''; }
+        else { _meta.style.display = 'none'; _meta.textContent = ''; }
+    }
 
     // Caixa de nomeação de substituto (só admin)
     renderSubstitutoBox(ev);
@@ -5643,6 +5669,14 @@ if ('serviceWorker' in navigator) {
 .sbi-stat{background:var(--card,#fff);border:1px solid var(--linha,#DDE3DD);border-radius:14px;padding:13px 14px 11px;display:flex;flex-direction:column;gap:5px;box-shadow:0 1px 3px rgba(11,59,43,.05);min-width:0;}
 .sbi-stat-label{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft,#5B6661);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sbi-stat-val{font-family:var(--mono,'IBM Plex Mono',monospace);font-size:20px;font-weight:600;color:var(--verde-tinta,#0E5C3F);letter-spacing:-.01em;}
+
+/* Barra de título do evento (título + eliminar + meta + combo) */
+.evt-title-row{display:flex;align-items:center;gap:8px;}
+.evt-title-row #descricao-evento{flex:1 1 auto;min-width:0;margin:0;}
+#btn-eliminar-evento{flex:0 0 auto;background:#fff !important;border:1.5px solid var(--rubro,#B3402F) !important;color:var(--rubro,#B3402F) !important;border-radius:9px;padding:8px 11px;font-size:17px;line-height:1;cursor:pointer;text-transform:none !important;letter-spacing:0 !important;}
+#btn-eliminar-evento:active{transform:scale(.96);}
+#evento-meta{margin-top:7px;font-family:var(--mono,'IBM Plex Mono',monospace);font-size:12px;font-weight:500;color:var(--ink-soft,#5B6661);letter-spacing:.02em;}
+#historico-select{-webkit-appearance:none;appearance:none;width:100%;min-width:0;max-width:100%;box-sizing:border-box;margin-top:10px;padding:10px 12px;border:1px solid var(--linha,#DDE3DD);border-radius:9px;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235B6661' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 12px center;font-size:14px;color:var(--ink,#1B231F);font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:600;letter-spacing:.02em;}
 
 </style>
 <script>
