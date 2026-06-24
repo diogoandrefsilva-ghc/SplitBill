@@ -1530,12 +1530,13 @@ html,body{touch-action:pan-x pan-y}
 
 <!-- Event context bar (only visible on Eventos tab) -->
 <div id="header-evento-context">
-    <div class="evt-title-row">
-        <input type="text" id="descricao-evento" placeholder="Descrição do evento (ex: Almoço Sá 19 Abril)" maxlength="80"
-            oninput="estado.descricaoEvento=this.value;salvarNoLocalStorage()">
-        <button id="btn-eliminar-evento" onclick="apagarEventoAtual()" title="Eliminar evento" style="display:none;">🗑️</button>
-    </div>
+    <input type="text" id="descricao-evento" placeholder="Descrição do evento (ex: Almoço Sá 19 Abril)" maxlength="80"
+        oninput="estado.descricaoEvento=this.value;salvarNoLocalStorage()">
     <div id="evento-meta" style="display:none;"></div>
+    <button class="historico-toggle-btn" id="historico-toggle-btn" onclick="toggleHistoricoPanel()" style="display:none;">
+        <span id="historico-toggle-label">📚 Histórico</span>
+        <span id="historico-toggle-arrow" style="font-size:10px;opacity:0.7;transition:transform 0.2s;">▼</span>
+    </button>
     <select id="historico-select" onchange="navegarHistorico(this.value)" style="display:none;">
         <option value="">📚 Histórico de eventos</option>
     </select>
@@ -1570,7 +1571,7 @@ html,body{touch-action:pan-x pan-y}
 </div>
 
 <div id="readonly-banner">
-    <span>Modo leitura</span>
+    <span>👁️ Modo leitura</span>
     <button onclick="desbloquearEvento()">🔓 Desbloquear para editar</button>
 </div>
 
@@ -1726,6 +1727,8 @@ html,body{touch-action:pan-x pan-y}
     </div>
 </div>
 
+
+<button id="btn-eliminar-evento" onclick="apagarEventoAtual()" style="display:none;">🗑️ Apagar Evento</button>
 
 </div> <!-- end page-eventos -->
 
@@ -3295,13 +3298,12 @@ function aplicarPermissoesEdicao() {
     // Eliminar evento — só admin e com o jogo ainda aberto (não fechado)
     const btnEliminar = document.getElementById('btn-eliminar-evento');
     if (btnEliminar) btnEliminar.style.display = (admin && ev && !ev.totalFatura) ? '' : 'none';
-    // Combo para alternar entre jogos — visível quando o jogo está fechado (histórico)
-    const _combo = document.getElementById('historico-select');
-    if (_combo) {
-        const _fechado = !!(ev && ev.totalFatura);
-        _combo.style.display = _fechado ? '' : 'none';
-        if (_fechado) _combo.value = String(ev.id);
-    }
+    // Dropdown personalizada do histórico — visível quando o jogo está fechado
+    const _toggle = document.getElementById('historico-toggle-btn');
+    const _panel = document.getElementById('historico-panel');
+    const _fechado = !!(ev && ev.totalFatura);
+    if (_toggle) _toggle.style.display = _fechado ? '' : 'none';
+    if (!_fechado && _panel) _panel.classList.remove('open');
     // Meta do título: data + época (corte a 15/jul)
     const _meta = document.getElementById('evento-meta');
     if (_meta) {
@@ -3334,7 +3336,7 @@ function aplicarPermissoesEdicao() {
         if (banner) {
             if (modoReadOnly && _paginaAtual === 'eventos' && isAdmin()) {
                 banner.style.display = 'flex';
-                if (bSpan) bSpan.textContent = 'Modo leitura';
+                if (bSpan) bSpan.textContent = '👁️ Modo leitura';
                 if (bBtn) bBtn.style.display = '';
             } else {
                 banner.style.display = 'none';
@@ -5670,13 +5672,14 @@ if ('serviceWorker' in navigator) {
 .sbi-stat-label{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft,#5B6661);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sbi-stat-val{font-family:var(--mono,'IBM Plex Mono',monospace);font-size:20px;font-weight:600;color:var(--verde-tinta,#0E5C3F);letter-spacing:-.01em;}
 
-/* Barra de título do evento (título + eliminar + meta + combo) */
-.evt-title-row{display:flex;align-items:center;gap:8px;}
-.evt-title-row #descricao-evento{flex:1 1 auto;min-width:0;margin:0;}
-#btn-eliminar-evento{flex:0 0 auto;background:#fff !important;border:1.5px solid var(--rubro,#B3402F) !important;color:var(--rubro,#B3402F) !important;border-radius:9px;padding:8px 11px;font-size:17px;line-height:1;cursor:pointer;text-transform:none !important;letter-spacing:0 !important;}
-#btn-eliminar-evento:active{transform:scale(.96);}
-#evento-meta{margin-top:7px;font-family:var(--mono,'IBM Plex Mono',monospace);font-size:12px;font-weight:500;color:var(--ink-soft,#5B6661);letter-spacing:.02em;}
-#historico-select{-webkit-appearance:none;appearance:none;width:100%;min-width:0;max-width:100%;box-sizing:border-box;margin-top:10px;padding:10px 12px;border:1px solid var(--linha,#DDE3DD);border-radius:9px;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235B6661' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 12px center;font-size:14px;color:var(--ink,#1B231F);font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:600;letter-spacing:.02em;}
+
+/* Meta data/época do evento (sobre fundo verde) */
+#evento-meta{margin-top:8px;text-align:center;font-family:var(--mono,'IBM Plex Mono',monospace);font-size:12px;font-weight:500;color:rgba(255,255,255,0.7);letter-spacing:.04em;}
+/* Dropdown personalizada do histórico — botão largura total */
+#historico-toggle-btn{width:100%;margin-top:10px;}
+/* Apagar evento — no fim do ecrã do evento */
+#btn-eliminar-evento{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:6px 0 10px;background:#fff;border:1.5px solid var(--rubro,#B3402F);color:var(--rubro,#B3402F);border-radius:12px;padding:13px;font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:15px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;}
+#btn-eliminar-evento:active{transform:scale(.99);background:#FDF2F0;}
 
 </style>
 <script>
