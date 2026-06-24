@@ -5638,6 +5638,12 @@ if ('serviceWorker' in navigator) {
 .sbi-voltar svg{width:18px;height:18px;}
 .sbi-voltar:active{transform:scale(.98);}
 
+/* Cards de consumo (quota do utilizador) */
+.sbi-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px;}
+.sbi-stat{background:var(--card,#fff);border:1px solid var(--linha,#DDE3DD);border-radius:14px;padding:13px 14px 11px;display:flex;flex-direction:column;gap:5px;box-shadow:0 1px 3px rgba(11,59,43,.05);min-width:0;}
+.sbi-stat-label{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft,#5B6661);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sbi-stat-val{font-family:var(--mono,'IBM Plex Mono',monospace);font-size:20px;font-weight:600;color:var(--verde-tinta,#0E5C3F);letter-spacing:-.01em;}
+
 </style>
 <script>
 /* ===== Ecrã inicial (hub) — SplitBill ===== */
@@ -5660,6 +5666,47 @@ if ('serviceWorker' in navigator) {
 
   function eventosAbertos(){ return getHist().filter(function(ev){ return !ev.totalFatura; }); }
   function nFechados(){ return getHist().filter(function(ev){ return !!ev.totalFatura; }).length; }
+
+  // Consumo (quota) do utilizador: mês civil corrente e época (início 15/jul)
+  function consumoUtilizador(){
+    var mine = [];
+    try { if (typeof meusAmigos==='function') mine = meusAmigos() || []; } catch(e){ mine = []; }
+    var hoje = new Date();
+    var inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).getTime();
+    var anoEp = hoje.getFullYear();
+    if (hoje.getTime() < new Date(anoEp, 6, 15).getTime()) anoEp -= 1;
+    var inicioEpoca = new Date(anoEp, 6, 15).getTime();
+    var somaMes = 0, somaEpoca = 0;
+    getHist().forEach(function(ev){
+      if (!ev.totalFatura) return;
+      var ts = (typeof _parsePgtoData==='function') ? _parsePgtoData(ev.data) : 0;
+      if (!ts) return;
+      var cf = {};
+      try { if (typeof calcularContaFinalEvento==='function') cf = calcularContaFinalEvento(ev) || {}; } catch(e){ return; }
+      var meu = 0;
+      mine.forEach(function(a){ if (cf[a]) meu += cf[a]; });
+      if (meu <= 0.005) return;
+      if (ts >= inicioEpoca) somaEpoca += meu;
+      if (ts >= inicioMes) somaMes += meu;
+    });
+    var nomeMes = 'mês';
+    try { nomeMes = hoje.toLocaleDateString('pt-PT', { month:'long' }); } catch(e){}
+    nomeMes = nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1);
+    function pad2(n){ n = String(n); return n.length<2 ? '0'+n : n; }
+    var labelEpoca = pad2(anoEp%100) + '/' + pad2((anoEp+1)%100);
+    return { mes: Math.round(somaMes*100)/100, epoca: Math.round(somaEpoca*100)/100,
+             temAmigo: mine.length>0, labelMes: nomeMes, labelEpoca: labelEpoca };
+  }
+
+  function statsConsumo(){
+    var c = consumoUtilizador();
+    if (!c.temAmigo) return '';
+    return '<div class="sbi-eyebrow">O teu consumo</div>'
+      + '<div class="sbi-stats">'
+      + '<div class="sbi-stat"><span class="sbi-stat-label">' + esc(c.labelMes) + '</span><span class="sbi-stat-val">' + eur(c.mes) + '</span></div>'
+      + '<div class="sbi-stat"><span class="sbi-stat-label">Época ' + esc(c.labelEpoca) + '</span><span class="sbi-stat-val">' + eur(c.epoca) + '</span></div>'
+      + '</div>';
+  }
 
   function pagInfo(){
     var saldos = {};
@@ -5738,6 +5785,7 @@ if ('serviceWorker' in navigator) {
     var admin = ehAdmin();
     var abertos = eventosAbertos();
     var h = '';
+    h += statsConsumo();
     if (abertos.length){
       h += '<div class="sbi-eyebrow">Em aberto <span class="sbi-count">'+abertos.length+'</span></div>';
       h += '<div class="sbi-list">'+abertos.map(cardAberto).join('')+'</div>';
