@@ -604,6 +604,8 @@ if ('serviceWorker' in navigator) {
 
 /* Cards de consumo tocáveis (detalhe de movimentos) */
 .sbi-stat-tap{cursor:pointer;text-align:left;font:inherit;transition:transform .12s,border-color .12s,box-shadow .12s;}
+/* Mantém o fundo branco do card: a regra global button:hover (verde) não deve sobrepor-se e tornar o montante ilegível. */
+.sbi-stat-tap:hover,.sbi-stat-tap:focus,.sbi-stat-tap:active,.sbi-stat-tap.aberto{background:var(--card,#fff);}
 .sbi-stat-tap:active{transform:scale(.985);}
 @media (prefers-reduced-motion:reduce){.sbi-stat-tap:active{transform:none;}}
 .sbi-stat-tap.aberto{border-color:var(--verde,#0E7A4F);box-shadow:0 0 0 1px var(--verde,#0E7A4F),0 1px 3px rgba(11,59,43,.06);}
