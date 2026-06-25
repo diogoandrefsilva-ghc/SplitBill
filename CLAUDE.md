@@ -25,7 +25,9 @@ App pessoal de divisão de contas ("dia de jogo").
 GitHub Pages a partir de `main`. Um push para `main` publica (caminho do site: `/SplitBill/`).
 
 ## Fluxo de branches (importante)
-Quando o utilizador pede **novas alterações** depois de já existir um branch de trabalho:
-- **Verifica primeiro se o branch anterior já foi *merged* para `main`** (ex.: `git fetch origin main` e ver se os commits do branch já lá estão / `git branch --merged origin/main`).
-- **Se já foi merged →** cria um **branch novo** (o utilizador não consegue voltar a fazer merge de um PR já merged). Incrementa o sufixo (ex.: `…-v3` → `…-v4`).
+**Antes de QUALQUER pedido que vá gerar commits** (não só no início da sessão — sempre, a cada novo pedido), corre primeiro esta verificação, antes de editar ficheiros:
+- `git fetch origin main` e vê se os commits do branch de trabalho atual já estão na main (`git branch --merged origin/main` / `git log origin/main..HEAD`).
+- **Se já foi merged →** cria um **branch novo** com sufixo incrementado (ex.: `…-v2` → `…-v3`) a partir da `origin/main`. O utilizador não consegue voltar a fazer merge de um PR já merged.
 - **Se ainda NÃO foi merged →** continua a trabalhar **no mesmo branch**.
+
+**Isto aplica-se mesmo quando o branch vem fixado pelo harness/tarefa.** Se o branch indicado já estiver merged, cria à mesma o branch incrementado e avisa o utilizador — a regra "não fazer push para outro branch" não impede criar o branch sancionado pelo fluxo (incrementado). Em caso de dúvida, pergunta.
