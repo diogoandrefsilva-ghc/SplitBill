@@ -23,3 +23,9 @@ App pessoal de divisão de contas ("dia de jogo").
 
 ## Deploy
 GitHub Pages a partir de `main`. Um push para `main` publica (caminho do site: `/SplitBill/`).
+
+## Fluxo de branches (importante)
+Quando o utilizador pede **novas alterações** depois de já existir um branch de trabalho:
+- **Verifica primeiro se o branch anterior já foi *merged* para `main`** (ex.: `git fetch origin main` e ver se os commits do branch já lá estão / `git branch --merged origin/main`).
+- **Se já foi merged →** cria um **branch novo** (o utilizador não consegue voltar a fazer merge de um PR já merged). Incrementa o sufixo (ex.: `…-v3` → `…-v4`).
+- **Se ainda NÃO foi merged →** continua a trabalhar **no mesmo branch**.
