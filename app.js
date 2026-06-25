@@ -3717,7 +3717,7 @@ function sbLogout() {
 async function abrirAdmin() {
     document.getElementById('page-admin').style.display = 'flex';
     const lista = document.getElementById('admin-lista');
-    lista.innerHTML = '<p style="color:#999;font-size:14px;text-align:center;padding:20px;">A carregar…</p>';
+    lista.innerHTML = '<p style="color:#999;font-size:14px;text-align:center;padding:24px 0;">A carregar…</p>';
     try {
         const r = await sbFetch(`${SB_URL}/rest/v1/access_requests?select=*&order=requested_at.desc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
         const data = await r.json();
@@ -3731,7 +3731,7 @@ async function abrirAdmin() {
                 </div>
                 <button onclick="sbAprovarAcesso('${p.email}')" style="background:#0E7A4F;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;">Aprovar</button>
             </div>`).join('');
-    } catch(e) { lista.innerHTML = '<p style="color:#B3402F;font-size:14px;text-align:center;padding:20px;">Erro ao carregar pedidos.</p>'; }
+    } catch(e) { lista.innerHTML = '<p style="color:#B3402F;font-size:14px;text-align:center;padding:24px 0;">Erro ao carregar pedidos.</p>'; }
 }
 
 // Atualiza o contador (badge) de pedidos pendentes no sino
