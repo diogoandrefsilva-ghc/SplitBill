@@ -595,8 +595,8 @@ if ('serviceWorker' in navigator) {
 .sbi-open{position:relative;overflow:hidden;background:linear-gradient(135deg,#13A56E 0%,#0E7A4F 55%,#0B5238 100%);border-radius:16px;padding:14px 16px;gap:13px;box-shadow:0 14px 30px -14px rgba(11,59,43,.9),inset 0 1px 0 rgba(255,255,255,.14);}
 .sbi-open::after{content:"";position:absolute;right:-34px;top:-34px;width:130px;height:130px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.16),transparent 70%);pointer-events:none;}
 .sbi-open > *{position:relative;z-index:1;}
-.sbi-open .sbi-ico{background:rgba(255,255,255,.18);border-radius:12px;width:44px;height:44px;color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);}
-.sbi-open .sbi-ico svg{width:24px;height:24px;}
+.sbi-open .sbi-ico{background:rgba(255,255,255,.18);border-radius:50%;width:47px;height:47px;color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);}
+.sbi-open .sbi-ico svg{width:27px;height:27px;}
 .sbi-octext{flex:1 1 auto;min-width:0;}
 .sbi-ocname{font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:20px;line-height:1;display:block;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:normal;text-transform:none;}
 .sbi-ocsub{font-family:var(--mono,monospace);font-size:11px;color:rgba(255,255,255,.85);margin-top:4px;display:block;letter-spacing:normal;text-transform:none;}
@@ -614,14 +614,14 @@ if ('serviceWorker' in navigator) {
   background:linear-gradient(180deg,#fff 0%,#F6FAF7 100%);border:1px solid #E6EDE6;border-radius:16px;padding:17px 12px;
   box-shadow:0 8px 20px -14px rgba(11,59,43,.55);min-height:128px;transition:transform .12s,box-shadow .15s,border-color .15s;}
 .sbi-sq:hover{box-shadow:0 12px 26px -14px rgba(11,59,43,.6);border-color:#D6E2D8;}
-.sbi-sq .sbi-ico.g{color:var(--verde-tinta,#0E5C3F);background:linear-gradient(135deg,#E7F2EC 0%,#CFE6DA 100%);border-radius:14px;width:48px;height:48px;box-shadow:inset 0 0 0 1px rgba(14,122,79,.14),0 4px 10px -6px rgba(14,122,79,.45);}
-.sbi-sq .sbi-ico.g svg{width:24px;height:24px;}
+.sbi-sq .sbi-ico.g{color:#fff;background:linear-gradient(135deg,#16A86F 0%,#0E7A4F 60%,#0B5238 100%);border-radius:50%;width:52px;height:52px;box-shadow:0 6px 14px -6px rgba(14,122,79,.6),inset 0 1px 0 rgba(255,255,255,.28);}
+.sbi-sq .sbi-ico.g svg{width:27px;height:27px;}
 .sbi-sqname{font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:17px;line-height:1;color:var(--ink,#1B231F);letter-spacing:normal;text-transform:none;}
 .sbi-sq > .sbi-pill,.sbi-sq > .sbi-pill-stack{margin-top:auto;}
 .sbi-sq .sbi-pill-stack{align-items:center;}
 
 /* Pílulas */
-.sbi-pill{flex:0 0 auto;font-family:var(--mono,monospace);font-weight:600;font-size:12px;padding:5px 9px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;letter-spacing:normal;text-transform:none;}
+.sbi-pill{flex:0 0 auto;font-family:var(--mono,monospace);font-weight:700;font-size:10.5px;padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;letter-spacing:.04em;text-transform:uppercase;box-shadow:inset 0 0 0 1px rgba(11,59,43,.06);}
 .sbi-pill svg{width:11px;height:11px;}
 .sbi-warn{background:var(--dourado-claro,#FBF4DC);color:#8a6d12;}
 .sbi-pos{background:var(--verde-claro,#E2EFE8);color:var(--verde-tinta,#0E5C3F);}
@@ -718,9 +718,9 @@ if ('serviceWorker' in navigator) {
 (function(){
   var ICO = {
     novo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
-    evento:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="13" y2="13"/></svg>',
-    hist:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><polyline points="3 3 3 8 8 8"/><polyline points="12 7.5 12 12 15 14"/></svg>',
-    pag:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 4 21 8 17 12"/><line x1="21" y1="8" x2="8" y2="8"/><polyline points="7 12 3 16 7 20"/><line x1="3" y1="16" x2="16" y2="16"/></svg>',
+    evento:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path fill="currentColor" stroke="none" opacity=".18" d="M4 7h16a1 1 0 0 1 1 1v2.2a1.8 1.8 0 0 0 0 3.6V16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2.2a1.8 1.8 0 0 0 0-3.6V8a1 1 0 0 1 1-1Z"/><path d="M4 7h16a1 1 0 0 1 1 1v2.2a1.8 1.8 0 0 0 0 3.6V16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2.2a1.8 1.8 0 0 0 0-3.6V8a1 1 0 0 1 1-1Z"/><path d="M14.5 7.5v9" stroke-dasharray="1.5 2.2"/></svg>',
+    hist:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" fill="currentColor" stroke="none" opacity=".15"/><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><polyline points="3 3 3 8 8 8"/><polyline points="12 7.8 12 12 15 13.8"/></svg>',
+    pag:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect fill="currentColor" stroke="none" opacity=".18" x="3" y="6.5" width="18" height="11" rx="2.4"/><rect x="3" y="6.5" width="18" height="11" rx="2.4"/><circle cx="12" cy="12" r="2.3"/><path d="M6.4 9.4v5.2M17.6 9.4v5.2"/></svg>',
     def:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="9" cy="8" r="2.6" fill="#fff"/><circle cx="15" cy="16" r="2.6" fill="#fff"/></svg>',
     up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 14 12 8 18 14"/></svg>',
     down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 10 12 16 18 10"/></svg>'
