@@ -637,9 +637,9 @@ if ('serviceWorker' in navigator) {
 .sbi-mov{display:flex;align-items:center;gap:10px;padding:9px 10px;border-bottom:1px solid #EDF0EC;}
 .sbi-mov:last-child{border-bottom:0;}
 .sbi-mov-info{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px;}
-.sbi-mov-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;}
+.sbi-mov-top{display:flex;align-items:baseline;gap:7px;}
 .sbi-mov-nome{flex:1 1 auto;min-width:0;font-weight:600;font-size:14px;color:var(--ink,#1B231F);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.sbi-mov-data{flex:0 0 auto;font-size:11px;color:var(--ink-soft,#5B6661);font-family:var(--mono,monospace);}
+.sbi-mov-data{flex:0 0 auto;font-size:11px;font-weight:600;color:var(--verde-tinta,#0E5C3F);font-family:var(--mono,monospace);}
 .sbi-mov-itens{font-size:10px;line-height:1.35;color:var(--ink-soft,#5B6661);white-space:normal;overflow-wrap:anywhere;}
 .sbi-mov-qtd{margin-left:3px;color:#9AA39E;}
 .sbi-mov-val{flex:0 0 auto;font-family:var(--mono,'IBM Plex Mono',monospace);font-weight:600;font-size:14px;color:var(--verde-tinta,#0E5C3F);}
@@ -806,8 +806,9 @@ if ('serviceWorker' in navigator) {
     }
     return '<div class="sbi-mov">'
       + '<span class="sbi-mov-info">'
-      + '<span class="sbi-mov-top"><span class="sbi-mov-nome">'+esc(m.nome)+'</span>'
+      + '<span class="sbi-mov-top">'
       + (m.data ? '<span class="sbi-mov-data">'+esc(m.data)+'</span>' : '')
+      + '<span class="sbi-mov-nome">'+esc(m.nome)+'</span>'
       + '</span>'
       + (itensStr ? '<span class="sbi-mov-itens">'+itensStr+'</span>' : '')
       + '</span>'
