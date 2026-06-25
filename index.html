@@ -194,6 +194,32 @@ window.sbEsconderSplash = function(){
     </div>
 </div>
 
+<!-- Modal: Novo Evento (descrição, data, tesoureiro) -->
+<div class="modal-overlay" id="novo-evento-overlay" onclick="fecharNovoEventoModal(event)">
+    <div class="modal-box">
+        <div class="modal-body">
+            <div class="modal-icon">🆕</div>
+            <div class="modal-title">Novo evento</div>
+            <div class="ne-field">
+                <label for="ne-descricao">Descrição do evento</label>
+                <input type="text" id="ne-descricao" placeholder="Ex.: Sporting–Benfica" autocomplete="off">
+            </div>
+            <div class="ne-field">
+                <label for="ne-data">Data do evento</label>
+                <input type="date" id="ne-data">
+            </div>
+            <div class="ne-field">
+                <label for="ne-tesoureiro">Tesoureiro (quem paga a conta)</label>
+                <select id="ne-tesoureiro"></select>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="modal-cancel" onclick="fecharNovoEventoModal()">Cancelar</button>
+            <button class="modal-confirm" onclick="confirmarNovoEvento()">Criar evento</button>
+        </div>
+    </div>
+</div>
+
 <div id="readonly-banner">
     <span>👁️ Modo leitura</span>
     <button onclick="desbloquearEvento()">🔓 Desbloquear para editar</button>
@@ -442,7 +468,8 @@ async function apagarEventoAtual() {
         const ultimo = historico[historico.length - 1];
         navegarHistorico(ultimo.id);
     } else {
-        novoEvento();
+        // Sem eventos restantes — cria um evento em branco diretamente (sem pop-up).
+        criarEvento({});
     }
     mostrarMensagem('Evento eliminado!', true);
 }
@@ -1062,8 +1089,8 @@ if ('serviceWorker' in navigator) {
   };
 
   window.sbiNovo = function(){
+    // Abre a pop-up de criação; a navegação para "eventos" acontece ao confirmar.
     if (typeof novoEvento==='function') novoEvento();
-    if (typeof mudarPagina==='function') mudarPagina('eventos');
   };
   window.sbiAbrirEvento = function(id){
     var ev = getHist().filter(function(h){ return String(h.id)===String(id); })[0];

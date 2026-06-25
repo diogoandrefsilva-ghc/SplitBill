@@ -606,6 +606,36 @@ html,body{touch-action:pan-x pan-y}
         @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes modalSlideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
+        /* Campos da pop-up "Novo evento" */
+        #novo-evento-overlay .modal-body { text-align: left; }
+        #novo-evento-overlay .modal-icon,
+        #novo-evento-overlay .modal-title { text-align: center; }
+        .ne-field { margin-top: 13px; }
+        .ne-field label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: #5B6661;
+            margin-bottom: 5px;
+        }
+        .ne-field input,
+        .ne-field select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #C8D0C8;
+            border-radius: 6px;
+            font-size: 14px;
+            background: #fff;
+            color: #0B3B2B;
+            box-sizing: border-box;
+        }
+        .ne-field input:focus,
+        .ne-field select:focus {
+            outline: none;
+            border-color: #0E7A4F;
+            box-shadow: 0 0 0 2px rgba(14,122,79,.15);
+        }
+
         .botoes-dados {
             display: grid;
             grid-template-columns: 1fr 1fr;

@@ -591,9 +591,12 @@ function salvarNoLocalStorage() {
             historico[idx].dividas = JSON.parse(JSON.stringify(estado.dividas));
             historico[idx].amigos = JSON.parse(JSON.stringify(amigos));
             historico[idx].menu = JSON.parse(JSON.stringify(menu));
-            // Update data field from first order
-            const dataEvento = dataDoEvento();
-            historico[idx].data = dataEvento.toLocaleDateString('pt-PT', {day:'2-digit', month:'2-digit', year:'numeric'});
+            // Update data field from first order — exceto se a data foi escolhida
+            // manualmente na criação do evento (dataManual).
+            if (!historico[idx].dataManual) {
+                const dataEvento = dataDoEvento();
+                historico[idx].data = dataEvento.toLocaleDateString('pt-PT', {day:'2-digit', month:'2-digit', year:'numeric'});
+            }
         }
     }
     salvarHistoricoLocal();
@@ -791,22 +794,73 @@ async function apagarEvento(id, ev_) {
     mostrarMensagem('🗑️ Evento apagado', true);
 }
 
-async function novoEvento() {
+// Abre a pop-up "Novo evento" (descrição, data, tesoureiro). O evento só é
+// criado/persistido depois de confirmar — ver confirmarNovoEvento().
+function novoEvento() {
     if (!isAdmin()) { mostrarMensagem('⚠️ Apenas o administrador pode criar eventos', false); return; }
+    abrirNovoEventoModal();
+}
+
+// ── Pop-up de criação de evento ──
+function _hojeIso() {
+    const d = new Date(), p = n => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+function _isoParaDataPt(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+    if (!m) return new Date().toLocaleDateString('pt-PT', {day:'2-digit', month:'2-digit', year:'numeric'});
+    return m[3] + '/' + m[2] + '/' + m[1];
+}
+
+function abrirNovoEventoModal() {
+    document.getElementById('ne-descricao').value = '';
+    document.getElementById('ne-data').value = _hojeIso();
+    // Tesoureiro: por defeito "eu" (nome associado à minha conta), depois todos os amigos conhecidos.
+    const sel = document.getElementById('ne-tesoureiro');
+    const eu = meusAmigos()[0] || '';
+    const vistos = new Set(); const lista = [];
+    [eu].concat(amigosAgregadoGlobal()).forEach(a => { if (a && !vistos.has(a)) { vistos.add(a); lista.push(a); } });
+    sel.innerHTML = '<option value="">— Seleciona —</option>'
+        + lista.map(a => `<option value="${a}"${a === eu ? ' selected' : ''}>${a}</option>`).join('');
+    document.getElementById('novo-evento-overlay').classList.add('show');
+    setTimeout(() => { try { document.getElementById('ne-descricao').focus(); } catch(e) {} }, 60);
+}
+
+function fecharNovoEventoModal(event) {
+    if (event && event.target !== document.getElementById('novo-evento-overlay')) return;
+    document.getElementById('novo-evento-overlay').classList.remove('show');
+}
+
+function confirmarNovoEvento() {
+    const descricao = document.getElementById('ne-descricao').value.trim();
+    const dataPt = _isoParaDataPt(document.getElementById('ne-data').value);
+    const tesoureiro = document.getElementById('ne-tesoureiro').value;
+    document.getElementById('novo-evento-overlay').classList.remove('show');
+    criarEvento({ descricao, data: dataPt, tesoureiro });
+    mudarPagina('eventos');
+    mostrarMensagem('✓ Novo evento criado', true);
+}
+
+// Cria o evento, grava em localStorage + BD, e carrega-o no estado de trabalho.
+function criarEvento(opts) {
+    opts = opts || {};
     // Por defeito: todos os amigos de eventos anteriores e todos os artigos
     // (nos repetidos fica o preço mais recente).
     const novosAmigos = amigosPorDefeito();
+    const tesoureiro = opts.tesoureiro || '';
+    if (tesoureiro && !novosAmigos.includes(tesoureiro)) novosAmigos.unshift(tesoureiro);
     const novoMenu = menuAgregadoGlobal();
 
     const novoId = Date.now();
     const novoEvt = {
         id: novoId,
-        descricao: '',
-        data: new Date().toLocaleDateString('pt-PT', {day:'2-digit', month:'2-digit', year:'numeric'}),
+        descricao: opts.descricao || '',
+        data: opts.data || new Date().toLocaleDateString('pt-PT', {day:'2-digit', month:'2-digit', year:'numeric'}),
+        dataManual: !!opts.data,   // data escolhida pelo utilizador — não recalcular a partir das ordens
         ordens: [],
         ofertas: [],
         totalFatura: null,
-        pagador: '',
+        pagador: tesoureiro,
         dividas: {},
         amigos: novosAmigos,
         menu: novoMenu
@@ -836,7 +890,9 @@ async function novoEvento() {
     const arrow = document.getElementById('historico-toggle-arrow');
     if (panel) { panel.classList.remove('open'); }
     if (arrow) { arrow.style.transform = ''; }
-    mostrarMensagem('✓ Novo evento criado', true);
+    // Persistir já na BD: o evento passa a existir mesmo sem ordens.
+    sbScheduleAutoSave();
+    return novoEvt;
 }
 
 function dataDoEvento() {
