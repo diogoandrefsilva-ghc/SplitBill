@@ -624,6 +624,8 @@ if ('serviceWorker' in navigator) {
 .sbi-stat-card.aberto .sbi-stat-hint svg{transform:rotate(90deg);}
 /* Top 3 itens mais consumidos do período (por baixo da despesa) */
 .sbi-stat-top{margin-top:9px;padding-top:8px;border-top:1px solid var(--linha,#DDE3DD);display:flex;flex-direction:column;gap:4px;}
+.sbi-stat-top[role="button"]{cursor:pointer;}
+.sbi-stat-top[role="button"]:active{transform:scale(.985);}
 .sbi-stat-top-head{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft,#5B6661);}
 .sbi-stat-top-row{display:flex;align-items:baseline;justify-content:space-between;gap:8px;}
 .sbi-stat-top-nome{flex:1 1 auto;min-width:0;font-size:12px;font-weight:500;color:var(--ink,#1B231F);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -635,8 +637,11 @@ if ('serviceWorker' in navigator) {
 .sbi-mov{display:flex;align-items:center;gap:10px;padding:9px 10px;border-bottom:1px solid #EDF0EC;}
 .sbi-mov:last-child{border-bottom:0;}
 .sbi-mov-info{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px;}
-.sbi-mov-nome{font-weight:600;font-size:14px;color:var(--ink,#1B231F);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.sbi-mov-data{font-size:11px;color:var(--ink-soft,#5B6661);font-family:var(--mono,monospace);}
+.sbi-mov-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;}
+.sbi-mov-nome{flex:1 1 auto;min-width:0;font-weight:600;font-size:14px;color:var(--ink,#1B231F);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sbi-mov-data{flex:0 0 auto;font-size:11px;color:var(--ink-soft,#5B6661);font-family:var(--mono,monospace);}
+.sbi-mov-itens{font-size:11px;color:var(--ink-soft,#5B6661);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sbi-mov-qtd{margin-left:3px;color:#9AA39E;}
 .sbi-mov-val{flex:0 0 auto;font-family:var(--mono,'IBM Plex Mono',monospace);font-weight:600;font-size:14px;color:var(--verde-tinta,#0E5C3F);}
 .sbi-mov-st{flex:0 0 auto;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;}
 .sbi-mov-st svg{width:13px;height:13px;}
@@ -791,9 +796,20 @@ if ('serviceWorker' in navigator) {
       : (m.parcial
           ? '<span class="sbi-mov-st parcial" title="Parcialmente pago">'+HALF+'</span>'
           : '<span class="sbi-mov-st falta" title="Por pagar">'+CIRC+'</span>');
+    var itensStr = '';
+    if (m.itens){
+      itensStr = Object.keys(m.itens)
+        .map(function(k){ return { nome: k, qtd: m.itens[k].qtd, valor: m.itens[k].valor }; })
+        .sort(function(a,b){ return b.valor - a.valor; })
+        .map(function(it){ return esc(it.nome)+'<span class="sbi-mov-qtd">×'+fmtQtd(it.qtd)+'</span>'; })
+        .join(' · ');
+    }
     return '<div class="sbi-mov">'
-      + '<span class="sbi-mov-info"><span class="sbi-mov-nome">'+esc(m.nome)+'</span>'
+      + '<span class="sbi-mov-info">'
+      + '<span class="sbi-mov-top"><span class="sbi-mov-nome">'+esc(m.nome)+'</span>'
       + (m.data ? '<span class="sbi-mov-data">'+esc(m.data)+'</span>' : '')
+      + '</span>'
+      + (itensStr ? '<span class="sbi-mov-itens">'+itensStr+'</span>' : '')
       + '</span>'
       + '<span class="sbi-mov-val">'+eur(m.valor)+'</span>'
       + st + '</div>';
@@ -833,7 +849,7 @@ if ('serviceWorker' in navigator) {
     var n = d.movs.length;
     var hint = n ? n + (n===1?' evento ':' eventos ') + CHEV : 'Sem eventos';
     var top = (d.top && d.top.length)
-      ? '<div class="sbi-stat-top">'
+      ? '<div class="sbi-stat-top"'+(n?' role="button" tabindex="0" onclick="sbiToggleConsumo(\''+periodo+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();sbiToggleConsumo(\''+periodo+'\');}"':'')+'>'
         + '<div class="sbi-stat-top-head">Top 3 itens</div>'
         + d.top.map(function(t){ return '<div class="sbi-stat-top-row"><span class="sbi-stat-top-nome">'+esc(t.nome)+'<span class="sbi-stat-top-qtd">×'+fmtQtd(t.qtd)+'</span></span><span class="sbi-stat-top-val">'+eur(t.valor)+'</span></div>'; }).join('')
         + '</div>'
