@@ -3718,6 +3718,19 @@ function fecharAdmin() {
     document.getElementById('page-admin').style.display = 'none';
 }
 
+// Definições (cabeçalho). Admin → painel completo (pedidos/equivalências/backup);
+// utilizador normal → painel simples (só terminar sessão).
+function abrirDefinicoes() {
+    if (isAdmin()) { abrirAdmin(); return; }
+    const emailEl = document.getElementById('def-conta-email');
+    if (emailEl) { const e = emailAtual(); emailEl.textContent = e ? 'Sessão iniciada como ' + e : ''; }
+    document.getElementById('page-definicoes').style.display = 'flex';
+}
+
+function fecharDefinicoes() {
+    document.getElementById('page-definicoes').style.display = 'none';
+}
+
 // ── Equivalências amigo ↔ conta (só admin) ──
 function abrirEquivalencias() {
     if (!isAdmin()) return;
