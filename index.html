@@ -376,6 +376,9 @@ window.sbEsconderSplash = function(){
 <!-- FAB: Registar Pagamento (só com token) -->
 <div class="fab-backdrop" id="fab-backdrop" onclick="fecharFabPanel()"></div>
 <button class="fab" id="fab-pgto" onclick="abrirFabPanel()">＋</button>
+
+<!-- FAB: Novo Evento (só no ecrã inicial + admin) -->
+<button class="fab-novo" id="fab-novo" onclick="sbiNovo()" aria-label="Novo evento"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>Novo evento</span></button>
 <div class="fab-panel" id="fab-panel">
     <div style="font-size:14px;font-weight:700;color:#0B3B2B;margin-bottom:12px;">💸 Registar Pagamento</div>
     <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
@@ -558,9 +561,10 @@ if ('serviceWorker' in navigator) {
 
 <style id="sbi-css">
 /* ===== Ecrã inicial (hub) ===== */
-#page-inicio{padding:14px 0 16px;}
+#page-inicio{padding:14px 0 92px;}
 .sbi-list{display:flex;flex-direction:column;gap:9px;}
-.sbi-eyebrow{font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:600;text-transform:uppercase;letter-spacing:.14em;color:var(--ink-soft,#5B6661);font-size:11px;margin:20px 4px 9px;display:flex;align-items:center;gap:7px;}
+.sbi-eyebrow{font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:var(--ink-soft,#5B6661);font-size:11px;margin:22px 4px 10px;display:flex;align-items:center;gap:8px;}
+.sbi-eyebrow::before{content:"";flex:0 0 auto;width:15px;height:3px;border-radius:2px;background:linear-gradient(90deg,var(--verde,#0E7A4F),var(--dourado,#B8911F));}
 .sbi-eyebrow:first-child{margin-top:2px;}
 .sbi-count{background:var(--verde,#0E7A4F);color:#fff;border-radius:20px;font-family:var(--mono,monospace);font-size:10px;padding:1px 7px;letter-spacing:0;text-transform:none;}
 
@@ -588,8 +592,10 @@ if ('serviceWorker' in navigator) {
 .sbi-newquiet svg{width:18px;height:18px;}
 
 /* Evento aberto (cartão verde) */
-.sbi-open{background:var(--verde,#0E7A4F);border-radius:14px;padding:13px 15px;gap:13px;box-shadow:0 8px 20px -12px rgba(14,122,79,.85);}
-.sbi-open .sbi-ico{background:rgba(255,255,255,.16);border-radius:10px;width:42px;height:42px;color:#fff;}
+.sbi-open{position:relative;overflow:hidden;background:linear-gradient(135deg,#13A56E 0%,#0E7A4F 55%,#0B5238 100%);border-radius:16px;padding:14px 16px;gap:13px;box-shadow:0 14px 30px -14px rgba(11,59,43,.9),inset 0 1px 0 rgba(255,255,255,.14);}
+.sbi-open::after{content:"";position:absolute;right:-34px;top:-34px;width:130px;height:130px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.16),transparent 70%);pointer-events:none;}
+.sbi-open > *{position:relative;z-index:1;}
+.sbi-open .sbi-ico{background:rgba(255,255,255,.18);border-radius:12px;width:44px;height:44px;color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);}
 .sbi-open .sbi-ico svg{width:24px;height:24px;}
 .sbi-octext{flex:1 1 auto;min-width:0;}
 .sbi-ocname{font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:20px;line-height:1;display:block;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:normal;text-transform:none;}
@@ -605,9 +611,10 @@ if ('serviceWorker' in navigator) {
 /* Atalhos quadrados lado a lado (Histórico · Pagamentos) */
 .sbi-grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
 .sbi-sq{flex-direction:column;align-items:center;justify-content:flex-start;text-align:center;gap:10px;
-  background:var(--card,#fff);border:1px solid var(--linha,#DDE3DD);border-radius:14px;padding:16px 12px;
-  box-shadow:0 3px 12px -10px rgba(11,59,43,.4);min-height:126px;}
-.sbi-sq .sbi-ico.g{color:var(--verde,#0E7A4F);background:var(--verde-claro,#E2EFE8);border-radius:12px;width:46px;height:46px;}
+  background:linear-gradient(180deg,#fff 0%,#F6FAF7 100%);border:1px solid #E6EDE6;border-radius:16px;padding:17px 12px;
+  box-shadow:0 8px 20px -14px rgba(11,59,43,.55);min-height:128px;transition:transform .12s,box-shadow .15s,border-color .15s;}
+.sbi-sq:hover{box-shadow:0 12px 26px -14px rgba(11,59,43,.6);border-color:#D6E2D8;}
+.sbi-sq .sbi-ico.g{color:var(--verde-tinta,#0E5C3F);background:linear-gradient(135deg,#E7F2EC 0%,#CFE6DA 100%);border-radius:14px;width:48px;height:48px;box-shadow:inset 0 0 0 1px rgba(14,122,79,.14),0 4px 10px -6px rgba(14,122,79,.45);}
 .sbi-sq .sbi-ico.g svg{width:24px;height:24px;}
 .sbi-sqname{font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:17px;line-height:1;color:var(--ink,#1B231F);letter-spacing:normal;text-transform:none;}
 .sbi-sq > .sbi-pill,.sbi-sq > .sbi-pill-stack{margin-top:auto;}
@@ -629,10 +636,13 @@ if ('serviceWorker' in navigator) {
 
 /* Cards de consumo (quota do utilizador) */
 .sbi-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px;}
-.sbi-stat{background:var(--verde-claro,#E2EFE8);border:1px solid var(--linha,#DDE3DD);border-radius:14px;padding:13px 14px 11px;display:flex;flex-direction:column;gap:5px;box-shadow:0 1px 3px rgba(11,59,43,.05);min-width:0;}
+.sbi-stat{position:relative;overflow:hidden;background:linear-gradient(180deg,#fff 0%,#F4F8F4 100%);border:1px solid #E6EDE6;border-radius:16px;padding:14px 14px 12px;display:flex;flex-direction:column;gap:5px;box-shadow:0 8px 20px -15px rgba(11,59,43,.55);min-width:0;}
+.sbi-stat::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--verde,#0E7A4F),#13A56E);opacity:.9;}
+#sbi-card-epoca::before{background:linear-gradient(90deg,var(--dourado,#B8911F),#D8B23C);}
 .sbi-stat-head{display:flex;align-items:center;gap:6px;}
 .sbi-stat-label{flex:1 1 auto;min-width:0;text-align:center;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft,#5B6661);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.sbi-stat-val{font-family:var(--mono,'IBM Plex Mono',monospace);font-size:20px;font-weight:600;color:var(--verde-tinta,#0E5C3F);letter-spacing:-.01em;}
+.sbi-stat-val{font-family:var(--mono,'IBM Plex Mono',monospace);font-size:22px;font-weight:700;color:var(--verde-tinta,#0E5C3F);letter-spacing:-.02em;}
+#sbi-card-epoca .sbi-stat-val{color:#9A7A14;}
 
 /* Setas de navegação entre períodos (mês a mês / época a época) */
 .sbi-nav{flex:0 0 auto;width:26px;height:26px;padding:0;border:none;border-radius:8px;background:transparent;color:var(--ink-soft,#5B6661);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .12s,color .12s;}
@@ -689,10 +699,18 @@ if ('serviceWorker' in navigator) {
 #btn-eliminar-evento{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:6px 0 10px;background:#fff;border:1.5px solid var(--rubro,#B3402F);color:var(--rubro,#B3402F);border-radius:12px;padding:13px;font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:15px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;}
 #btn-eliminar-evento:active{transform:scale(.99);background:#FDF2F0;}
 
-/* Novo Evento — botão primário no fundo do hub */
-.sbi-newbottom{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;margin-top:18px;background:var(--verde,#0E7A4F);border:none;color:#fff;border-radius:14px;padding:15px;font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:16px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;box-shadow:0 5px 16px -7px rgba(14,122,79,.65);}
-.sbi-newbottom svg{width:20px;height:20px;}
-.sbi-newbottom:active{transform:scale(.99);}
+/* FAB Novo Evento — extendido, flutuante (só no ecrã inicial + admin) */
+.fab-novo{position:fixed;right:18px;bottom:22px;z-index:100;display:none;align-items:center;gap:9px;
+  padding:0 22px 0 17px;height:56px;border:none;border-radius:30px;cursor:pointer;
+  background:linear-gradient(135deg,#13A56E 0%,#0E7A4F 52%,#0B4A33 100%);color:#fff;
+  font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:17px;letter-spacing:.05em;text-transform:uppercase;
+  box-shadow:0 12px 28px -8px rgba(14,122,79,.72),0 3px 8px rgba(11,59,43,.28),inset 0 1px 0 rgba(255,255,255,.18);
+  -webkit-tap-highlight-color:transparent;transition:transform .15s,box-shadow .15s;animation:fabNovoIn .32s cubic-bezier(.2,.9,.3,1.2);}
+.fab-novo svg{width:22px;height:22px;flex:0 0 auto;}
+.fab-novo:hover{box-shadow:0 16px 32px -8px rgba(14,122,79,.8),0 4px 10px rgba(11,59,43,.3),inset 0 1px 0 rgba(255,255,255,.18);}
+.fab-novo:active{transform:scale(.95);}
+@keyframes fabNovoIn{from{opacity:0;transform:translateY(14px) scale(.9);}to{opacity:1;transform:none;}}
+@media (prefers-reduced-motion:reduce){.fab-novo{animation:none;}.fab-novo:active{transform:none;}}
 
 </style>
 <script>
@@ -1033,8 +1051,10 @@ if ('serviceWorker' in navigator) {
     h += '<div class="sbi-eyebrow">Atalhos</div>';
     h += '<div class="sbi-grid2">'+atalhos()+'</div>';
     h += statsConsumo();
-    if (admin) h += '<button class="sbi-tap sbi-newbottom" onclick="sbiNovo()" aria-label="Novo Evento">'+ICO.novo+'<span>Novo Evento</span></button>';
     el.innerHTML = h;
+    // Sincroniza o FAB de novo evento (só visível neste ecrã e para admin).
+    var fn = document.getElementById('fab-novo');
+    if (fn) fn.style.display = (admin && el.style.display !== 'none') ? 'inline-flex' : 'none';
   };
 
   window.sbiNovo = function(){

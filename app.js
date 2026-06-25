@@ -1717,6 +1717,9 @@ function mudarPagina(pagina) {
     // FAB visibility: only on pagamentos page + permissão
     const fab = document.getElementById('fab-pgto');
     fab.style.display = (pagina === 'pagamentos' && ghHasToken()) ? 'block' : 'none';
+    // FAB Novo Evento: só no ecrã inicial + admin
+    const fabNovo = document.getElementById('fab-novo');
+    if (fabNovo) fabNovo.style.display = (pagina === 'inicio' && isAdmin()) ? 'inline-flex' : 'none';
     if (pagina === 'pagamentos') renderContas();
     aplicarPermissoesEdicao();
 }
