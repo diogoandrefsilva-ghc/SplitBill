@@ -598,7 +598,7 @@ if ('serviceWorker' in navigator) {
 .sbi-open .sbi-ico{background:rgba(255,255,255,.18);border-radius:50%;width:47px;height:47px;color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);}
 .sbi-open .sbi-ico svg{width:27px;height:27px;}
 .sbi-octext{flex:1 1 auto;min-width:0;}
-.sbi-ocname{font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:20px;line-height:1;display:block;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:normal;text-transform:none;}
+.sbi-ocname{font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:20px;line-height:1.08;color:#fff;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;letter-spacing:normal;text-transform:none;overflow-wrap:anywhere;}
 .sbi-ocsub{font-family:var(--mono,monospace);font-size:11px;color:rgba(255,255,255,.85);margin-top:4px;display:block;letter-spacing:normal;text-transform:none;}
 
 /* Atalho (cartão branco) */
@@ -645,10 +645,14 @@ if ('serviceWorker' in navigator) {
 #sbi-card-epoca .sbi-stat-val{color:#9A7A14;}
 
 /* Setas de navegação entre períodos (mês a mês / época a época) */
-.sbi-nav{flex:0 0 auto;width:26px;height:26px;padding:0;border:none;border-radius:8px;background:transparent;color:var(--ink-soft,#5B6661);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .12s,color .12s;}
-.sbi-nav svg{width:16px;height:16px;}
-.sbi-nav:hover{background:var(--verde-claro,#E2EFE8);color:var(--verde-tinta,#0E5C3F);}
-.sbi-nav:disabled{opacity:.28;cursor:default;background:transparent;color:var(--ink-soft,#5B6661);}
+.sbi-nav{flex:0 0 auto;width:28px;height:28px;padding:0;border:none;border-radius:50%;background:rgba(14,122,79,.09);color:var(--verde-tinta,#0E5C3F);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(14,122,79,.12);transition:background .14s,color .14s,transform .12s,box-shadow .14s;}
+.sbi-nav svg{width:15px;height:15px;}
+.sbi-nav:hover{background:var(--verde,#0E7A4F);color:#fff;box-shadow:0 4px 10px -4px rgba(14,122,79,.6);}
+.sbi-nav:active{transform:scale(.9);}
+.sbi-nav:disabled{opacity:.32;cursor:default;background:rgba(11,59,43,.05);color:var(--ink-soft,#5B6661);box-shadow:none;transform:none;}
+#sbi-card-epoca .sbi-nav{background:rgba(184,145,31,.14);color:#9A7A14;box-shadow:inset 0 0 0 1px rgba(184,145,31,.22);}
+#sbi-card-epoca .sbi-nav:hover{background:var(--dourado,#B8911F);color:#fff;box-shadow:0 4px 10px -4px rgba(184,145,31,.65);}
+#sbi-card-epoca .sbi-nav:disabled{background:rgba(11,59,43,.05);color:var(--ink-soft,#5B6661);box-shadow:none;}
 
 /* Área tocável do card (detalhe de movimentos). Fundo transparente: a regra
    global button:hover (verde) não deve sobrepor-se e tornar o montante ilegível. */
