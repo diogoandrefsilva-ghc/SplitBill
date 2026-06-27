@@ -3841,7 +3841,90 @@ function ghPromptSync() {}
 function ghPush() { mostrarMensagem('Dados guardados automaticamente no Supabase ✓', true); }
 function ghReset() { sbCarregarDados().then(() => { renderHistoricoDropdown(); renderContas(); mostrarMensagem('✓ Dados sincronizados do Supabase', true); }); }
 
+/* ── Swipe-back (PWA: deslizar da margem esquerda → direita p/ voltar) ── */
+// Só em modo standalone (app instalada): no browser já existe o gesto/botão nativo.
+function sbEmStandalone() {
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+        || window.navigator.standalone === true;
+}
+
+// Cadeia de "voltar": fecha o overlay/painel ativo; senão volta ao ecrã inicial.
+// É o mesmo destino do botão "Início" do cabeçalho.
+function sbVoltar() {
+    const modal = document.getElementById('modal-overlay');
+    if (modal && modal.classList.contains('show')) return false; // confirmação a decorrer → não interferir
+    const pdf = document.getElementById('pdfOverlay');
+    if (pdf) { pdf.remove(); return true; }
+    const fab = document.getElementById('fab-panel');
+    if (fab && fab.style.display === 'block') { fecharFabPanel(); return true; }
+    const equiv = document.getElementById('page-equivalencias');
+    if (equiv && equiv.style.display === 'flex') { fecharEquivalencias(); return true; }
+    const admin = document.getElementById('page-admin');
+    if (admin && admin.style.display === 'flex') { fecharAdmin(); return true; }
+    const defs = document.getElementById('page-definicoes');
+    if (defs && defs.style.display === 'flex') { fecharDefinicoes(); return true; }
+    if (typeof _paginaAtual !== 'undefined' && _paginaAtual && _paginaAtual !== 'inicio') {
+        mudarPagina('inicio'); return true;
+    }
+    return false;
+}
+
+function sbSetupSwipeBack() {
+    if (!sbEmStandalone()) return;
+    const EDGE = 28;    // zona de arranque junto à margem esquerda (px)
+    const THRESH = 70;  // distância horizontal mínima p/ confirmar (px)
+    let active = false, x0 = 0, y0 = 0, dx = 0, dy = 0, hint = null;
+
+    function getHint() {
+        if (!hint) {
+            hint = document.createElement('div');
+            hint.className = 'sb-swipe-hint';
+            hint.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>';
+            document.body.appendChild(hint);
+        }
+        return hint;
+    }
+    function resetHint() {
+        if (hint) { hint.style.opacity = '0'; hint.classList.remove('committed'); }
+    }
+
+    document.addEventListener('touchstart', e => {
+        active = false;
+        if (e.touches.length !== 1) return;
+        const t = e.touches[0];
+        if (t.clientX > EDGE) return;
+        const modal = document.getElementById('modal-overlay');
+        if (modal && modal.classList.contains('show')) return;
+        active = true; x0 = t.clientX; y0 = t.clientY; dx = 0; dy = 0;
+    }, { passive: true });
+
+    document.addEventListener('touchmove', e => {
+        if (!active) return;
+        const t = e.touches[0];
+        dx = t.clientX - x0; dy = t.clientY - y0;
+        // movimento sobretudo vertical → é scroll, cancela o gesto
+        if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 12) { resetHint(); active = false; return; }
+        if (dx <= 0) { resetHint(); return; }
+        const h = getHint();
+        const prog = Math.min(dx / THRESH, 1);
+        h.style.transform = 'translate(' + (dx * 0.6 - 23) + 'px,' + (t.clientY - 23) + 'px)';
+        h.style.opacity = String(Math.min(prog + 0.2, 1));
+        h.classList.toggle('committed', dx >= THRESH);
+    }, { passive: true });
+
+    document.addEventListener('touchend', () => {
+        if (!active) return;
+        active = false;
+        const ok = dx >= THRESH && Math.abs(dy) < Math.abs(dx);
+        resetHint();
+        if (ok) sbVoltar();
+    }, { passive: true });
+
+    document.addEventListener('touchcancel', () => { active = false; resetHint(); }, { passive: true });
+}
+
 // Iniciar
+sbSetupSwipeBack();
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', sbInit);
 } else {
