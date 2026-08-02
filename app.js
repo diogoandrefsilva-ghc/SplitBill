@@ -147,6 +147,9 @@ function carregarEvento(ev) {
     // todos os eventos (preço mais recente) para o dropdown de artigos funcionar.
     menu = (ev.menu && Object.keys(ev.menu).length) ? JSON.parse(JSON.stringify(ev.menu)) : menuAgregadoGlobal();
     modoReadOnly = !!ev.totalFatura;
+    // A conferência da fatura é de um evento concreto — ao trocar de evento o
+    // painel fecha-se, senão ficavam comparações da conta anterior no ecrã.
+    if (typeof faturaFecharRecon === 'function') faturaFecharRecon();
     document.getElementById('descricao-evento').value = estado.descricaoEvento;
     document.getElementById('total-fatura').value = estado.totalFatura || '';
     renderPagadorSelect();
@@ -325,7 +328,13 @@ function removerOrdem(id) {
     mostrarMensagem('✓ Ordem removida', true);
 }
 
-function atualizarUI() { _atualizarUIInner(); if(typeof atualizarReadOnly==='function') atualizarReadOnly(); }
+function atualizarUI() {
+    _atualizarUIInner();
+    if(typeof atualizarReadOnly==='function') atualizarReadOnly();
+    // A conferência da fatura compara-se com as ordens: se elas mudam (marcar o
+    // artigo que faltava, corrigir uma quantidade), o painel refaz as contas.
+    if(typeof faturaRenderRecon==='function' && _faturaRecon) faturaRenderRecon();
+}
 function _atualizarUIInner() {
     // Lista de ordens
     const lista = document.getElementById('lista-ordens');
@@ -1502,6 +1511,421 @@ function aplicarColapsosSecoes() {
     }
 }
 
+/* ── IMPORTAR FATURA (foto/PDF → Gemini → conferência artigo a artigo) ──────
+   Até aqui a fatura era só um número: metia-se o total e a app espalhava a
+   diferença por toda a gente com um rácio. Com a foto do talão passa a haver
+   detalhe: a Edge Function `fatura-restaurante` (mesmo projeto Supabase da
+   FestasBV, prompt próprio para conta de restaurante) devolve
+   {restaurante, data, total, linhas:[{artigo,qtd,precoUnit,precoTotal}]} e a app
+   compara linha a linha com o que foi marcado como consumido.
+
+   O caso que interessa mesmo: quando os artigos e as QUANTIDADES batem certo e
+   só os PREÇOS divergem (a casa subiu a imperial e o menu da app ficou velho),
+   não há nada para discutir sobre quem comeu o quê — é só corrigir o preço do
+   artigo NESTE evento. Aí a divisão passa a ser exata, sem rácio nenhum.
+   O utilizador revê sempre antes de aplicar seja o que for. */
+
+let _faturaRecon = null;    // {restaurante, data, total, linhas:[...]} da última leitura
+let _faturaRows = [];       // linhas da conferência, recalculadas a cada render
+let _faturaSemAplicar = new Set();   // artigos com a correção de preço desmarcada
+
+const _frR2 = v => Math.round(v * 100) / 100;
+function _frEsc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+// Chave de comparação: minúsculas, sem acentos, sem pontuação
+function faturaKey(s) {
+    return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, ' ').trim();
+}
+function faturaTokens(s) { return faturaKey(s).split(' ').filter(t => t.length >= 3); }
+// Duas palavras são "a mesma" se partilharem um prefixo longo. Prefixo em vez de
+// igualdade porque o talão vem quase sempre no plural e o menu no singular — e
+// prefixo COMPRIDO (não startsWith) porque em português o plural nem sempre
+// acrescenta letras: imperial→imperiais, pastel→pastéis. Mínimo de 4 letras
+// iguais para "sumo"/"sopa" não colarem uma na outra.
+function _frTokSim(a, b) {
+    if (a === b) return 1;
+    let i = 0; const n = Math.min(a.length, b.length);
+    while (i < n && a[i] === b[i]) i++;
+    return i >= 4 ? i / Math.max(a.length, b.length) : 0;
+}
+// Score 0..1 entre dois nomes. As duas direções contam, mas a melhor pesa mais:
+// o talão costuma ser mais falado que o menu ("Bitoque" vs "Bitoque de vaca") e
+// exigir cobertura total nos dois sentidos deixava esses de fora.
+function faturaScore(a, b) {
+    const ta = faturaTokens(a), tb = faturaTokens(b);
+    if (!ta.length || !tb.length) { const ka = faturaKey(a); return ka && ka === faturaKey(b) ? 1 : 0; }
+    const hit = (x, y) => x.filter(t => y.some(u => _frTokSim(t, u) >= 0.7)).length;
+    const d1 = hit(ta, tb) / ta.length, d2 = hit(tb, ta) / tb.length;
+    return Math.max(d1, d2) * 0.6 + Math.min(d1, d2) * 0.4;
+}
+
+function faturaPick() {
+    if (!eventoAtualId) { mostrarMensagem('⚠️ Cria ou abre um evento primeiro', false); return; }
+    if (!podeEditarEventoAtual()) { mostrarMensagem('⚠️ Sem permissão para editar este evento', false); return; }
+    if (modoReadOnly) { mostrarMensagem('⚠️ Conta fechada — reabre-a para conferir a fatura', false); return; }
+    if (!_sbSession) { mostrarMensagem('⚠️ Inicia sessão para usar a leitura da fatura', false); return; }
+    const i = document.getElementById('fatura-file');
+    if (i) i.click();
+}
+
+async function faturaChosen(inp) {
+    const f = inp.files && inp.files[0];
+    inp.value = '';
+    if (!f) return;
+    const btn = document.getElementById('btn-fatura-ocr');
+    const label = btn ? btn.innerHTML : '';   // duas linhas (título + subtítulo) → repor em HTML
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ A ler a fatura…'; }
+    try {
+        // PDF vai tal e qual (o Gemini lê PDFs nativamente); imagem é comprimida em canvas
+        const isPdf = f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '');
+        if (isPdf && f.size > 4 * 1024 * 1024) throw new Error('PDF demasiado grande (máx. 4 MB)');
+        const { b64, mime } = isPdf ? await faturaLerPdf(f) : await faturaComprime(f);
+        // O menu do evento segue no pedido: com ele o modelo devolve o nome que a
+        // app já usa em vez de uma grafia nova, e a conferência bate certo
+        const body = { image: b64, mime };
+        const arts = Object.keys(menu).slice(0, 200).map(n => ({ nome: n, preco: menu[n] }));
+        if (arts.length) body.menu = arts;
+        const r = await sbFetch(`${SB_URL}/functions/v1/fatura-restaurante`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY },
+            body: JSON.stringify(body)
+        });
+        if (!r.ok) {
+            const e = await r.json().catch(() => ({}));
+            if (r.status === 404) throw new Error('a função de leitura ainda não está publicada no Supabase');
+            throw new Error(e.error || ('HTTP ' + r.status));
+        }
+        faturaAplicar(await r.json());
+    } catch (e) {
+        // "Load failed"/"Failed to fetch" é o erro genérico do browser quando o
+        // pedido é cortado por timeout (~60s no iOS) ou a ligação cai a meio.
+        const m = String(e && e.message || e);
+        const rede = /load failed|failed to fetch|networkerror|timed? ?out/i.test(m);
+        mostrarMensagem(rede
+            ? '❌ A leitura demorou demasiado ou falhou a ligação. Tenta uma foto mais nítida ou volta a tentar.'
+            : '❌ Não consegui ler a fatura: ' + m, false);
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = label; }
+    }
+}
+
+// Lê um PDF em base64, sem transformação (o modelo aceita PDFs diretamente)
+function faturaLerPdf(file) {
+    return new Promise((resolve, reject) => {
+        const rd = new FileReader();
+        rd.onload = () => resolve({ b64: String(rd.result).split(',')[1], mime: 'application/pdf' });
+        rd.onerror = () => reject(new Error('não consegui ler o PDF'));
+        rd.readAsDataURL(file);
+    });
+}
+// Reduz a foto (máx 1600px no lado maior, JPEG q0.85): chega de sobra para o
+// modelo ler o talão e mantém o upload leve mesmo em rede móvel
+function faturaComprime(file) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            const MAX = 1600;
+            const s = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
+            const w = Math.round(img.naturalWidth * s), h = Math.round(img.naturalHeight * s);
+            const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+            cv.getContext('2d').drawImage(img, 0, 0, w, h);
+            URL.revokeObjectURL(img.src);
+            resolve({ b64: cv.toDataURL('image/jpeg', 0.85).split(',')[1], mime: 'image/jpeg' });
+        };
+        img.onerror = () => { URL.revokeObjectURL(img.src); reject(new Error('imagem inválida')); };
+        img.src = URL.createObjectURL(file);
+    });
+}
+
+// Resposta do modelo → estado da conferência (guarda-se o que foi LIDO, cru; as
+// comparações são refeitas a cada render para acompanharem edições às ordens)
+function faturaAplicar(d) {
+    const cru = (d && Array.isArray(d.linhas)) ? d.linhas : [];
+    const linhas = [];
+    let semPreco = 0;
+    cru.forEach(l => {
+        const nome = String((l && l.artigo) || '').replace(/\s+/g, ' ').trim();
+        if (!nome) return;
+        let q = Number(l.qtd);
+        if (!isFinite(q) || q <= 0) q = 1;
+        let u = Number(l.precoUnit), t = Number(l.precoTotal);
+        if (!isFinite(u) || u < 0) u = NaN;
+        if (!isFinite(t) || t < 0) t = NaN;
+        if (isNaN(u) && !isNaN(t)) u = t / q;
+        if (isNaN(t) && !isNaN(u)) t = u * q;
+        if (isNaN(u)) { semPreco++; return; }   // linha sem preço legível não dá para conferir
+        linhas.push({ nome, qtd: q, unit: _frR2(u), total: _frR2(t) });
+    });
+    if (!linhas.length) { mostrarMensagem('❌ Não encontrei artigos legíveis na fatura', false); return; }
+    const total = (d && isFinite(Number(d.total)) && Number(d.total) > 0) ? _frR2(Number(d.total)) : null;
+    _faturaRecon = { restaurante: (d && d.restaurante) || '', data: (d && d.data) || '', total, linhas, semPreco };
+    _faturaSemAplicar = new Set();
+    faturaRenderRecon();
+    const box = document.getElementById('fatura-recon');
+    if (box) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+/* Compara a fatura lida com o consumo marcado. Devolve uma linha por artigo:
+     ok     — quantidade e preço batem certo
+     preco  — quantidade certa, preço diferente  (é o caso que se pode corrigir)
+     qtd    — quantidade diferente
+     extra  — está na fatura mas não foi marcado por ninguém
+     falta  — foi marcado mas não aparece na fatura                              */
+function faturaConferir() {
+    const r = _faturaRecon;
+    if (!r) return null;
+
+    // Consumo marcado, agregado por artigo
+    const cons = {};
+    estado.ordens.forEach(o => {
+        const c = cons[o.item] || (cons[o.item] = { item: o.item, qtd: 0, total: 0 });
+        c.qtd += o.quantidade;
+        c.total += o.precoTotal;
+    });
+    Object.keys(cons).forEach(k => { cons[k].unit = cons[k].qtd ? _frR2(cons[k].total / cons[k].qtd) : 0; });
+    const porChave = {};
+    Object.keys(menu).forEach(k => { porChave[faturaKey(k)] = k; });
+    Object.keys(cons).forEach(k => { porChave[faturaKey(k)] = k; });   // consumido manda sobre o menu
+
+    // Fatura agregada pelo artigo a que cada linha corresponde (a mesma bebida
+    // pode vir em duas linhas da conta)
+    const fat = {};
+    r.linhas.forEach(l => {
+        let item = porChave[faturaKey(l.nome)] || null;
+        if (!item) {
+            // Sem nome igual: escolhe o mais parecido, primeiro entre o que foi
+            // consumido e só depois no resto do menu
+            let best = null, bs = 0;
+            Object.keys(cons).forEach(it => { const s = faturaScore(it, l.nome); if (s > bs) { bs = s; best = it; } });
+            if (bs < 0.6) Object.keys(menu).forEach(it => { const s = faturaScore(it, l.nome); if (s > bs) { bs = s; best = it; } });
+            if (bs >= 0.6) item = best;
+        }
+        const key = item || ('~' + faturaKey(l.nome));
+        const f = fat[key] || (fat[key] = { item, nome: item || l.nome, qtd: 0, total: 0, nomes: [] });
+        f.qtd += l.qtd;
+        f.total = _frR2(f.total + l.total);
+        if (f.nomes.indexOf(l.nome) < 0) f.nomes.push(l.nome);
+    });
+
+    const rows = [];
+    Object.keys(fat).forEach(key => {
+        const f = fat[key];
+        f.unit = f.qtd ? _frR2(f.total / f.qtd) : 0;
+        const c = f.item ? cons[f.item] : null;
+        if (!c) {
+            // Na fatura mas ninguém marcou (artigo novo ou esquecido)
+            rows.push({ tipo: 'extra', item: f.item, nome: f.nome, nomesFatura: f.nomes,
+                        qtdF: f.qtd, unitF: f.unit, totF: f.total });
+            return;
+        }
+        const dq = _frR2(f.qtd - c.qtd);
+        const du = _frR2(f.unit - c.unit);
+        rows.push({
+            tipo: Math.abs(dq) > 0.001 ? 'qtd' : (Math.abs(du) >= 0.01 ? 'preco' : 'ok'),
+            item: f.item, nome: f.item, nomesFatura: f.nomes,
+            qtdF: f.qtd, qtdC: c.qtd, unitF: f.unit, unitC: c.unit,
+            totF: f.total, totC: _frR2(c.total), dq, du
+        });
+    });
+    // Marcado mas ausente da fatura
+    const naFatura = {};
+    Object.keys(fat).forEach(k => { if (fat[k].item) naFatura[fat[k].item] = true; });
+    Object.keys(cons).forEach(it => {
+        if (naFatura[it]) return;
+        rows.push({ tipo: 'falta', item: it, nome: it, qtdC: cons[it].qtd, unitC: cons[it].unit, totC: _frR2(cons[it].total) });
+    });
+
+    // Problemas primeiro, depois preços, e o que está certo por último
+    const rank = { qtd: 0, extra: 1, falta: 2, preco: 3, ok: 4 };
+    rows.sort((a, b) => (rank[a.tipo] - rank[b.tipo]) || a.nome.localeCompare(b.nome, 'pt'));
+
+    const n = t => rows.filter(x => x.tipo === t).length;
+    const precoRows = rows.filter(x => x.tipo === 'preco');
+    return {
+        rows,
+        nOk: n('ok'), nPreco: n('preco'), nQtd: n('qtd'), nExtra: n('extra'), nFalta: n('falta'),
+        contagemOk: !n('qtd') && !n('extra') && !n('falta'),
+        difPrecos: _frR2(precoRows.reduce((s, x) => s + (x.totF - x.totC), 0)),
+        totalMesa: _frR2(estado.ordens.reduce((s, o) => s + o.precoTotal, 0)),
+        totalLinhas: _frR2(rows.reduce((s, x) => s + (x.totF || 0), 0))
+    };
+}
+
+function faturaRenderRecon() {
+    const box = document.getElementById('fatura-recon');
+    if (!box) return;
+    const r = _faturaRecon, c = faturaConferir();
+    if (!r || !c) { box.style.display = 'none'; box.innerHTML = ''; _faturaRows = []; return; }
+    _faturaRows = c.rows;
+
+    // Reservas: o que a leitura não garante, mesmo quando as linhas batem certo.
+    // Sem isto o veredicto dizia "confere" com linhas por ler em cima da mesa.
+    const difTotal = r.total != null ? _frR2(r.total - c.totalLinhas) : 0;
+    const reservas = [];
+    if (r.semPreco) reservas.push(r.semPreco + (r.semPreco === 1 ? ' linha da fatura ficou' : ' linhas da fatura ficaram') + ' por ler (preço ilegível)');
+    if (Math.abs(difTotal) >= 0.01) {
+        reservas.push('o total impresso (€' + r.total.toFixed(2) + ') não é a soma das linhas (€'
+            + c.totalLinhas.toFixed(2) + ')' + (difTotal > 0 ? ' — serviço, couvert ou linha em falta?' : ''));
+    }
+
+    // Veredicto — a frase que se lê primeiro
+    let vClasse, vTitulo, vTexto;
+    if (c.contagemOk && !c.nPreco && !reservas.length) {
+        vClasse = 'ok';
+        vTitulo = '✅ A fatura confere';
+        vTexto = 'Artigos, quantidades e preços batem certo com o que foi marcado.';
+    } else if (c.contagemOk && !c.nPreco) {
+        vClasse = 'preco';
+        vTitulo = '✅ Artigos e preços batem certo';
+        vTexto = 'Mas confere o total antes de fechar.';
+    } else if (c.contagemOk) {
+        const sinal = c.difPrecos >= 0 ? '+' : '−';
+        vClasse = 'preco';
+        vTitulo = '💶 Contagem certa — só os preços divergem';
+        vTexto = 'Os artigos e as quantidades batem todos certo. ' + c.nPreco
+            + (c.nPreco === 1 ? ' artigo tem' : ' artigos têm') + ' preço diferente na fatura ('
+            + sinal + '€' + Math.abs(c.difPrecos).toFixed(2) + '). Corrige os preços neste evento e a divisão fica exata, sem rácio.';
+    } else {
+        const faltas = [];
+        if (c.nQtd) faltas.push(c.nQtd + ' com quantidade diferente');
+        if (c.nExtra) faltas.push(c.nExtra + ' na fatura sem estar marcado');
+        if (c.nFalta) faltas.push(c.nFalta + ' marcado sem estar na fatura');
+        vClasse = 'qtd';
+        vTitulo = '⚠️ Diferenças na contagem';
+        vTexto = 'Confere estes artigos antes de fechar: ' + faltas.join(' · ') + '.';
+    }
+    if (reservas.length) {
+        const t = reservas.join('; ');
+        vTexto += ' Atenção: ' + t + (/[?.!]$/.test(t) ? '' : '.');
+    }
+
+    // Cabeçalho lido do talão + totais
+    const meta = [];
+    if (r.restaurante) meta.push('🏠 ' + _frEsc(r.restaurante));
+    if (r.data) meta.push('📅 ' + _frEsc(r.data));
+    meta.push('🧾 Soma das linhas: €' + c.totalLinhas.toFixed(2));
+    if (r.total != null) {
+        meta.push('Total impresso: €' + r.total.toFixed(2)
+            + (Math.abs(difTotal) >= 0.01 ? ' <span class="neg">(' + (difTotal > 0 ? '+' : '−') + '€' + Math.abs(difTotal).toFixed(2) + ')</span>' : ''));
+    }
+    meta.push('Marcado na app: €' + c.totalMesa.toFixed(2));
+
+    const tag = { ok: 'certo', preco: 'preço', qtd: 'quantidade', extra: 'não marcado', falta: 'sem fatura' };
+    const linhasHtml = c.rows.map((x, i) => {
+        let det = '', chk = '<span class="fr-chk-off"></span>', acao = '';
+        if (x.tipo === 'ok') {
+            det = x.qtdF + ' × €' + x.unitF.toFixed(2) + ' = €' + x.totF.toFixed(2);
+        } else if (x.tipo === 'preco') {
+            const cl = x.du > 0 ? 'neg' : 'pos';
+            det = x.qtdF + ' un · marcado €' + x.unitC.toFixed(2) + ' → fatura €' + x.unitF.toFixed(2)
+                + ' <span class="' + cl + '">(' + (x.du > 0 ? '+' : '−') + '€' + Math.abs(_frR2(x.totF - x.totC)).toFixed(2) + ')</span>';
+            chk = '<input type="checkbox" class="fr-chk" ' + (_faturaSemAplicar.has(x.item) ? '' : 'checked')
+                + ' onchange="faturaTogglePreco(' + i + ')">';
+        } else if (x.tipo === 'qtd') {
+            const cl = x.dq > 0 ? 'neg' : 'pos';
+            det = 'marcado ' + x.qtdC + ' × €' + x.unitC.toFixed(2) + ' · fatura ' + x.qtdF + ' × €' + x.unitF.toFixed(2)
+                + ' <span class="' + cl + '">(' + (x.dq > 0 ? '+' : '−') + Math.abs(x.dq) + ' un)</span>';
+        } else if (x.tipo === 'extra') {
+            det = 'fatura: ' + x.qtdF + ' × €' + x.unitF.toFixed(2) + ' = €' + x.totF.toFixed(2) + ' · ninguém marcou este artigo';
+            acao = '<button class="fr-acao" onclick="faturaMarcarExtra(' + i + ')">➕ Marcar</button>';
+        } else {
+            det = 'marcado: ' + x.qtdC + ' × €' + x.unitC.toFixed(2) + ' = €' + x.totC.toFixed(2) + ' · não aparece na fatura';
+        }
+        // Nome que veio impresso, quando difere do artigo da app
+        const alias = (x.nomesFatura || []).filter(n => faturaKey(n) !== faturaKey(x.nome));
+        const sub = alias.length ? '<div class="fr-det">na fatura: ' + _frEsc(alias.join(', ')) + '</div>' : '';
+        return '<div class="fr-linha">' + chk
+            + '<div class="fr-body"><div class="fr-nome">' + _frEsc(x.nome)
+            + '<span class="fr-tag ' + x.tipo + '">' + tag[x.tipo] + '</span></div>'
+            + '<div class="fr-det">' + det + '</div>' + sub + '</div>' + acao + '</div>';
+    }).join('');
+
+    const btns = [];
+    if (c.nPreco) btns.push('<button onclick="faturaAplicarPrecos()">💶 Corrigir preços</button>');
+    if (r.total != null) btns.push('<button class="fr-sec" onclick="faturaUsarTotal()">🧾 Usar total €' + r.total.toFixed(2) + '</button>');
+    btns.push('<button class="fr-sec" onclick="faturaFecharRecon()">✕ Fechar</button>');
+
+    box.innerHTML = '<div class="fr-verdict ' + vClasse + '"><b>' + vTitulo + '</b>' + vTexto + '</div>'
+        + '<div class="fr-meta">' + meta.join(' · ')
+        + (r.semPreco ? ' · <span class="neg">' + r.semPreco + (r.semPreco === 1 ? ' linha ignorada' : ' linhas ignoradas') + ' (sem preço)</span>' : '') + '</div>'
+        + linhasHtml
+        + '<div class="fr-btns">' + btns.join('') + '</div>';
+    box.style.display = '';
+}
+
+function faturaTogglePreco(i) {
+    const x = _faturaRows[i];
+    if (!x || !x.item) return;
+    if (_faturaSemAplicar.has(x.item)) _faturaSemAplicar.delete(x.item);
+    else _faturaSemAplicar.add(x.item);
+}
+
+// Corrige o preço dos artigos escolhidos NESTE evento: menu do evento + todas as
+// ordens desse artigo. Não toca noutros eventos — o menu é guardado por evento.
+function faturaAplicarPrecos() {
+    if (!podeEditarEventoAtual()) { mostrarMensagem('⚠️ Sem permissão para editar este evento', false); return; }
+    if (modoReadOnly) { mostrarMensagem('⚠️ Conta fechada — reabre-a primeiro', false); return; }
+    const alvos = _faturaRows.filter(x => x.tipo === 'preco' && x.item && !_faturaSemAplicar.has(x.item));
+    if (!alvos.length) { mostrarMensagem('⚠️ Nenhum preço selecionado', false); return; }
+    alvos.forEach(x => {
+        menu[x.item] = x.unitF;
+        estado.ordens.forEach(o => {
+            if (o.item !== x.item) return;
+            o.precoUnitario = x.unitF;
+            o.precoTotal = _frR2(x.unitF * o.quantidade);
+        });
+    });
+    salvarNoLocalStorage();
+    renderDropdownItens();
+    renderConfigMenu();
+    atualizarUI();   // refaz também a conferência com os preços novos
+    atualizarPreco();
+    if (document.getElementById('total-fatura').value) atualizarAjuste();
+    mostrarMensagem('✓ ' + alvos.length + (alvos.length === 1 ? ' preço corrigido' : ' preços corrigidos') + ' neste evento', true);
+}
+
+// Artigo que está na fatura mas ninguém marcou: acrescenta-o ao menu com o preço
+// da fatura e deixa o formulário pronto — só falta escolher quem consumiu.
+function faturaMarcarExtra(i) {
+    const x = _faturaRows[i];
+    if (!x || x.tipo !== 'extra') return;
+    if (!podeEditarEventoAtual()) { mostrarMensagem('⚠️ Sem permissão para editar este evento', false); return; }
+    if (modoReadOnly) { mostrarMensagem('⚠️ Conta fechada — reabre-a primeiro', false); return; }
+    if (menu[x.nome] == null || Math.abs(menu[x.nome] - x.unitF) >= 0.01) {
+        menu[x.nome] = x.unitF;
+        salvarNoLocalStorage();
+        renderDropdownItens();
+        renderConfigMenu();
+    }
+    const sel = document.getElementById('item');
+    if (sel) sel.value = x.nome;
+    const q = document.getElementById('quantidade');
+    if (q) q.value = String(Math.min(10, Math.max(1, Math.round(x.qtdF))));
+    atualizarPreco();
+    atualizarBotaoOrdem();
+    const sec = document.getElementById('section-adicionar');
+    if (sec) { sec.classList.remove('collapsed'); sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    mostrarMensagem('✓ "' + x.nome + '" pronto — escolhe quem consumiu e adiciona', true);
+}
+
+function faturaUsarTotal() {
+    if (!_faturaRecon || _faturaRecon.total == null) return;
+    const el = document.getElementById('total-fatura');
+    if (!el) return;
+    el.value = _faturaRecon.total.toFixed(2);
+    atualizarAjuste();
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function faturaFecharRecon() {
+    _faturaRecon = null;
+    _faturaRows = [];
+    _faturaSemAplicar = new Set();
+    faturaRenderRecon();
+}
+
 function atualizarReadOnly() {
     const banner = document.getElementById('readonly-banner');
     const sections = ['section-adicionar', 'section-ofertas', 'section-config'];
@@ -1517,6 +1941,10 @@ function atualizarReadOnly() {
     document.getElementById('btn-reabrir-evento').style.display = hasFatura ? '' : 'none';
     const _car = document.getElementById('talao-carimbo');
     if (_car) _car.style.display = hasFatura ? '' : 'none';
+    // Ler a fatura é o passo ANTES de fechar: com a conta fechada (ou sem
+    // permissão) o botão fica inativo, senão prometia correções que não pode aplicar.
+    const _ocr = document.getElementById('btn-fatura-ocr');
+    if (_ocr) _ocr.disabled = modoReadOnly || !podeEditarEventoAtual();
 
     // Formulário de ofertas: escondido em evento fechado, visível ao desbloquear
     const ofertaForm = document.getElementById('oferta-form');

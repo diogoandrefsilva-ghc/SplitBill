@@ -321,6 +321,9 @@ window.sbEsconderSplash = function(){
         <div class="carimbo" id="talao-carimbo" style="display:none;">Fechado</div>
         <div class="talao-head"><b>FATURA DO RESTAURANTE</b>conferência da conta</div>
         <hr class="talao-hr">
+        <button id="btn-fatura-ocr" class="fatura-ocr-btn" onclick="faturaPick()">📷 Importar fatura (foto ou PDF)<span>compara artigo a artigo com o consumo marcado</span></button>
+        <input type="file" id="fatura-file" accept="image/*,application/pdf" style="display:none" onchange="faturaChosen(this)">
+        <div id="fatura-recon" class="fatura-recon" style="display:none;"></div>
         <div class="pagador-selector">
             <label>💳 Quem pagou:</label>
             <select id="pagador-select" onchange="atualizarPagador()">

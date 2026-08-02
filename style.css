@@ -1396,6 +1396,102 @@ html,body{touch-action:pan-x pan-y}
             opacity: 0.85;
             pointer-events: none;
         }
+        /* ── Importar fatura (OCR) + conferência artigo a artigo ── */
+        .fatura-ocr-btn {
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 10px 12px;
+            font-family: var(--mono);
+            font-size: 13px;
+            font-weight: 600;
+            background: #fff;
+            color: var(--verde-escuro);
+            border: 1px dashed #C9C2AC;
+            border-radius: 6px;
+            line-height: 1.3;
+        }
+        .fatura-ocr-btn span {
+            display: block;
+            margin-top: 3px;
+            font-size: 10.5px;
+            font-weight: 400;
+            letter-spacing: 0;
+            text-transform: none;
+            color: var(--ink-soft);
+        }
+        /* O `button:hover`/`button:disabled:hover` globais pintam tudo de verde —
+           estes botões são de papel (fundo branco no talão), por isso repõem a
+           própria cor nos dois estados. */
+        .fatura-ocr-btn:hover, .fatura-ocr-btn:disabled, .fatura-ocr-btn:disabled:hover {
+            background: #fff;
+            color: var(--verde-escuro);
+        }
+        .fatura-ocr-btn:hover:not(:disabled) { background: var(--verde-claro); }
+        .fatura-ocr-btn:disabled { opacity: 0.45; }
+        .fatura-recon { font-family: var(--mono); font-size: 12px; margin-bottom: 12px; }
+        /* Veredicto: uma frase que diz de relance se a conta bate certo */
+        .fr-verdict {
+            border: 1px solid #C9C2AC;
+            border-left-width: 4px;
+            border-radius: 5px;
+            padding: 9px 10px;
+            line-height: 1.45;
+            margin-bottom: 9px;
+            background: #fff;
+        }
+        .fr-verdict b { display: block; font-size: 13px; margin-bottom: 2px; }
+        .fr-verdict.ok { border-left-color: var(--verde); color: var(--verde); }
+        .fr-verdict.preco { border-left-color: var(--dourado); color: #8A6D14; }
+        .fr-verdict.qtd { border-left-color: var(--rubro); color: var(--rubro); }
+        .fr-meta { color: var(--ink-soft); font-size: 11px; margin-bottom: 8px; line-height: 1.5; }
+        /* Uma linha por artigo: nome + estado em cima, números por baixo */
+        .fr-linha {
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+            padding: 7px 2px;
+            border-bottom: 1px dashed #E0DAC4;
+        }
+        .fr-linha:first-of-type { border-top: 1px dashed #E0DAC4; }
+        .fr-chk { margin-top: 3px; flex: 0 0 auto; width: 15px; height: 15px; accent-color: var(--dourado); }
+        .fr-chk-off { flex: 0 0 15px; }
+        .fr-body { flex: 1; min-width: 0; }
+        .fr-nome { font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+        .fr-det { color: var(--ink-soft); font-size: 11px; line-height: 1.5; margin-top: 1px; }
+        .fr-det .neg { color: var(--rubro); font-weight: 600; }
+        .fr-det .pos { color: var(--verde); font-weight: 600; }
+        .fr-tag {
+            display: inline-block;
+            font-size: 9.5px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            padding: 1px 5px;
+            border-radius: 3px;
+            margin-left: 6px;
+            vertical-align: 1px;
+        }
+        .fr-tag.ok { background: var(--verde-claro); color: var(--verde); }
+        .fr-tag.preco { background: var(--dourado-claro); color: #8A6D14; }
+        .fr-tag.qtd { background: #F7E0DC; color: var(--rubro); }
+        .fr-tag.extra { background: #F7E0DC; color: var(--rubro); }
+        .fr-tag.falta { background: #EDEDE6; color: var(--ink-soft); }
+        .fr-acao {
+            flex: 0 0 auto;
+            padding: 4px 8px;
+            font-size: 11px;
+            font-family: var(--mono);
+            background: #fff;
+            color: var(--verde-escuro);
+            border: 1px solid var(--linha);
+            border-radius: 5px;
+            margin-top: 2px;
+        }
+        .fr-acao:hover { background: var(--verde-claro); color: var(--verde-escuro); }
+        .fr-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+        .fr-btns button { flex: 1 1 132px; padding: 9px 10px; font-size: 12px; font-family: var(--mono); }
+        .fr-btns .fr-sec { background: #fff; color: var(--verde-escuro); border: 1px solid var(--linha); }
+        .fr-btns .fr-sec:hover { background: var(--verde-claro); color: var(--verde-escuro); }
         #ajuste-racio { font-family: var(--mono); font-size: 12px !important; }
         .pessoa-ajuste { border-left: none; background: transparent; border-bottom: 1px dashed #E0DAC4; border-radius: 0; }
         .pessoa-conta-final { border: none; border-bottom: 1px solid var(--linha); border-radius: 0; margin-bottom: 0; padding: 10px 2px; }
