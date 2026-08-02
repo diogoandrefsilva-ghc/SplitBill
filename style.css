@@ -1429,6 +1429,34 @@ html,body{touch-action:pan-x pan-y}
         .fatura-ocr-btn:hover:not(:disabled) { background: var(--verde-claro); }
         .fatura-ocr-btn:disabled { opacity: 0.45; }
         .fatura-recon { font-family: var(--mono); font-size: 12px; margin-bottom: 12px; }
+        /* Barra de resumo: o que fica à vista quando o evento tem fatura
+           guardada. Abre/fecha o detalhe todo. */
+        .fr-strip {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            width: 100%;
+            text-align: left;
+            padding: 9px 10px;
+            margin-bottom: 9px;
+            background: #fff;
+            color: var(--ink);
+            border: 1px solid #C9C2AC;
+            border-left-width: 4px;
+            border-radius: 5px;
+            font-family: var(--mono);
+            font-weight: 400;
+            font-size: 12px;
+        }
+        .fr-strip.ok { border-left-color: var(--verde); }
+        .fr-strip.preco { border-left-color: var(--dourado); }
+        .fr-strip.qtd { border-left-color: var(--rubro); }
+        .fr-strip:hover { background: var(--verde-claro); color: var(--ink); }
+        .fr-strip-ic { flex: 0 0 auto; font-size: 15px; }
+        .fr-strip-txt { flex: 1; min-width: 0; }
+        .fr-strip-txt b { display: block; font-size: 12.5px; font-weight: 700; overflow-wrap: anywhere; }
+        .fr-strip-txt span { display: block; font-size: 10.5px; color: var(--ink-soft); margin-top: 1px; overflow-wrap: anywhere; }
+        .fr-strip-chev { flex: 0 0 auto; font-size: 10px; color: var(--ink-soft); }
         /* Veredicto: uma frase que diz de relance se a conta bate certo */
         .fr-verdict {
             border: 1px solid #C9C2AC;

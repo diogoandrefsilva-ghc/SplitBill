@@ -10,6 +10,7 @@ let estado = {
     ordens: [],
     ofertas: [],
     totalFatura: null,
+    fatura: null,          // detalhe lido da fatura (artigo a artigo), guardado no evento
     descricaoEvento: '',
     pagador: '',
     dividas: {},
@@ -139,6 +140,7 @@ function carregarEvento(ev) {
     estado.ordens = ev.ordens ? JSON.parse(JSON.stringify(ev.ordens)) : [];
     estado.ofertas = ev.ofertas ? JSON.parse(JSON.stringify(ev.ofertas)) : [];
     estado.totalFatura = ev.totalFatura || null;
+    estado.fatura = ev.fatura ? JSON.parse(JSON.stringify(ev.fatura)) : null;
     estado.descricaoEvento = ev.descricao || '';
     estado.pagador = ev.pagador || '';
     estado.dividas = ev.dividas ? JSON.parse(JSON.stringify(ev.dividas)) : {};
@@ -333,7 +335,7 @@ function atualizarUI() {
     if(typeof atualizarReadOnly==='function') atualizarReadOnly();
     // A conferência da fatura compara-se com as ordens: se elas mudam (marcar o
     // artigo que faltava, corrigir uma quantidade), o painel refaz as contas.
-    if(typeof faturaRenderRecon==='function' && _faturaRecon) faturaRenderRecon();
+    if(typeof faturaRenderRecon==='function' && estado.fatura) faturaRenderRecon();
 }
 function _atualizarUIInner() {
     // Lista de ordens
@@ -595,6 +597,7 @@ function salvarNoLocalStorage() {
             historico[idx].ordens = JSON.parse(JSON.stringify(estado.ordens));
             historico[idx].ofertas = JSON.parse(JSON.stringify(estado.ofertas));
             historico[idx].totalFatura = estado.totalFatura;
+            historico[idx].fatura = estado.fatura ? JSON.parse(JSON.stringify(estado.fatura)) : null;
             historico[idx].descricao = estado.descricaoEvento;
             historico[idx].pagador = estado.pagador;
             historico[idx].dividas = JSON.parse(JSON.stringify(estado.dividas));
@@ -775,6 +778,7 @@ async function apagarEvento(id, ev_) {
             estado.ordens = [];
             estado.ofertas = [];
             estado.totalFatura = null;
+            estado.fatura = null;
             estado.descricaoEvento = '';
             estado.pagador = '';
             estado.dividas = {};
@@ -869,6 +873,7 @@ function criarEvento(opts) {
         ordens: [],
         ofertas: [],
         totalFatura: null,
+        fatura: null,
         pagador: tesoureiro,
         dividas: {},
         amigos: novosAmigos,
@@ -934,6 +939,7 @@ function snaphotEstado() {
         ordens: JSON.parse(JSON.stringify(estado.ordens)),
         ofertas: JSON.parse(JSON.stringify(estado.ofertas)),
         totalFatura: estado.totalFatura,
+        fatura: estado.fatura ? JSON.parse(JSON.stringify(estado.fatura)) : null,
         pagador: estado.pagador,
         dividas: JSON.parse(JSON.stringify(estado.dividas)),
         amigos: JSON.parse(JSON.stringify(amigos)),
@@ -1025,6 +1031,7 @@ async function limparTudo() {
         estado.ordens = [];
         estado.ofertas = [];
         estado.totalFatura = null;
+        estado.fatura = null;
         estado.descricaoEvento = '';
         estado.pagador = '';
         estado.dividas = {};
@@ -1525,7 +1532,11 @@ function aplicarColapsosSecoes() {
    artigo NESTE evento. Aí a divisão passa a ser exata, sem rácio nenhum.
    O utilizador revê sempre antes de aplicar seja o que for. */
 
-let _faturaRecon = null;    // {restaurante, data, total, linhas:[...]} da última leitura
+/* A fatura lida fica GUARDADA no evento (`estado.fatura`), não só em memória:
+   é o registo do que a casa cobrou, e é o que permite reabrir a conferência
+   meses depois sem ter de fotografar outra vez. O painel aberto/fechado é que
+   é volátil — isso é só ecrã. */
+let _faturaPainel = false;  // detalhe expandido? (UI, não se guarda)
 let _faturaRows = [];       // linhas da conferência, recalculadas a cada render
 let _faturaSemAplicar = new Set();   // artigos com a correção de preço desmarcada
 
@@ -1660,11 +1671,41 @@ function faturaAplicar(d) {
     });
     if (!linhas.length) { mostrarMensagem('❌ Não encontrei artigos legíveis na fatura', false); return; }
     const total = (d && isFinite(Number(d.total)) && Number(d.total) > 0) ? _frR2(Number(d.total)) : null;
-    _faturaRecon = { restaurante: (d && d.restaurante) || '', data: (d && d.data) || '', total, linhas, semPreco };
+    estado.fatura = {
+        restaurante: String((d && d.restaurante) || '').slice(0, 80),
+        data: String((d && d.data) || '').slice(0, 10),
+        total, linhas, semPreco,
+        lidaEm: new Date().toISOString()
+    };
     _faturaSemAplicar = new Set();
+    _faturaPainel = true;
+    salvarNoLocalStorage();
     faturaRenderRecon();
     const box = document.getElementById('fatura-recon');
     if (box) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// Apagar a fatura guardada. Não mexe nas ordens nem nos preços já corrigidos —
+// o que foi aplicado foi aplicado; isto só deita fora o registo da leitura.
+async function faturaApagar() {
+    if (!estado.fatura) return;
+    if (!podeEditarEventoAtual()) { mostrarMensagem('⚠️ Sem permissão para editar este evento', false); return; }
+    const ok = await mostrarModal({
+        icon: '🗑️',
+        title: 'Apagar a fatura guardada?',
+        msg: 'Remove o detalhe lido da fatura deste evento (' + estado.fatura.linhas.length + ' linha(s)).<br><br>'
+            + 'As ordens e os preços já corrigidos <strong>não</strong> são alterados.',
+        confirmText: 'Apagar',
+        cancelText: 'Cancelar',
+        danger: true
+    });
+    if (!ok) return;
+    estado.fatura = null;
+    _faturaPainel = false;
+    _faturaSemAplicar = new Set();
+    salvarNoLocalStorage();
+    faturaRenderRecon();
+    mostrarMensagem('✓ Fatura apagada', true);
 }
 
 /* Compara a fatura lida com o consumo marcado. Devolve uma linha por artigo:
@@ -1674,7 +1715,7 @@ function faturaAplicar(d) {
      extra  — está na fatura mas não foi marcado por ninguém
      falta  — foi marcado mas não aparece na fatura                              */
 function faturaConferir() {
-    const r = _faturaRecon;
+    const r = estado.fatura;
     if (!r) return null;
 
     // Consumo marcado, agregado por artigo
@@ -1756,9 +1797,17 @@ function faturaConferir() {
 function faturaRenderRecon() {
     const box = document.getElementById('fatura-recon');
     if (!box) return;
-    const r = _faturaRecon, c = faturaConferir();
-    if (!r || !c) { box.style.display = 'none'; box.innerHTML = ''; _faturaRows = []; return; }
+    const btnImp = document.getElementById('btn-fatura-ocr');
+    const r = estado.fatura, c = faturaConferir();
+    if (!r || !c) {
+        box.style.display = 'none'; box.innerHTML = ''; _faturaRows = [];
+        if (btnImp) btnImp.innerHTML = '📷 Importar fatura (foto ou PDF)<span>compara artigo a artigo com o consumo marcado</span>';
+        return;
+    }
     _faturaRows = c.rows;
+    const podeMexer = !modoReadOnly && podeEditarEventoAtual();
+    // Já há fatura guardada: importar outra é substituí-la, e o botão diz isso
+    if (btnImp) btnImp.innerHTML = '🔄 Ler outra fatura<span>substitui a que está guardada neste evento</span>';
 
     // Reservas: o que a leitura não garante, mesmo quando as linhas batem certo.
     // Sem isto o veredicto dizia "confere" com linhas por ler em cima da mesa.
@@ -1821,7 +1870,7 @@ function faturaRenderRecon() {
             const cl = x.du > 0 ? 'neg' : 'pos';
             det = x.qtdF + ' un · marcado €' + x.unitC.toFixed(2) + ' → fatura €' + x.unitF.toFixed(2)
                 + ' <span class="' + cl + '">(' + (x.du > 0 ? '+' : '−') + '€' + Math.abs(_frR2(x.totF - x.totC)).toFixed(2) + ')</span>';
-            chk = '<input type="checkbox" class="fr-chk" ' + (_faturaSemAplicar.has(x.item) ? '' : 'checked')
+            if (podeMexer) chk = '<input type="checkbox" class="fr-chk" ' + (_faturaSemAplicar.has(x.item) ? '' : 'checked')
                 + ' onchange="faturaTogglePreco(' + i + ')">';
         } else if (x.tipo === 'qtd') {
             const cl = x.dq > 0 ? 'neg' : 'pos';
@@ -1829,7 +1878,7 @@ function faturaRenderRecon() {
                 + ' <span class="' + cl + '">(' + (x.dq > 0 ? '+' : '−') + Math.abs(x.dq) + ' un)</span>';
         } else if (x.tipo === 'extra') {
             det = 'fatura: ' + x.qtdF + ' × €' + x.unitF.toFixed(2) + ' = €' + x.totF.toFixed(2) + ' · ninguém marcou este artigo';
-            acao = '<button class="fr-acao" onclick="faturaMarcarExtra(' + i + ')">➕ Marcar</button>';
+            if (podeMexer) acao = '<button class="fr-acao" onclick="faturaMarcarExtra(' + i + ')">➕ Marcar</button>';
         } else {
             det = 'marcado: ' + x.qtdC + ' × €' + x.unitC.toFixed(2) + ' = €' + x.totC.toFixed(2) + ' · não aparece na fatura';
         }
@@ -1842,17 +1891,42 @@ function faturaRenderRecon() {
             + '<div class="fr-det">' + det + '</div>' + sub + '</div>' + acao + '</div>';
     }).join('');
 
+    // Com a conta fechada (ou sem permissão) a fatura vê-se na mesma — é para
+    // isso que fica guardada — mas sem botões que só iam recusar-se a agir.
     const btns = [];
-    if (c.nPreco) btns.push('<button onclick="faturaAplicarPrecos()">💶 Corrigir preços</button>');
-    if (r.total != null) btns.push('<button class="fr-sec" onclick="faturaUsarTotal()">🧾 Usar total €' + r.total.toFixed(2) + '</button>');
-    btns.push('<button class="fr-sec" onclick="faturaFecharRecon()">✕ Fechar</button>');
+    if (podeMexer) {
+        if (c.nPreco) btns.push('<button onclick="faturaAplicarPrecos()">💶 Corrigir preços</button>');
+        if (r.total != null) btns.push('<button class="fr-sec" onclick="faturaUsarTotal()">🧾 Usar total €' + r.total.toFixed(2) + '</button>');
+        btns.push('<button class="fr-sec" onclick="faturaApagar()">🗑️ Apagar fatura</button>');
+    }
 
-    box.innerHTML = '<div class="fr-verdict ' + vClasse + '"><b>' + vTitulo + '</b>' + vTexto + '</div>'
+    // Barra de resumo — fica sempre visível quando o evento tem fatura guardada.
+    // É por aqui que se reabre o detalhe meses depois, sem refotografar nada.
+    const quando = _frDataCurta(r.lidaEm);
+    const resumo = [r.restaurante ? _frEsc(r.restaurante) : 'Fatura',
+                    r.linhas.length + (r.linhas.length === 1 ? ' linha' : ' linhas'),
+                    '€' + (r.total != null ? r.total : c.totalLinhas).toFixed(2)].join(' · ');
+    const strip = '<button class="fr-strip ' + vClasse + '" onclick="faturaTogglePainel()">'
+        + '<span class="fr-strip-ic">🧾</span>'
+        + '<span class="fr-strip-txt"><b>' + resumo + '</b>'
+        + '<span>' + _frEsc(vTitulo) + (quando ? ' · lida a ' + quando : '') + '</span></span>'
+        + '<span class="fr-strip-chev">' + (_faturaPainel ? '▲' : '▼') + '</span></button>';
+
+    box.innerHTML = strip + (!_faturaPainel ? '' :
+          '<div class="fr-verdict ' + vClasse + '"><b>' + vTitulo + '</b>' + vTexto + '</div>'
         + '<div class="fr-meta">' + meta.join(' · ')
         + (r.semPreco ? ' · <span class="neg">' + r.semPreco + (r.semPreco === 1 ? ' linha ignorada' : ' linhas ignoradas') + ' (sem preço)</span>' : '') + '</div>'
         + linhasHtml
-        + '<div class="fr-btns">' + btns.join('') + '</div>';
+        + '<div class="fr-btns">' + btns.join('') + '</div>');
     box.style.display = '';
+}
+
+// "12/03, 21:40" a partir do ISO guardado; vazio se não der para ler
+function _frDataCurta(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
 function faturaTogglePreco(i) {
@@ -1911,16 +1985,22 @@ function faturaMarcarExtra(i) {
 }
 
 function faturaUsarTotal() {
-    if (!_faturaRecon || _faturaRecon.total == null) return;
+    if (!estado.fatura || estado.fatura.total == null) return;
     const el = document.getElementById('total-fatura');
     if (!el) return;
-    el.value = _faturaRecon.total.toFixed(2);
+    el.value = estado.fatura.total.toFixed(2);
     atualizarAjuste();
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
+// Esconder/mostrar o detalhe. Não apaga nada — para isso há o faturaApagar().
+function faturaTogglePainel() {
+    _faturaPainel = !_faturaPainel;
+    faturaRenderRecon();
+}
+// Ao trocar de evento o painel arruma-se; a fatura guardada fica no evento.
 function faturaFecharRecon() {
-    _faturaRecon = null;
+    _faturaPainel = false;
     _faturaRows = [];
     _faturaSemAplicar = new Set();
     faturaRenderRecon();
@@ -3723,11 +3803,25 @@ async function sbAposLogin() {
     init();
 }
 
+/* O detalhe da fatura vive numa coluna `fatura jsonb` da tabela `eventos`
+   (migração db/fatura-detalhe.sql). Coluna e não tabela nova: assim herda as
+   políticas RLS de `eventos` — quem pode editar o evento pode gravar a fatura —
+   e não é preciso sincronizar linhas nem podar nada.
+   Enquanto a migração não for corrida, FATURA_COL fica false e a app funciona
+   na mesma: a fatura guarda-se só no localStorage deste dispositivo. Testa-se
+   uma vez por sessão, na carga dos eventos. */
+let FATURA_COL = true;
+
 async function sbCarregarDados() {
     try {
-        // Carregar eventos
+        // Carregar eventos. `fatura` vem no select=* se a coluna existir; se a
+        // migração não estiver corrida, as linhas simplesmente não a trazem.
         const evRes = await sbFetch(`${SB_URL}/rest/v1/eventos?select=*&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
         const eventos = await evRes.json();
+        FATURA_COL = Array.isArray(eventos) && eventos.length > 0
+            ? Object.prototype.hasOwnProperty.call(eventos[0], 'fatura')
+            : FATURA_COL;
+        if (!FATURA_COL) console.warn('[SplitBill] coluna eventos.fatura ausente — corre db/fatura-detalhe.sql para guardar o detalhe da fatura no servidor');
 
         // Carregar ordens + ordem_amigos
         const ordRes = await sbFetch(`${SB_URL}/rest/v1/ordens?select=*,ordem_amigos(amigo)&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
@@ -3742,6 +3836,12 @@ async function sbCarregarDados() {
         const pags = await pgRes.json();
 
         // Reconstruir historico no formato esperado pela app
+        // Faturas já guardadas neste dispositivo: sem a migração o servidor não
+        // as devolve, e o historico é reconstruído por cima — sem isto perdia-se
+        // o detalhe a cada login.
+        const faturasLocais = {};
+        (historico || []).forEach(e => { if (e && e.fatura) faturasLocais[e.id] = e.fatura; });
+
         historico = eventos.map(ev => {
             const evOrdens = ordens.filter(o => o.evento_id === ev.id).map(o => ({
                 id: o.id,
@@ -3775,6 +3875,7 @@ async function sbCarregarDados() {
                 amigos: [...new Set(evOrdens.flatMap(o => o.amigos))],
                 menu: {},
                 dividas: evDividas,
+                fatura: (FATURA_COL && ev.fatura) ? ev.fatura : (faturasLocais[ev.id] || null),
                 substituto: ev.substituto_email || null
             };
         });
@@ -3878,17 +3979,21 @@ async function sbGuardarEvento(ev) {
     try {
         // Upsert evento — admin cria/atualiza; substituto apenas atualiza (nunca cria
         // nem mexe no campo substituto_email, protegido também por RLS/trigger).
+        // `fatura` só entra no corpo se a coluna existir — senão o PostgREST
+        // rejeitava o pedido inteiro (PGRST204) e o evento não se gravava.
+        const campos = { descricao: ev.descricao, data: ev.data, total_fatura: ev.totalFatura, pagador: ev.pagador };
+        if (FATURA_COL) campos.fatura = ev.fatura ?? null;
         if (isAdmin()) {
             await sbFetch(`${SB_URL}/rest/v1/eventos`, {
                 method: 'POST',
                 headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
-                body: JSON.stringify({ id: ev.id, descricao: ev.descricao, data: ev.data, total_fatura: ev.totalFatura, pagador: ev.pagador, substituto_email: ev.substituto ?? null })
+                body: JSON.stringify(Object.assign({ id: ev.id, substituto_email: ev.substituto ?? null }, campos))
             });
         } else {
             await sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${ev.id}`, {
                 method: 'PATCH',
                 headers: sbHeaders(),
-                body: JSON.stringify({ descricao: ev.descricao, data: ev.data, total_fatura: ev.totalFatura, pagador: ev.pagador })
+                body: JSON.stringify(campos)
             });
         }
 
