@@ -2677,6 +2677,7 @@ function renderContasEventos(lista, resumo) {
             const evInfo = pessoaSaldo ? pessoaSaldo.eventos.find(e => e.eventoId === ev.id) : null;
             const restante = evInfo ? evInfo.restante : d.valor;
             const isPago = restante < 0.01;
+            const isPrescrita = isPago && pagamentos.some(pg => pg.tipo === 'prescricao' && pg.pessoa === p && String(pg.eventoId) === String(ev.id));
             const consumos = {};
             (ev.ordens || []).forEach(o => {
                 if (o.amigos.includes(p)) {
@@ -2689,10 +2690,12 @@ function renderContasEventos(lista, resumo) {
                 const qtdStr = Number.isInteger(qtd) ? qtd : qtd.toFixed(1);
                 return qtdStr + '\u00d7 ' + item;
             }).join(', ');
-            return '<div class="contas-divida-item" style="flex-wrap:wrap;">'
+            const icone = isPrescrita ? '<span style="color:#B02A2A;font-size:14px;">\u231b</span>' : (isPago ? '<span style="color:#0E7A4F;font-size:16px;">✓</span>' : '\u23f3');
+            return '<div class="contas-divida-item" style="flex-wrap:wrap;' + (isPrescrita ? 'opacity:0.75;' : '') + '">'
                 + '<span class="nome">' + p + '</span>'
-                + '<span class="valor ' + (isPago ? 'pago' : 'pendente') + '">\u20ac' + d.valor.toFixed(2) + (!isPago && restante < d.valor - 0.005 ? ' (resta \u20ac' + restante.toFixed(2) + ')' : '') + ' <span style="display:inline-block;width:24px;text-align:center;margin-left:6px;">' + (isPago ? '<span style="color:#0E7A4F;font-size:16px;">✓</span>' : '\u23f3') + '</span></span>'
+                + '<span class="valor ' + (isPago ? 'pago' : 'pendente') + '">\u20ac' + d.valor.toFixed(2) + (!isPago && restante < d.valor - 0.005 ? ' (resta \u20ac' + restante.toFixed(2) + ')' : '') + ' <span style="display:inline-block;width:24px;text-align:center;margin-left:6px;">' + icone + '</span></span>'
                 + (consumoStr ? '<div style="width:100%;font-size:11px;color:#7C8782;margin-top:2px;">' + consumoStr + '</div>' : '')
+                + (isPrescrita ? '<div style="width:100%;font-size:10.5px;color:#B02A2A;margin-top:2px;">\u231b Dívida prescrita — não foi paga</div>' : '')
                 + '</div>';
         }).join('');
 
@@ -2756,10 +2759,10 @@ function renderContasPagamentos(lista, resumo) {
     var basePagamentos = pagamentos;
     if (!isAdmin()) {
         basePagamentos = pagamentos.filter(function(p) {
-            if (ehEu(p.pessoa)) return true;                       // pagamento feito por mim
-            if (p.tipo === 'evento' && p.eventoId) {
+            if (ehEu(p.pessoa)) return true;                       // pagamento (ou prescrição) que me diz respeito
+            if (p.eventoId) {
                 var evp = historico.find(function(e) { return e.id === p.eventoId; });
-                if (evp && ehEu(evp.pagador)) return true;         // pagamento recebido por mim
+                if (evp && ehEu(evp.pagador)) return true;         // pagamento/prescrição que me era devido
             }
             return false;
         });
@@ -2771,7 +2774,7 @@ function renderContasPagamentos(lista, resumo) {
     var _seen = {};
     basePagamentos.forEach(function(p) {
         if (!_seen[p.pessoa]) { allPessoas.push(p.pessoa); _seen[p.pessoa] = true; }
-        if (p.tipo === 'evento' && p.eventoId && !allEventosMap[p.eventoId]) {
+        if (p.eventoId && !allEventosMap[p.eventoId]) {
             var ev = historico.find(function(e) { return e.id === p.eventoId; });
             var desc = ev ? (ev.descricao || 'Sem nome') : 'Evento removido';
             allEventosMap[p.eventoId] = desc;
@@ -2823,9 +2826,11 @@ function renderContasPagamentos(lista, resumo) {
     var itemsHtml = filtrados.map(function(p) {
         var eventoDesc = (function() { var ev = historico.find(function(e) { return e.id === p.eventoId; }); return ev ? (ev.descricao || 'Sem nome') : 'Evento removido'; })();
 
+        var isPrescricao = p.tipo === 'prescricao';
+
         // Consumption detail
         var consumoStr = '';
-        if (p.tipo === 'evento' && p.eventoId) {
+        if (p.eventoId) {
             var ev = historico.find(function(e) { return e.id === p.eventoId; });
             if (ev && ev.ordens) {
                 var consumos = {};
@@ -2845,21 +2850,23 @@ function renderContasPagamentos(lista, resumo) {
 
         var acoes = podeEditarPagamentoDoEvento(p.eventoId) ? '<button class="pgto-edit" onclick="editarPagamento(' + p.id + ')" title="Editar data">\u270e</button><button class="pgto-delete" onclick="removerPagamento(' + p.id + ')" title="Remover">\u00d7</button>' : '';
         var recebedorStr = (function() {
-            if (p.tipo === 'evento' && p.eventoId) {
+            if (p.eventoId) {
                 var evr = historico.find(function(e) { return e.id === p.eventoId; });
                 if (evr && evr.pagador && evr.pagador !== p.pessoa) {
-                    return ' <span style="font-size:10.5px;font-weight:400;color:#9AA5A0;">(pagou ao ' + evr.pagador + ')</span>';
+                    return ' <span style="font-size:10.5px;font-weight:400;color:#9AA5A0;">' + (isPrescricao ? '(devia a ' + evr.pagador + ')' : '(pagou ao ' + evr.pagador + ')') + '</span>';
                 }
             }
             return '';
         })();
-        return '<div class="pgto-hist-item" id="pgto-item-' + p.id + '" style="flex-wrap:wrap;">'
+        var notaPrescricao = isPrescricao ? '<div style="font-size:10.5px;color:#B02A2A;margin-top:2px;">\u231b D\u00edvida prescrita \u2014 n\u00e3o foi paga</div>' : '';
+        return '<div class="pgto-hist-item" id="pgto-item-' + p.id + '" style="flex-wrap:wrap;' + (isPrescricao ? 'opacity:0.75;' : '') + '">'
             + '<div class="pgto-info-col">'
             + '<div class="pgto-nome">' + p.pessoa + recebedorStr + '</div>'
             + '<div class="pgto-detalhe">' + eventoDesc + ' \u00b7 ' + p.data + '</div>'
             + (consumoStr ? '<div style="font-size:11px;color:#7C8782;margin-top:2px;">' + consumoStr + '</div>' : '')
+            + notaPrescricao
             + '</div>'
-            + '<span class="pgto-valor">\u20ac' + p.valor.toFixed(2) + '</span>'
+            + '<span class="pgto-valor"' + (isPrescricao ? ' style="color:#9AA5A0;text-decoration:line-through;"' : '') + '>\u20ac' + p.valor.toFixed(2) + '</span>'
             + acoes
             + '</div>';
     }).join('');
@@ -2868,8 +2875,8 @@ function renderContasPagamentos(lista, resumo) {
         ? '<div class="contas-vazio">Nenhum resultado encontrado</div>'
         : itemsHtml);
 
-    var totalFiltrado = filtrados.reduce(function(s, p) { return s + p.valor; }, 0);
-    var totalGeral = basePagamentos.reduce(function(s, p) { return s + p.valor; }, 0);
+    var totalFiltrado = filtrados.filter(function(p) { return p.tipo !== 'prescricao'; }).reduce(function(s, p) { return s + p.valor; }, 0);
+    var totalGeral = basePagamentos.filter(function(p) { return p.tipo !== 'prescricao'; }).reduce(function(s, p) { return s + p.valor; }, 0);
     var isFiltered = _pgtoFilterPessoa || _pgtoFilterEvento;
     var showTotal = isFiltered ? totalFiltrado : totalGeral;
     var showCount = isFiltered ? filtrados.length : basePagamentos.length;
@@ -3016,6 +3023,62 @@ async function registarPagamento() {
     if (okSb) mostrarPgtoMsg('✅ Pagamento de €' + valor.toFixed(2) + ' registado para ' + pessoa, true);
 }
 
+// Marca a dívida como prescrita: deixa de contar como pendente (sem alerta constante),
+// mas fica um registo (tipo 'prescricao' na tabela pagamentos) para aparecer discreto
+// no histórico, só visível a quem devia e a quem era devido.
+async function prescreverDivida() {
+    const pessoa = document.getElementById('pgto-pessoa').value;
+    if (!pessoa) { mostrarPgtoMsg('⚠️ Seleciona quem deve', false); return; }
+
+    const selEvento = document.getElementById('pgto-evento');
+    const eventoId = selEvento.value;
+    if (!eventoId) { mostrarPgtoMsg('⚠️ Seleciona o evento', false); return; }
+    if (!podeEditarPagamentoDoEvento(eventoId)) { mostrarPgtoMsg('⚠️ Sem permissão para editar dívidas deste evento', false); return; }
+    const valor = parseFloat(selEvento.selectedOptions[0].dataset.valor);
+
+    const existente = pagamentos.find(p => p.pessoa === pessoa && String(p.eventoId) === String(eventoId));
+    if (existente) {
+        mostrarPgtoMsg('⚠️ ' + pessoa + ' já tem um registo para este evento', false);
+        return;
+    }
+
+    const ok = await mostrarModal({
+        icon: '⌛',
+        title: 'Prescrever dívida',
+        msg: 'Confirmas que <strong>' + pessoa + '</strong> não vai pagar os €' + valor.toFixed(2) + ' em falta?<br><br>Deixa de aparecer como pendente, mas fica uma nota discreta no histórico.',
+        confirmText: 'Prescrever',
+        cancelText: 'Cancelar',
+        danger: true
+    });
+    if (!ok) return;
+
+    const dataInput = document.getElementById('pgto-data');
+    const dataPresc = dataInput && dataInput.value.trim()
+        ? dataInput.value.trim()
+        : new Date().toLocaleDateString('pt-PT', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
+
+    const novaPresc = {
+        id: nextId(),
+        pessoa,
+        valor,
+        tipo: 'prescricao',
+        eventoId: parseInt(eventoId),
+        data: dataPresc
+    };
+    pagamentos.push(novaPresc);
+    salvarPagamentos();
+    const okSb = await sbGuardarPagamento(novaPresc);
+
+    document.getElementById('pgto-evento').value = '';
+    document.getElementById('pgto-data').value = '';
+    document.getElementById('pgto-info').style.display = 'none';
+
+    fecharFabPanel();
+    renderContas();
+    renderHistoricoDropdown();
+    if (okSb) mostrarPgtoMsg('⌛ Dívida de ' + pessoa + ' prescrita', true);
+}
+
 function guardarEdicaoPgto(id) {
     const input = document.getElementById('pgto-edit-data-' + id);
     if (!input) return;
@@ -3031,11 +3094,12 @@ function guardarEdicaoPgto(id) {
 async function removerPagamento(id) {
     const p = pagamentos.find(pg => pg.id === id);
     if (p && !podeEditarPagamentoDoEvento(p.eventoId)) { mostrarMensagem('⚠️ Sem permissão para remover este pagamento', false); return; }
+    const isPrescricao = p && p.tipo === 'prescricao';
     const ok = await mostrarModal({
-        icon: '💸',
-        title: 'Remover pagamento',
-        msg: 'Tens a certeza que queres remover este pagamento?',
-        confirmText: 'Remover',
+        icon: isPrescricao ? '⌛' : '💸',
+        title: isPrescricao ? 'Anular prescrição' : 'Remover pagamento',
+        msg: isPrescricao ? 'Tens a certeza que queres anular a prescrição desta dívida? Volta a aparecer como pendente.' : 'Tens a certeza que queres remover este pagamento?',
+        confirmText: isPrescricao ? 'Anular' : 'Remover',
         cancelText: 'Cancelar',
         danger: true
     });
