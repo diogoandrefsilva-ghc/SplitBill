@@ -2695,7 +2695,6 @@ function renderContasEventos(lista, resumo) {
                 + '<span class="nome">' + p + '</span>'
                 + '<span class="valor ' + (isPago ? 'pago' : 'pendente') + '">\u20ac' + d.valor.toFixed(2) + (!isPago && restante < d.valor - 0.005 ? ' (resta \u20ac' + restante.toFixed(2) + ')' : '') + ' <span style="display:inline-block;width:24px;text-align:center;margin-left:6px;">' + icone + '</span></span>'
                 + (consumoStr ? '<div style="width:100%;font-size:11px;color:#7C8782;margin-top:2px;">' + consumoStr + '</div>' : '')
-                + (isPrescrita ? '<div style="width:100%;font-size:10.5px;color:#B02A2A;margin-top:2px;">\u231b Dívida prescrita — não foi paga</div>' : '')
                 + '</div>';
         }).join('');
 
@@ -2858,13 +2857,11 @@ function renderContasPagamentos(lista, resumo) {
             }
             return '';
         })();
-        var notaPrescricao = isPrescricao ? '<div style="font-size:10.5px;color:#B02A2A;margin-top:2px;">\u231b D\u00edvida prescrita \u2014 n\u00e3o foi paga</div>' : '';
         return '<div class="pgto-hist-item" id="pgto-item-' + p.id + '" style="flex-wrap:wrap;' + (isPrescricao ? 'opacity:0.75;' : '') + '">'
             + '<div class="pgto-info-col">'
             + '<div class="pgto-nome">' + p.pessoa + recebedorStr + '</div>'
             + '<div class="pgto-detalhe">' + eventoDesc + ' \u00b7 ' + p.data + '</div>'
             + (consumoStr ? '<div style="font-size:11px;color:#7C8782;margin-top:2px;">' + consumoStr + '</div>' : '')
-            + notaPrescricao
             + '</div>'
             + '<span class="pgto-valor"' + (isPrescricao ? ' style="color:#9AA5A0;text-decoration:line-through;"' : '') + '>\u20ac' + p.valor.toFixed(2) + '</span>'
             + acoes
