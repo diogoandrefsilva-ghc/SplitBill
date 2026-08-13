@@ -133,6 +133,29 @@ function init() {
     ghPromptSync();
 }
 
+// Deixa o estado de trabalho sem evento nenhum (não há histórico, ou o evento
+// aberto deixou de existir). Tem de limpar TUDO o que o carregarEvento enche:
+// se ficar lixo em memória, o próximo salvarNoLocalStorage() carimba-o no
+// evento seguinte.
+function limparEstadoEvento() {
+    eventoAtualId = null;
+    try { localStorage.removeItem('sb_evento'); } catch(e) {}
+    estado.ordens = [];
+    estado.ofertas = [];
+    estado.totalFatura = null;
+    estado.fatura = null;
+    estado.descricaoEvento = '';
+    estado.pagador = '';
+    estado.dividas = {};
+    estado.amigosSelecionados.clear();
+    estado.ofertaAmigos.clear();
+    amigos = [];
+    menu = {};
+    modoReadOnly = false;
+    const d = document.getElementById('descricao-evento'); if (d) d.value = '';
+    const t = document.getElementById('total-fatura'); if (t) t.value = '';
+}
+
 // Helper: load an event's data into the working state
 function carregarEvento(ev) {
     eventoAtualId = ev.id;
@@ -782,25 +805,8 @@ async function apagarEvento(id, ev_) {
 
     // Se apaguei o evento que estava aberto, carregar outro ou limpar o estado
     if (eventoAtualId == id) {
-        if (historico.length > 0) {
-            carregarEvento(historico[historico.length - 1]);
-        } else {
-            eventoAtualId = null;
-            estado.ordens = [];
-            estado.ofertas = [];
-            estado.totalFatura = null;
-            estado.fatura = null;
-            estado.descricaoEvento = '';
-            estado.pagador = '';
-            estado.dividas = {};
-            estado.amigosSelecionados.clear();
-            estado.ofertaAmigos.clear();
-            amigos = [];
-            menu = {};
-            modoReadOnly = false;
-            document.getElementById('descricao-evento').value = '';
-            document.getElementById('total-fatura').value = '';
-        }
+        if (historico.length > 0) carregarEvento(historico[historico.length - 1]);
+        else limparEstadoEvento();
         atualizarReadOnly();
     }
 
@@ -917,7 +923,7 @@ function criarEvento(opts) {
     if (arrow) { arrow.style.transform = ''; }
     // Persistir já na BD, sem esperar pelo debounce de 2s: o evento nasce no
     // servidor com os convocados e o menu, mesmo sem uma única ordem lançada.
-    sbGuardarEvento(novoEvt).catch(() => {});
+    sbGuardarEvento(novoEvt, { criar: true }).catch(() => {});
     return novoEvt;
 }
 
@@ -4173,6 +4179,22 @@ async function sbCarregarDados() {
 
         salvarHistoricoLocal();
         salvarPagamentos();
+
+        // Re-sincronizar o ESTADO DE TRABALHO com o histórico acabado de
+        // reconstruir. Quem chama isto fora do arranque (pull-to-refresh, botão
+        // de sincronizar) ficava com `amigos`/`menu`/`estado.ordens` do evento
+        // anterior presos em memória enquanto o `historico` já era outro — e o
+        // próximo salvarNoLocalStorage() carimbava esse conteúdo no evento
+        // actual. Era assim que um evento acabava a herdar o conteúdo de outro.
+        // No arranque (sbAposLogin) o eventoAtualId ainda é null e isto não faz
+        // nada: quem carrega o evento é o init(), logo a seguir.
+        if (eventoAtualId != null) {
+            const atual = historico.find(e => e.id == eventoAtualId);
+            if (atual) carregarEvento(atual);
+            else if (historico.length > 0) carregarEvento(historico[historico.length - 1]);
+            else limparEstadoEvento();
+            atualizarReadOnly();
+        }
     } catch(e) {
         console.error('Erro ao carregar dados do Supabase:', e);
         mostrarMensagem('Erro ao carregar dados!', false);
@@ -4274,8 +4296,15 @@ async function sbSyncFilhos(tabelaPai, tabelaFilho, fkFilho, eventoId, itens) {
     }
 }
 
-async function sbGuardarEvento(ev) {
+// `opts.criar` só vem a true do criarEvento(). Sem ele isto faz PATCH, que não
+// cria linhas: era esta a origem dos eventos-zombie. O upsert (POST +
+// merge-duplicates) RECRIA a linha pelo id, portanto qualquer gravação de um
+// evento que entretanto foi apagado — o auto-save de 2s, o flush do
+// pull-to-refresh, uma aba/telemóvel com histórico velho em memória —
+// ressuscitava-o na BD. Apagava-se, e ao sincronizar estava lá outra vez.
+async function sbGuardarEvento(ev, opts) {
     if (!_sbSession) return;
+    const criar = !!(opts && opts.criar);
     try {
         // Upsert evento — admin cria/atualiza; substituto apenas atualiza (nunca cria
         // nem mexe no campo substituto_email, protegido também por RLS/trigger).
@@ -4290,18 +4319,26 @@ async function sbGuardarEvento(ev) {
         // sbOk: se a linha-pai não gravar, as ordens seguintes rebentam na chave
         // estrangeira. Sem esta verificação a causa real ficava escondida e só
         // se via o erro derivado (ou nada).
-        if (isAdmin()) {
+        if (isAdmin() && criar) {
             await sbOk(await sbFetch(`${SB_URL}/rest/v1/eventos`, {
                 method: 'POST',
                 headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
                 body: JSON.stringify(Object.assign({ id: ev.id, substituto_email: ev.substituto ?? null }, campos))
             }), 'upsert eventos');
         } else {
-            await sbOk(await sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${ev.id}`, {
+            const r = await sbOk(await sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${ev.id}`, {
                 method: 'PATCH',
-                headers: sbHeaders(),
+                headers: sbHeaders({ 'Prefer': 'return=representation', 'Accept': 'application/json' }),
                 body: JSON.stringify(campos)
             }), 'patch eventos');
+            // Zero linhas = a linha já não existe (apagada aqui ou noutro
+            // dispositivo). Abortar: continuar para as ordens só daria erro de
+            // chave estrangeira, e recriar o evento era exactamente o bug.
+            const linhas = await r.json().catch(() => null);
+            if (Array.isArray(linhas) && linhas.length === 0) {
+                mostrarMensagem('⚠️ Este evento já não existe no servidor (apagado noutro dispositivo?) — as alterações não foram gravadas. Refresca para actualizar a lista.', false);
+                return;
+            }
         }
 
         // Sincronizar ordens e ofertas com UPSERT+PRUNE (nunca apaga antes de inserir)
