@@ -549,7 +549,10 @@ html,body{touch-action:pan-x pan-y}
             position: fixed;
             inset: 0;
             background: rgba(0,0,0,0.5);
-            z-index: 3000;
+            /* Acima dos painéis de Definições/Equivalências (9997) e do login
+               (9999), abaixo do splash (100000). Em 3000 a pop-up de confirmação
+               nascia POR TRÁS das Definições e parecia que nada acontecia. */
+            z-index: 99999;
             align-items: flex-end;
             justify-content: center;
             padding: 0 10px 20px;

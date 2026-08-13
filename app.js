@@ -4439,6 +4439,7 @@ async function _diagPasso(out, nome, fn) {
             + (extra ? '<span style="color:#7C8782;"> — ' + extra + '</span>' : '');
         return true;
     } catch (e) {
+        li.setAttribute('data-falhou', '1');
         li.innerHTML = '<span style="color:#B3402F;font-weight:700;">✗ ' + nome + '</span>'
             + '<div style="color:#B3402F;">' + sbErroLegivel(e) + '</div>'
             + '<div style="color:#7C8782;font-size:11px;word-break:break-word;">'
@@ -4463,6 +4464,10 @@ async function sbDiagnostico() {
 
     out.innerHTML = '';
     out.style.display = '';
+    // O resultado nasce abaixo dos botões, fora do que está à vista. Sem isto o
+    // teste corria sem se ver nada acontecer.
+    const verResultado = el => { try { el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch(_) {} };
+    verResultado(out);
     // Este corpo é o MESMO que sbGuardarEvento envia para um evento acabado de
     // criar — incluindo `fatura` quando a coluna existe. A data usa dia > 12 de
     // propósito: se a coluna fosse `date` em vez de texto, "28/12" rebenta com
@@ -4616,6 +4621,18 @@ async function sbDiagnostico() {
         + 'na tabela indicada — o upsert precisa das de INSERT <i>e</i> de UPDATE. '
         + '<b>Coluna em falta</b>: falta correr uma migração em <code>db/</code>.';
     out.appendChild(rodape);
+
+    // Resumo no topo: com dez passos, o que interessa é saber de relance se
+    // passou tudo — sem ter de percorrer a lista à procura de vermelhos.
+    const falhas = out.querySelectorAll('[data-falhou="1"]').length;
+    const resumo = document.createElement('div');
+    resumo.style.cssText = 'font-size:13px;font-weight:700;padding:8px 10px;margin-bottom:8px;border-radius:7px;'
+        + (falhas ? 'background:#FBEAE8;color:#B3402F;' : 'background:#E7F3EC;color:#0E7A4F;');
+    resumo.textContent = falhas
+        ? '✗ ' + falhas + ' passo(s) a falhar — ver abaixo'
+        : '✓ Escrita a funcionar em todas as tabelas';
+    out.insertBefore(resumo, out.firstChild);
+    verResultado(resumo);
 }
 
 // Definições (cabeçalho). Admin → painel completo (pedidos/equivalências/backup);
