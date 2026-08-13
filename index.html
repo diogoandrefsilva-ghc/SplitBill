@@ -100,6 +100,11 @@ window.sbEsconderSplash = function(){
         <div style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;">
         <p style="font-size:12px;font-weight:700;color:#5B6661;text-transform:uppercase;letter-spacing:.08em;margin:0;padding:16px 16px 0;">🔔 Pedidos de acesso</p>
         <div id="admin-lista" style="padding:12px 16px 4px;"></div>
+        <p style="font-size:12px;font-weight:700;color:#5B6661;text-transform:uppercase;letter-spacing:.08em;margin:0;padding:6px 16px 0;border-top:1px solid #DEE3DD;padding-top:14px;">👁️ Ver a app como…</p>
+        <div style="padding:8px 16px 14px;">
+            <select id="vercomo-sel" onchange="entrarVerComo(this.value)" style="width:100%;box-sizing:border-box;-webkit-appearance:none;appearance:none;padding:10px 12px;border:1px solid #C8D0C8;border-radius:9px;font-size:14px;background:#fff;"></select>
+            <p style="font-size:11px;color:#7C8782;margin:8px 0 0;line-height:1.4;">Vês a app como essa pessoa a vê (menus, saldos, permissões). Nada é gravado enquanto estiveres no modo — sais pela barra no topo.</p>
+        </div>
         <div style="padding:0 16px 16px;border-top:1px solid #DEE3DD;padding-top:14px;">
             <button onclick="abrirEquivalencias()" style="width:100%;padding:11px;background:#0B3B2B;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:10px;">👥 Equivalências amigo ↔ conta</button>
             <button onclick="exportarJSON()" style="width:100%;padding:11px;background:#fff;color:#0E7A4F;border:1.5px solid #0E7A4F;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;">💾 Descarregar backup (JSON)</button>
@@ -144,6 +149,9 @@ window.sbEsconderSplash = function(){
     </div>
 </div>
 
+
+<!-- Barra do modo "ver como" (só admin; fica fixa no topo enquanto o modo estiver ligado) -->
+<div id="vercomo-bar" style="display:none;"></div>
 
 <div class="header" style="display:flex;align-items:center;justify-content:space-between;">
     <h1>SplitBill<small>Divisão de contas · dia de jogo</small></h1>

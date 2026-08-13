@@ -3672,8 +3672,16 @@ async function sbEnsureFresh() {
 }
 // fetch para o REST: garante token fresco e, se ainda assim vier 401, faz refresh + 1 retry
 async function sbFetch(url, opt) {
-    await sbEnsureFresh();
     opt = opt || {};
+    // Em modo "ver como" o token continua a ser o do admin: uma escrita passaria
+    // e ficaria gravada em nome de outra pessoa. Corta-se aqui, num sítio só,
+    // em vez de andar a semear guardas por cada função que grava.
+    const _metodo = (opt.method || 'GET').toUpperCase();
+    if (typeof verComoAtivo === 'function' && verComoAtivo() && _metodo !== 'GET' && _metodo !== 'HEAD') {
+        mostrarMensagem('👁️ Modo "ver como": nada é gravado. Sai do modo para editar.', false);
+        return new Response('[]', { status: 403, headers: { 'Content-Type': 'application/json' } });
+    }
+    await sbEnsureFresh();
     opt.headers = Object.assign({}, opt.headers, { 'Authorization': `Bearer ${_sbSession?.access_token || SB_KEY}` });
     let r = await fetch(url, opt);
     if (r.status === 401 && _sbSession && _sbSession.refresh_token) {
@@ -3689,11 +3697,18 @@ setInterval(() => { sbEnsureFresh(); }, 10 * 60 * 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) sbEnsureFresh(); });
 
 /* ── PERMISSÕES ──────────────────────────────── */
-function emailAtual() {
+// Email da conta com sessão iniciada — o real, sempre, mesmo em modo "ver como".
+function emailSessao() {
     return (_sbSession && _sbSession.user && _sbSession.user.email)
         ? _sbSession.user.email.toLowerCase() : null;
 }
+// Email que a INTERFACE usa. Em modo "ver como" é o do utilizador simulado: é
+// daqui que saem isAdmin()/ehEu()/meusAmigos(), ou seja, tudo o que decide o que
+// aparece no ecrã. Ver a secção "VER COMO" mais abaixo.
+function emailAtual() { return _verComo || emailSessao(); }
 function isAdmin() { return emailAtual() === ADMIN_EMAIL.toLowerCase(); }
+// Sou mesmo o admin (ignorando o "ver como")? É o que permite sair do modo.
+function isAdminReal() { return emailSessao() === ADMIN_EMAIL.toLowerCase(); }
 
 // É o utilizador o substituto nomeado para este evento?
 function ehSubstitutoDe(ev) {
@@ -3733,6 +3748,129 @@ function meusAmigos() {
 // Aviso quando um não-admin ainda não tem nome associado (senão veria tudo vazio sem perceber porquê)
 function _avisoSemAmigo() {
     return '<div class="contas-vazio">A tua conta ainda não está associada a nenhum nome. Pede ao administrador para te associar nas Configurações.</div>';
+}
+
+/* ── VER COMO (só admin) ──────────────────────────────────────────────────
+   Serve para conferir o que uma pessoa vê sem lhe pedir o telemóvel. Troca
+   apenas a IDENTIDADE do ecrã (emailAtual): a sessão e o token continuam a ser
+   os do admin, logo os dados em memória são os mesmos — o que muda são os
+   filtros de visibilidade, que é exatamente onde estão as diferenças a validar.
+   Nota: o admin recebe do servidor tudo (RLS), portanto isto simula fielmente o
+   que a app ESCONDE a cada um, não o que o servidor lhe recusaria.
+   Duas salvaguardas: o modo vive em sessionStorage (sobrevive a um reload da
+   PWA, morre ao fechar o separador) e toda a escrita no servidor fica bloqueada
+   (ver sbFetch), para nunca gravar seja o que for em nome de outra pessoa. */
+const VERCOMO_KEY = 'sb_ver_como';
+let _verComo = null;   // email a simular; null = eu próprio
+
+function verComoAtivo() { return !!_verComo; }
+
+// Identidades simuláveis: uma por email conhecido, com o(s) nome(s) de amigo
+// associados. Inclui contas autorizadas ainda sem equivalência (aparecem só com
+// o email) — são precisamente as que costumam ver a app "vazia".
+function verComoCandidatos() {
+    const porEmail = {};
+    Object.keys(amigoUsers).forEach(a => {
+        const e = (amigoUsers[a] || '').toLowerCase();
+        if (!e) return;
+        (porEmail[e] = porEmail[e] || []).push(a);
+    });
+    _allowedUsersCache.forEach(e => {
+        const k = (e || '').toLowerCase();
+        if (k) porEmail[k] = porEmail[k] || [];
+    });
+    return Object.keys(porEmail).sort()
+        .map(e => ({ email: e, nome: porEmail[e].join(' / ') }));
+}
+function verComoNome(email) {
+    const c = verComoCandidatos().find(x => x.email === email);
+    return (c && c.nome) ? c.nome : (email || '');
+}
+
+function entrarVerComo(email) {
+    if (!isAdminReal()) return;
+    email = (email || '').trim().toLowerCase();
+    if (!email || email === ADMIN_EMAIL.toLowerCase()) { sairVerComo(); return; }
+    _verComo = email;
+    try { sessionStorage.setItem(VERCOMO_KEY, email); } catch(e) {}
+    fecharEquivalencias();
+    fecharAdmin();
+    fecharDefinicoes();
+    verComoAplicar();
+    mostrarMensagem('👁️ A ver a app como ' + verComoNome(email), true);
+}
+
+function sairVerComo() {
+    const estava = _verComo;
+    _verComo = null;
+    try { sessionStorage.removeItem(VERCOMO_KEY); } catch(e) {}
+    verComoAplicar();
+    if (estava) {
+        sbVerificarPedidos();   // repõe o sino de pedidos, escondido durante o modo
+        mostrarMensagem('✓ De volta à tua conta', true);
+    }
+}
+
+// Repõe o ecrã inteiro com a identidade em vigor. Volta sempre ao início: o
+// separador onde se estava pode nem existir para a pessoa simulada.
+function verComoAplicar() {
+    renderVerComoBanner();
+    if (verComoAtivo()) {
+        const b = document.getElementById('admin-badge');
+        if (b) b.style.display = 'none';
+    }
+    try {
+        renderHistoricoDropdown();
+        renderConfigAmigos();
+        atualizarUI();
+        atualizarNavBadge();
+        mudarPagina('inicio');
+    } catch(e) { console.error('ver como:', e); }
+}
+
+function renderVerComoBanner() {
+    const bar = document.getElementById('vercomo-bar');
+    if (!bar) return;
+    if (!verComoAtivo()) {
+        bar.style.display = 'none';
+        bar.innerHTML = '';
+        document.body.classList.remove('com-vercomo');
+        return;
+    }
+    const nome = verComoNome(_verComo);
+    bar.innerHTML = '<span class="vercomo-txt">👁️ A ver como <b>' + nome + '</b>'
+        + (nome !== _verComo ? '<span class="vercomo-email">' + _verComo + '</span>' : '')
+        + '</span><button onclick="sairVerComo()">Sair</button>';
+    bar.style.display = 'flex';
+    document.body.classList.add('com-vercomo');
+}
+
+// Dropdown no painel de definições do admin.
+function renderVerComoSelect() {
+    const sel = document.getElementById('vercomo-sel');
+    if (!sel) return;
+    const cands = verComoCandidatos().filter(c => c.email !== ADMIN_EMAIL.toLowerCase());
+    if (!cands.length) {
+        sel.innerHTML = '<option value="">— ainda não há outras contas —</option>';
+        sel.disabled = true;
+        return;
+    }
+    sel.disabled = false;
+    sel.innerHTML = ['<option value="">— escolher pessoa —</option>'].concat(
+        cands.map(c => '<option value="' + c.email + '">'
+            + (c.nome ? c.nome + ' · ' + c.email : c.email) + '</option>')
+    ).join('');
+}
+
+// Chamado depois do arranque: um reload da PWA não deve tirar o admin do modo
+// (é preciso para testar precisamente o que acontece ao recarregar).
+function verComoRestaurar() {
+    if (!isAdminReal()) return;
+    let guardado = null;
+    try { guardado = sessionStorage.getItem(VERCOMO_KEY); } catch(e) {}
+    if (!guardado || guardado === ADMIN_EMAIL.toLowerCase()) return;
+    _verComo = guardado.toLowerCase();
+    verComoAplicar();
 }
 
 /* ── AGREGAÇÃO GLOBAL (menu e amigos de todos os eventos) ── */
@@ -3882,6 +4020,7 @@ async function sbAposLogin() {
     await sbCarregarConfigAcesso();
     await sbCarregarDados();
     init();
+    verComoRestaurar();
 }
 
 /* O detalhe da fatura vive numa coluna `fatura jsonb` da tabela `eventos`
@@ -4282,8 +4421,10 @@ async function sbCarregarConfigAcesso() {
             if (Array.isArray(data)) data.forEach(row => { if (row.amigo) amigoUsers[row.amigo] = row.email; });
         }
     } catch(e) { console.error('Erro ao carregar equivalências:', e); }
-    // Utilizadores autorizados — só o admin precisa (para os dropdowns)
-    if (isAdmin()) {
+    // Utilizadores autorizados — só o admin precisa (para os dropdowns).
+    // isAdminReal: num reload já dentro do "ver como" a lista continua a ser
+    // carregada, senão o dropdown ficava vazio ao sair do modo.
+    if (isAdminReal()) {
         try {
             const r = await sbFetch(`${SB_URL}/rest/v1/allowed_users?select=email&order=email.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
             if (r.ok) {
@@ -4409,6 +4550,12 @@ async function sbVerificarAcesso() {
 }
 
 function sbLogout() {
+    // Em "ver como" este botão é o da pessoa simulada — terminava a sessão do
+    // admin a sério, que não é o que se está a testar.
+    if (verComoAtivo()) {
+        mostrarMensagem('👁️ Estás em modo "ver como" — sai do modo primeiro.', false);
+        return;
+    }
     localStorage.removeItem(SESSION_KEY);
     _sbSession = null;
     window.location.reload();
@@ -4417,6 +4564,7 @@ function sbLogout() {
 // Admin
 async function abrirAdmin() {
     document.getElementById('page-admin').style.display = 'flex';
+    renderVerComoSelect();
     const lista = document.getElementById('admin-lista');
     lista.innerHTML = '<p style="color:#999;font-size:14px;text-align:center;padding:24px 0;">A carregar…</p>';
     try {
