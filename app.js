@@ -2677,7 +2677,8 @@ function renderContasEventos(lista, resumo) {
             const evInfo = pessoaSaldo ? pessoaSaldo.eventos.find(e => e.eventoId === ev.id) : null;
             const restante = evInfo ? evInfo.restante : d.valor;
             const isPago = restante < 0.01;
-            const isPrescrita = isPago && pagamentos.some(pg => pg.tipo === 'prescricao' && pg.pessoa === p && String(pg.eventoId) === String(ev.id));
+            const prescricao = isPago ? pagamentos.find(pg => pg.tipo === 'prescricao' && pg.pessoa === p && String(pg.eventoId) === String(ev.id)) : null;
+            const isPrescrita = !!prescricao;
             const consumos = {};
             (ev.ordens || []).forEach(o => {
                 if (o.amigos.includes(p)) {
@@ -2690,10 +2691,11 @@ function renderContasEventos(lista, resumo) {
                 const qtdStr = Number.isInteger(qtd) ? qtd : qtd.toFixed(1);
                 return qtdStr + '\u00d7 ' + item;
             }).join(', ');
-            const icone = isPrescrita ? '<span style="color:#B02A2A;font-size:14px;">\u231b</span>' : (isPago ? '<span style="color:#0E7A4F;font-size:16px;">✓</span>' : '\u23f3');
-            return '<div class="contas-divida-item" style="flex-wrap:wrap;' + (isPrescrita ? 'opacity:0.75;' : '') + '">'
+            const icone = isPrescrita ? '<span class="icone-prescrita">?</span>' : (isPago ? '<span style="color:#0E7A4F;font-size:16px;">✓</span>' : '\u23f3');
+            return '<div class="contas-divida-item' + (isPrescrita ? ' prescrita' : '') + '" style="flex-wrap:wrap;">'
                 + '<span class="nome">' + p + '</span>'
-                + '<span class="valor ' + (isPago ? 'pago' : 'pendente') + '">\u20ac' + d.valor.toFixed(2) + (!isPago && restante < d.valor - 0.005 ? ' (resta \u20ac' + restante.toFixed(2) + ')' : '') + ' <span style="display:inline-block;width:24px;text-align:center;margin-left:6px;">' + icone + '</span></span>'
+                + '<span class="valor ' + (isPrescrita ? 'prescrita' : (isPago ? 'pago' : 'pendente')) + '">\u20ac' + d.valor.toFixed(2) + (!isPago && restante < d.valor - 0.005 ? ' (resta \u20ac' + restante.toFixed(2) + ')' : '') + ' <span style="display:inline-block;width:24px;text-align:center;margin-left:6px;">' + icone + '</span></span>'
+                + (isPrescrita ? '<div class="nota-prescrita">Prescrita' + (prescricao.data ? ' em ' + prescricao.data : '') + ' — confirmar se chegou a pagar</div>' : '')
                 + (consumoStr ? '<div style="width:100%;font-size:11px;color:#7C8782;margin-top:2px;">' + consumoStr + '</div>' : '')
                 + '</div>';
         }).join('');
@@ -2852,18 +2854,18 @@ function renderContasPagamentos(lista, resumo) {
             if (p.eventoId) {
                 var evr = historico.find(function(e) { return e.id === p.eventoId; });
                 if (evr && evr.pagador && evr.pagador !== p.pessoa) {
-                    return ' <span style="font-size:10.5px;font-weight:400;color:#9AA5A0;">' + (isPrescricao ? '(devia a ' + evr.pagador + ')' : '(pagou ao ' + evr.pagador + ')') + '</span>';
+                    return ' <span style="font-size:10.5px;font-weight:400;color:' + (isPrescricao ? '#B8911F' : '#9AA5A0') + ';">' + (isPrescricao ? '(prescrita · devia a ' + evr.pagador + ')' : '(pagou ao ' + evr.pagador + ')') + '</span>';
                 }
             }
             return '';
         })();
-        return '<div class="pgto-hist-item" id="pgto-item-' + p.id + '" style="flex-wrap:wrap;' + (isPrescricao ? 'opacity:0.75;' : '') + '">'
+        return '<div class="pgto-hist-item' + (isPrescricao ? ' prescrita' : '') + '" id="pgto-item-' + p.id + '" style="flex-wrap:wrap;">'
             + '<div class="pgto-info-col">'
             + '<div class="pgto-nome">' + p.pessoa + recebedorStr + '</div>'
             + '<div class="pgto-detalhe">' + eventoDesc + ' \u00b7 ' + p.data + '</div>'
             + (consumoStr ? '<div style="font-size:11px;color:#7C8782;margin-top:2px;">' + consumoStr + '</div>' : '')
             + '</div>'
-            + '<span class="pgto-valor"' + (isPrescricao ? ' style="color:#9AA5A0;text-decoration:line-through;"' : '') + '>\u20ac' + p.valor.toFixed(2) + '</span>'
+            + '<span class="pgto-valor' + (isPrescricao ? ' prescrita' : '') + '">\u20ac' + p.valor.toFixed(2) + '</span>'
             + acoes
             + '</div>';
     }).join('');
