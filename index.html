@@ -466,31 +466,14 @@ window.sbEsconderSplash = function(){
 <script src="app.js"></script>
 
 <script>
-// Apagar evento selecionado
+// Apagar evento selecionado. Delega no apagarEvento() do app.js — isto era uma
+// SEGUNDA implementação de apagar que só mexia no histórico local: nunca
+// chamava o Supabase, portanto o evento voltava na carga seguinte. Pior, quando
+// ficava o histórico vazio criava já um evento em branco no lugar dele, que
+// esse sim ia para a BD. Apagar um evento acabava a somar outro.
 async function apagarEventoAtual() {
-    if (!isAdmin()) { mostrarMensagem('⚠️ Apenas o administrador pode apagar eventos', false); return; }
     if (!eventoAtualId) { mostrarMensagem('Nenhum evento selecionado.', false); return; }
-    const ok = await mostrarModal({
-        icon: '🗑️',
-        title: 'Eliminar evento',
-        msg: 'Eliminar este evento do histórico?',
-        confirmText: 'Eliminar',
-        cancelText: 'Cancelar',
-        danger: true
-    });
-    if (!ok) return;
-    historico = historico.filter(ev => ev.id !== eventoAtualId);
-    salvarHistoricoLocal();
-    renderHistoricoDropdown();
-    // Selecionar evento mais recente aberto, ou último fechado
-    if (historico.length > 0) {
-        const ultimo = historico[historico.length - 1];
-        navegarHistorico(ultimo.id);
-    } else {
-        // Sem eventos restantes — cria um evento em branco diretamente (sem pop-up).
-        criarEvento({});
-    }
-    mostrarMensagem('Evento eliminado!', true);
+    await apagarEvento(eventoAtualId);
 }
 </script>
 

@@ -764,6 +764,12 @@ async function apagarEvento(id, ev_) {
     });
     if (!ok) return;
 
+    // Apagar no servidor PRIMEIRO e só mexer no local se pegar. Ao contrário,
+    // um apagar que o servidor recusa desaparecia do ecrã na mesma e o evento
+    // voltava na carga seguinte — e como entretanto se criava outro no lugar
+    // dele, os eventos multiplicavam-se em vez de desaparecerem.
+    if (!await sbApagarEvento(id)) return;
+
     // Remover o evento do histórico
     historico = historico.filter(e => e.id != id);
 
@@ -773,9 +779,6 @@ async function apagarEvento(id, ev_) {
 
     salvarHistoricoLocal();
     if (pagamentos.length !== antesPg) salvarPagamentos();
-
-    // Apagar no Supabase (CASCADE remove ordens/ofertas/ligações; pagamentos vão por FK CASCADE)
-    sbApagarEvento(id);
 
     // Se apaguei o evento que estava aberto, carregar outro ou limpar o estado
     if (eventoAtualId == id) {
@@ -4392,11 +4395,52 @@ async function sbApagarDivisao(eventoId) {
     } catch(e) { console.error('Erro ao apagar divisão:', e); }
 }
 
+// Apaga o evento no servidor e CONFIRMA que a linha desapareceu mesmo.
+// Devolve true só nesse caso — quem chama não deve mexer no histórico local
+// sem isso, senão o evento some do ecrã e ressuscita no arranque seguinte
+// (o histórico é reconstruído a partir do servidor a cada carga).
+// Duas armadilhas, e a versão anterior caía nas duas:
+//   · o pedido ia fire-and-forget, sem sequer olhar ao `res.ok` — um 403 (RLS)
+//     ou um 409 (chave estrangeira) passava completamente despercebido;
+//   · com RLS activo, um DELETE que não encontre linhas PERMITIDAS devolve
+//     204, igualzinho a um apagar bem sucedido. Sem `return=representation`
+//     não há maneira de distinguir "apagado" de "a política não deixou".
 async function sbApagarEvento(id) {
-    if (!_sbSession) return;
+    if (!_sbSession) { mostrarMensagem('⚠️ Sem sessão — evento NÃO apagado', false); return false; }
+    // Em modo "ver como" o sbFetch já corta a escrita e avisa. Sair aqui evita
+    // um segundo aviso por cima, e sobretudo evita que ele diga "sem permissão
+    // (RLS)" — que é outra coisa e mandava o diagnóstico para o sítio errado.
+    if (typeof verComoAtivo === 'function' && verComoAtivo()) return false;
+    const apagarLinha = () => sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${id}`, {
+        method: 'DELETE', headers: sbHeaders({ 'Prefer': 'return=representation', 'Accept': 'application/json' })
+    });
     try {
-        await sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${id}`, { method: 'DELETE', headers: sbHeaders() });
-    } catch(e) { console.error('Erro ao apagar evento no Supabase:', e); }
+        let r = await apagarLinha();
+        if (!r.ok) {
+            let code = '';
+            try { code = ((await r.clone().json()) || {}).code || ''; } catch(_) {}
+            if (r.status === 409 || code === '23503') {
+                // Filhos a segurar o evento (tabelas sem ON DELETE CASCADE).
+                // Só se apagam DEPOIS de o servidor dizer que o problema é a
+                // chave estrangeira: se fosse falta de permissão, apagá-los à
+                // cabeça levava as ordens à frente e o evento ficava na mesma.
+                for (const t of ['pagamentos', 'eventos_divisao', 'ordens', 'ofertas'])
+                    await sbFetch(`${SB_URL}/rest/v1/${t}?evento_id=eq.${id}`, { method: 'DELETE', headers: sbHeaders() });
+                r = await apagarLinha();
+            }
+            if (!r.ok) await sbOk(r, 'apagar eventos');
+        }
+        const linhas = await r.json().catch(() => null);
+        if (!Array.isArray(linhas) || linhas.length === 0) {
+            mostrarMensagem('⚠️ Evento NÃO apagado: o servidor aceitou o pedido mas não removeu nada — falta política DELETE em `eventos`. Ver db/diagnostico-escrita.sql (query 2).', false);
+            return false;
+        }
+        return true;
+    } catch(e) {
+        console.error('Erro ao apagar evento no Supabase:', e);
+        mostrarMensagem('⚠️ Evento NÃO apagado no servidor: ' + sbErroLegivel(e), false);
+        return false;
+    }
 }
 
 // Define/remove o substituto de um evento (só admin). PATCH direto para não mexer nas ordens.
