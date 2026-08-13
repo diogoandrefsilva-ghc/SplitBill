@@ -3992,11 +3992,46 @@ function nextId() {
 
 // Lança em caso de resposta não-OK do PostgREST, para a gravação ABORTAR antes
 // de apagar seja o que for (em vez de continuar e perder dados em silêncio).
+// O erro leva o status e o corpo do PostgREST agarrados (err.status/code/msg),
+// para se poder dizer ao utilizador O QUE falhou e não só "falhou".
 async function sbOk(res, ctx) {
     if (res && res.ok) return res;
-    let det = '';
-    try { det = JSON.stringify(await res.json()); } catch(_) {}
-    throw new Error(`${ctx} → HTTP ${res ? res.status : '?'} ${det}`);
+    let body = null;
+    try { body = await res.json(); } catch(_) {}
+    const e = new Error(`${ctx} → HTTP ${res ? res.status : '?'} ${body ? JSON.stringify(body) : ''}`);
+    e.ctx = ctx;
+    e.status = res ? res.status : 0;
+    e.code = body && body.code || '';
+    e.msg = (body && (body.message || body.hint || body.details)) || '';
+    throw e;
+}
+
+// Traduz o erro do PostgREST para uma frase que diga o que fazer a seguir.
+// Sem isto, "falha ao guardar" é indistinguível de sessão expirada, de falta
+// de permissão (RLS) ou de coluna/tabela em falta — e o bug fica invisível.
+function sbErroLegivel(e) {
+    if (!e) return 'erro desconhecido';
+    if (e.status === undefined) return 'sem ligação ao servidor (rede ou Supabase em baixo)';
+    switch (true) {
+        case e.status === 0:
+            return 'sem ligação ao servidor (rede ou Supabase em baixo)';
+        case e.status === 401:
+            return 'sessão expirada ou inválida — termina sessão e volta a entrar';
+        case e.status === 403 || e.code === '42501':
+            return 'sem permissão de escrita (RLS) — a tua conta pode ler mas não gravar';
+        case e.status === 404 || e.code === 'PGRST205':
+            return 'tabela não encontrada no schema `splitbill`';
+        case e.code === 'PGRST204':
+            return 'coluna em falta na tabela — falta correr uma migração em db/';
+        case e.code === '23503':
+            return 'o evento ainda não existe na BD (chave estrangeira) — a gravação do evento falhou antes';
+        case e.status === 409:
+            return 'conflito de chaves na BD';
+        case e.status >= 500:
+            return 'erro do servidor Supabase (' + e.status + ')';
+        default:
+            return 'HTTP ' + e.status + (e.msg ? ' — ' + e.msg : '');
+    }
 }
 
 // Sincroniza uma tabela-pai (ordens/ofertas) + a tabela-filho respetiva
@@ -4044,18 +4079,21 @@ async function sbGuardarEvento(ev) {
         // rejeitava o pedido inteiro (PGRST204) e o evento não se gravava.
         const campos = { descricao: ev.descricao, data: ev.data, total_fatura: ev.totalFatura, pagador: ev.pagador };
         if (FATURA_COL) campos.fatura = ev.fatura ?? null;
+        // sbOk: se a linha-pai não gravar, as ordens seguintes rebentam na chave
+        // estrangeira. Sem esta verificação a causa real ficava escondida e só
+        // se via o erro derivado (ou nada).
         if (isAdmin()) {
-            await sbFetch(`${SB_URL}/rest/v1/eventos`, {
+            await sbOk(await sbFetch(`${SB_URL}/rest/v1/eventos`, {
                 method: 'POST',
-                headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
+                headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
                 body: JSON.stringify(Object.assign({ id: ev.id, substituto_email: ev.substituto ?? null }, campos))
-            });
+            }), 'upsert eventos');
         } else {
-            await sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${ev.id}`, {
+            await sbOk(await sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${ev.id}`, {
                 method: 'PATCH',
                 headers: sbHeaders(),
                 body: JSON.stringify(campos)
-            });
+            }), 'patch eventos');
         }
 
         // Sincronizar ordens e ofertas com UPSERT+PRUNE (nunca apaga antes de inserir)
@@ -4073,7 +4111,8 @@ async function sbGuardarEvento(ev) {
         );
     } catch(e) {
         console.error('Erro ao guardar evento no Supabase:', e);
-        mostrarMensagem('⚠️ Falha ao guardar no servidor — as alterações podem NÃO ter sido gravadas. Verifica a ligação e tenta de novo.', false);
+        mostrarMensagem('⚠️ Não gravado no servidor [' + (e.ctx || 'rede') + ']: ' + sbErroLegivel(e)
+            + ' · Definições → Diagnóstico da BD para detalhes.', false);
         throw e;
     }
 }
@@ -4213,7 +4252,9 @@ function sbScheduleAutoSave() {
     if (_sbAutoSaveTimer) clearTimeout(_sbAutoSaveTimer);
     _sbAutoSaveTimer = setTimeout(() => {
         const ev = historico.find(e => e.id === eventoAtualId);
-        if (ev) sbGuardarEvento(ev);
+        // O erro já é mostrado dentro de sbGuardarEvento; apanhar aqui evita a
+        // unhandled rejection (que em alguns browsers mata o resto do timer).
+        if (ev) sbGuardarEvento(ev).catch(() => {});
     }, 2000);
 }
 
@@ -4369,6 +4410,140 @@ async function sbAprovarAcesso(email) {
 
 function fecharAdmin() {
     document.getElementById('page-admin').style.display = 'none';
+}
+
+/* ── DIAGNÓSTICO DA BD ────────────────────────────────────────────────────
+   Quando a leitura funciona e a escrita não, o culpado está quase sempre no
+   servidor (política RLS em falta para INSERT/UPDATE/DELETE, coluna que a
+   migração não criou, ou chave estrangeira). O browser só via "falhou".
+   Este teste percorre o MESMO caminho que a gravação real — upsert do evento,
+   ordens, ordem_amigos, prune — numa linha-sentinela com id negativo (nunca
+   colide com os ids reais, que são Date.now()), e diz qual o passo que parte.
+   Limpa sempre o que criou, mesmo se rebentar a meio. */
+const DIAG_ID = -1;
+
+async function _diagPasso(out, nome, fn) {
+    const li = document.createElement('div');
+    li.style.cssText = 'font-size:12.5px;padding:6px 0;border-bottom:1px solid #E4E8E2;line-height:1.45;';
+    li.innerHTML = '<span style="color:#7C8782;">⏳ ' + nome + '…</span>';
+    out.appendChild(li);
+    try {
+        const extra = await fn();
+        li.innerHTML = '<span style="color:#0E7A4F;font-weight:600;">✓ ' + nome + '</span>'
+            + (extra ? '<span style="color:#7C8782;"> — ' + extra + '</span>' : '');
+        return true;
+    } catch (e) {
+        li.innerHTML = '<span style="color:#B3402F;font-weight:700;">✗ ' + nome + '</span>'
+            + '<div style="color:#B3402F;">' + sbErroLegivel(e) + '</div>'
+            + '<div style="color:#7C8782;font-size:11px;word-break:break-word;">'
+            + (e.status ? 'HTTP ' + e.status + ' ' : '') + (e.code || '') + ' ' + (e.msg || '') + '</div>';
+        return false;
+    }
+}
+
+async function sbDiagnostico() {
+    const out = document.getElementById('diag-out');
+    if (!out) return;
+    const ok = await mostrarModal({
+        icon: '🩺',
+        title: 'Diagnóstico da BD',
+        msg: 'Vai escrever e apagar uma linha de teste (id ' + DIAG_ID + ') nas tabelas '
+           + '<b>eventos</b>, <b>ordens</b> e <b>ordem_amigos</b>, para descobrir qual a operação que falha. '
+           + 'Não toca em nenhum evento real.',
+        confirmText: 'Correr teste'
+    });
+    if (!ok) return;
+
+    out.innerHTML = '';
+    out.style.display = '';
+    const linhaEvento = { id: DIAG_ID, descricao: '⚙️ diagnóstico', data: '01/01/2000',
+                          total_fatura: null, pagador: '', substituto_email: null };
+
+    await _diagPasso(out, 'Sessão', async () => {
+        if (!_sbSession || !_sbSession.access_token) throw Object.assign(new Error('sem sessão'), { status: 401 });
+        await sbEnsureFresh();
+        const mins = _sbSession.expires_at ? Math.round((_sbSession.expires_at - Date.now() / 1000) / 60) : null;
+        return (emailAtual() || '?') + (mins !== null ? ' · token válido +' + mins + ' min' : '');
+    });
+
+    await _diagPasso(out, 'Ler eventos (SELECT)', async () => {
+        const r = await sbOk(await sbFetch(`${SB_URL}/rest/v1/eventos?select=*&limit=1`,
+            { headers: sbHeaders({ 'Accept': 'application/json' }) }), 'select eventos');
+        const rows = await r.json();
+        if (!Array.isArray(rows) || !rows.length) return 'tabela vazia';
+        const cols = Object.keys(rows[0]);
+        return cols.length + ' colunas · fatura: ' + (cols.includes('fatura') ? 'sim' : 'NÃO (falta db/fatura-detalhe.sql)')
+             + ' · substituto_email: ' + (cols.includes('substituto_email') ? 'sim' : 'NÃO');
+    });
+
+    let evOk = await _diagPasso(out, 'Criar evento (INSERT)', async () => {
+        await sbOk(await sbFetch(`${SB_URL}/rest/v1/eventos`, {
+            method: 'POST', headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+            body: JSON.stringify(linhaEvento)
+        }), 'insert eventos');
+    });
+
+    if (evOk) {
+        await _diagPasso(out, 'Alterar evento (UPDATE)', async () => {
+            await sbOk(await sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${DIAG_ID}`, {
+                method: 'PATCH', headers: sbHeaders(),
+                body: JSON.stringify({ descricao: '⚙️ diagnóstico (2)' })
+            }), 'patch eventos');
+        });
+        // O upsert real cai em ON CONFLICT DO UPDATE: o Postgres exige política
+        // de UPDATE além da de INSERT. É a falha clássica de "só a escrita parte".
+        await _diagPasso(out, 'Regravar evento (UPSERT)', async () => {
+            await sbOk(await sbFetch(`${SB_URL}/rest/v1/eventos`, {
+                method: 'POST', headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+                body: JSON.stringify(linhaEvento)
+            }), 'upsert eventos');
+        });
+        if (FATURA_COL) {
+            await _diagPasso(out, 'Gravar fatura (coluna jsonb)', async () => {
+                await sbOk(await sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${DIAG_ID}`, {
+                    method: 'PATCH', headers: sbHeaders(),
+                    body: JSON.stringify({ fatura: { linhas: [] } })
+                }), 'patch eventos.fatura');
+            });
+        }
+        const ordOk = await _diagPasso(out, 'Criar ordem (INSERT + chave estrangeira)', async () => {
+            await sbOk(await sbFetch(`${SB_URL}/rest/v1/ordens`, {
+                method: 'POST', headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+                body: JSON.stringify({ id: DIAG_ID, evento_id: DIAG_ID, item: 'diagnóstico',
+                                       quantidade: 1, preco_unitario: 0, preco_total: 0, hora: '01/01, 00:00' })
+            }), 'insert ordens');
+        });
+        if (ordOk) {
+            await _diagPasso(out, 'Associar amigos à ordem (ordem_amigos)', async () => {
+                await sbOk(await sbFetch(`${SB_URL}/rest/v1/ordem_amigos`, {
+                    method: 'POST', headers: sbHeaders({ 'Prefer': 'return=minimal' }),
+                    body: JSON.stringify([{ ordem_id: DIAG_ID, amigo: 'diagnóstico' }])
+                }), 'insert ordem_amigos');
+            });
+            await _diagPasso(out, 'Podar ordens (DELETE)', async () => {
+                await sbOk(await sbFetch(`${SB_URL}/rest/v1/ordem_amigos?ordem_id=eq.${DIAG_ID}`,
+                    { method: 'DELETE', headers: sbHeaders() }), 'delete ordem_amigos');
+                await sbOk(await sbFetch(`${SB_URL}/rest/v1/ordens?id=eq.${DIAG_ID}`,
+                    { method: 'DELETE', headers: sbHeaders() }), 'delete ordens');
+            });
+        }
+    }
+
+    // Limpeza — corre sempre, mesmo com passos falhados acima.
+    await _diagPasso(out, 'Limpar linhas de teste', async () => {
+        await sbFetch(`${SB_URL}/rest/v1/ordem_amigos?ordem_id=eq.${DIAG_ID}`, { method: 'DELETE', headers: sbHeaders() });
+        await sbFetch(`${SB_URL}/rest/v1/ordens?id=eq.${DIAG_ID}`, { method: 'DELETE', headers: sbHeaders() });
+        await sbOk(await sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${DIAG_ID}`,
+            { method: 'DELETE', headers: sbHeaders() }), 'delete eventos');
+    });
+
+    const rodape = document.createElement('div');
+    rodape.style.cssText = 'font-size:11.5px;color:#7C8782;padding-top:10px;line-height:1.5;';
+    rodape.innerHTML = 'Passos a vermelho = é aí que a escrita parte. '
+        + '<b>Sem permissão (RLS)</b> resolve-se no SQL Editor do Supabase, com uma política '
+        + 'para o comando em falta (INSERT/UPDATE/DELETE) na tabela indicada — o upsert precisa '
+        + 'das políticas de INSERT <i>e</i> de UPDATE. <b>Coluna em falta</b> resolve-se correndo a migração em <code>db/</code>.';
+    out.appendChild(rodape);
 }
 
 // Definições (cabeçalho). Admin → painel completo (pedidos/equivalências/backup);

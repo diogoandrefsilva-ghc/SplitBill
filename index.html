@@ -100,6 +100,8 @@ window.sbEsconderSplash = function(){
             <button onclick="abrirEquivalencias()" style="width:100%;padding:11px;background:#0B3B2B;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:10px;">👥 Equivalências amigo ↔ conta</button>
             <button onclick="exportarJSON()" style="width:100%;padding:11px;background:#fff;color:#0E7A4F;border:1.5px solid #0E7A4F;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;">💾 Descarregar backup (JSON)</button>
             <p style="font-size:11px;color:#7C8782;text-align:center;margin:8px 0 14px;">O plano gratuito do Supabase não faz backups automáticos.</p>
+            <button onclick="sbDiagnostico()" style="width:100%;padding:11px;background:#fff;color:#0B3B2B;border:1.5px solid #C8D0C8;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;">🩺 Diagnóstico da BD</button>
+            <div id="diag-out" style="display:none;background:#fff;border:1px solid #DEE3DD;border-radius:9px;padding:10px 12px;margin-bottom:14px;"></div>
             <button onclick="sbLogout()" style="width:100%;padding:11px;background:transparent;color:#B3402F;border:1.5px solid #E3C9C4;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;">🚪 Terminar sessão</button>
         </div>
     </div>
