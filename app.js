@@ -4420,7 +4420,10 @@ function fecharAdmin() {
    ordens, ordem_amigos, prune — numa linha-sentinela com id negativo (nunca
    colide com os ids reais, que são Date.now()), e diz qual o passo que parte.
    Limpa sempre o que criou, mesmo se rebentar a meio. */
-const DIAG_ID = -1;
+// id negativo com a MESMA ordem de grandeza dos ids reais (Date.now(), 13
+// dígitos). Um id pequeno como -1 cabe num `integer` e escondia um eventual
+// overflow de int4; negativo garante que nunca colide com um evento a sério.
+let DIAG_ID = -1;
 
 async function _diagPasso(out, nome, fn) {
     const li = document.createElement('div');
@@ -4444,20 +4447,26 @@ async function _diagPasso(out, nome, fn) {
 async function sbDiagnostico() {
     const out = document.getElementById('diag-out');
     if (!out) return;
+    DIAG_ID = -Date.now();
     const ok = await mostrarModal({
         icon: '🩺',
         title: 'Diagnóstico da BD',
-        msg: 'Vai escrever e apagar uma linha de teste (id ' + DIAG_ID + ') nas tabelas '
-           + '<b>eventos</b>, <b>ordens</b> e <b>ordem_amigos</b>, para descobrir qual a operação que falha. '
-           + 'Não toca em nenhum evento real.',
+        msg: 'Vai escrever e apagar linhas de teste (id <code>' + DIAG_ID + '</code>) em <b>eventos</b>, '
+           + '<b>ordens</b>, <b>ofertas</b>, <b>eventos_divisao</b> e <b>pagamentos</b>, pelo mesmo caminho '
+           + 'da gravação real, para descobrir qual a operação que falha. Não toca em nenhum evento real.',
         confirmText: 'Correr teste'
     });
     if (!ok) return;
 
     out.innerHTML = '';
     out.style.display = '';
-    const linhaEvento = { id: DIAG_ID, descricao: '⚙️ diagnóstico', data: '01/01/2000',
+    // Este corpo é o MESMO que sbGuardarEvento envia para um evento acabado de
+    // criar — incluindo `fatura` quando a coluna existe. A data usa dia > 12 de
+    // propósito: se a coluna fosse `date` em vez de texto, "28/12" rebenta com
+    // DateStyle MDY e "01/01" passava, escondendo o problema.
+    const linhaEvento = { id: DIAG_ID, descricao: '⚙️ diagnóstico', data: '28/12/2000',
                           total_fatura: null, pagador: '', substituto_email: null };
+    if (FATURA_COL) linhaEvento.fatura = null;
 
     await _diagPasso(out, 'Sessão', async () => {
         if (!_sbSession || !_sbSession.access_token) throw Object.assign(new Error('sem sessão'), { status: 401 });
@@ -4476,7 +4485,35 @@ async function sbDiagnostico() {
              + ' · substituto_email: ' + (cols.includes('substituto_email') ? 'sim' : 'NÃO');
     });
 
-    let evOk = await _diagPasso(out, 'Criar evento (INSERT)', async () => {
+    // Os tipos das colunas vêm do próprio PostgREST (spec OpenAPI da raiz do
+    // /rest/v1). É leitura pura e resolve de uma vez duas dúvidas que os dados
+    // sozinhos não resolvem: se `eventos.id` é bigint (Date.now() tem 13
+    // dígitos e NÃO cabe num integer) e se `data` é texto ou date.
+    await _diagPasso(out, 'Tipos das colunas', async () => {
+        // Informativo: se o PostgREST tiver a spec desligada, não é falha de
+        // escrita nenhuma — não vale a pena pintar de vermelho.
+        let spec = null;
+        try {
+            const r = await sbFetch(`${SB_URL}/rest/v1/`,
+                { headers: sbHeaders({ 'Accept': 'application/openapi+json' }) });
+            if (r.ok) spec = await r.json();
+        } catch(_) {}
+        if (!spec) return 'spec do PostgREST indisponível (não é erro de escrita)';
+        const defs = (spec && (spec.definitions || (spec.components && spec.components.schemas))) || {};
+        const tipo = (tab, col) => {
+            const p = defs[tab] && defs[tab].properties && defs[tab].properties[col];
+            return p ? (p.format || p.type) : '?';
+        };
+        const idEv = tipo('eventos', 'id');
+        const aviso = /^integer$|^int4$/.test(idEv)
+            ? ' ⛔ integer não chega para Date.now() — precisa de bigint' : '';
+        return 'eventos.id: ' + idEv + aviso
+             + ' · eventos.data: ' + tipo('eventos', 'data')
+             + ' · ordens.id: ' + tipo('ordens', 'id')
+             + ' · ordens.evento_id: ' + tipo('ordens', 'evento_id');
+    });
+
+    let evOk = await _diagPasso(out, 'Criar evento (INSERT, id e data reais)', async () => {
         await sbOk(await sbFetch(`${SB_URL}/rest/v1/eventos`, {
             method: 'POST', headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
             body: JSON.stringify(linhaEvento)
