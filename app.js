@@ -4506,33 +4506,63 @@ async function sbDiagnostico() {
                 }), 'patch eventos.fatura');
             });
         }
-        const ordOk = await _diagPasso(out, 'Criar ordem (INSERT + chave estrangeira)', async () => {
-            await sbOk(await sbFetch(`${SB_URL}/rest/v1/ordens`, {
-                method: 'POST', headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
-                body: JSON.stringify({ id: DIAG_ID, evento_id: DIAG_ID, item: 'diagnóstico',
-                                       quantidade: 1, preco_unitario: 0, preco_total: 0, hora: '01/01, 00:00' })
-            }), 'insert ordens');
+        // Daqui para baixo chama-se a FUNÇÃO REAL da gravação (sbSyncFilhos), e
+        // não uma imitação: assim o teste não pode ficar verde por cobrir menos
+        // do que a app faz. Cobre upsert das linhas-pai, reposição das filhas,
+        // e o prune `id=not.in.(…)` — que é escrita que nenhum INSERT solto testa.
+        const ordemDemo = [{
+            row: { id: DIAG_ID, evento_id: DIAG_ID, item: 'diagnóstico', quantidade: 1,
+                   preco_unitario: 0, preco_total: 0, hora: '01/01, 00:00' },
+            filhos: [{ ordem_id: DIAG_ID, amigo: 'diagnóstico' }]
+        }];
+        const ofertaDemo = [{
+            row: { id: DIAG_ID, evento_id: DIAG_ID, quem: 'diagnóstico', item: 'diagnóstico',
+                   quantidade: 1, preco_unitario: 0, preco_total: 0, hora: '01/01, 00:00' },
+            filhos: [{ oferta_id: DIAG_ID, amigo: 'diagnóstico' }]
+        }];
+
+        await _diagPasso(out, 'Gravar ordens (upsert + ordem_amigos + prune)', async () => {
+            await sbSyncFilhos('ordens', 'ordem_amigos', 'ordem_id', DIAG_ID, ordemDemo);
         });
-        if (ordOk) {
-            await _diagPasso(out, 'Associar amigos à ordem (ordem_amigos)', async () => {
-                await sbOk(await sbFetch(`${SB_URL}/rest/v1/ordem_amigos`, {
-                    method: 'POST', headers: sbHeaders({ 'Prefer': 'return=minimal' }),
-                    body: JSON.stringify([{ ordem_id: DIAG_ID, amigo: 'diagnóstico' }])
-                }), 'insert ordem_amigos');
-            });
-            await _diagPasso(out, 'Podar ordens (DELETE)', async () => {
-                await sbOk(await sbFetch(`${SB_URL}/rest/v1/ordem_amigos?ordem_id=eq.${DIAG_ID}`,
-                    { method: 'DELETE', headers: sbHeaders() }), 'delete ordem_amigos');
-                await sbOk(await sbFetch(`${SB_URL}/rest/v1/ordens?id=eq.${DIAG_ID}`,
-                    { method: 'DELETE', headers: sbHeaders() }), 'delete ordens');
-            });
-        }
+        await _diagPasso(out, 'Apagar todas as ordens do evento', async () => {
+            await sbSyncFilhos('ordens', 'ordem_amigos', 'ordem_id', DIAG_ID, []);
+        });
+        // As ofertas correm SEMPRE a seguir às ordens em sbGuardarEvento, mesmo
+        // quando o evento não tem nenhuma — e nesse caso passam pelo ramo do
+        // DELETE. É escrita numa tabela à parte, com políticas próprias.
+        await _diagPasso(out, 'Gravar ofertas (upsert + oferta_para + prune)', async () => {
+            await sbSyncFilhos('ofertas', 'oferta_para', 'oferta_id', DIAG_ID, ofertaDemo);
+        });
+        await _diagPasso(out, 'Apagar todas as ofertas do evento', async () => {
+            await sbSyncFilhos('ofertas', 'oferta_para', 'oferta_id', DIAG_ID, []);
+        });
+
+        await _diagPasso(out, 'Gravar divisão fixada (eventos_divisao)', async () => {
+            await sbOk(await sbFetch(`${SB_URL}/rest/v1/eventos_divisao?evento_id=eq.${DIAG_ID}`,
+                { method: 'DELETE', headers: sbHeaders() }), 'delete eventos_divisao');
+            await sbOk(await sbFetch(`${SB_URL}/rest/v1/eventos_divisao`, {
+                method: 'POST', headers: sbHeaders({ 'Prefer': 'return=minimal' }),
+                body: JSON.stringify([{ evento_id: DIAG_ID, pessoa: 'diagnóstico', quota: 0 }])
+            }), 'insert eventos_divisao');
+        });
+        await _diagPasso(out, 'Gravar pagamento (pagamentos)', async () => {
+            await sbOk(await sbFetch(`${SB_URL}/rest/v1/pagamentos`, {
+                method: 'POST', headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+                body: JSON.stringify({ id: DIAG_ID, evento_id: DIAG_ID, pessoa: 'diagnóstico',
+                                       valor: 0, tipo: 'pagamento', data: '01/01/2000' })
+            }), 'upsert pagamentos');
+        });
     }
 
     // Limpeza — corre sempre, mesmo com passos falhados acima.
     await _diagPasso(out, 'Limpar linhas de teste', async () => {
-        await sbFetch(`${SB_URL}/rest/v1/ordem_amigos?ordem_id=eq.${DIAG_ID}`, { method: 'DELETE', headers: sbHeaders() });
-        await sbFetch(`${SB_URL}/rest/v1/ordens?id=eq.${DIAG_ID}`, { method: 'DELETE', headers: sbHeaders() });
+        for (const url of [
+            `ordem_amigos?ordem_id=eq.${DIAG_ID}`, `ordens?id=eq.${DIAG_ID}`,
+            `oferta_para?oferta_id=eq.${DIAG_ID}`, `ofertas?id=eq.${DIAG_ID}`,
+            `eventos_divisao?evento_id=eq.${DIAG_ID}`, `pagamentos?id=eq.${DIAG_ID}`
+        ]) {
+            await sbFetch(`${SB_URL}/rest/v1/${url}`, { method: 'DELETE', headers: sbHeaders() });
+        }
         await sbOk(await sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${DIAG_ID}`,
             { method: 'DELETE', headers: sbHeaders() }), 'delete eventos');
     });
