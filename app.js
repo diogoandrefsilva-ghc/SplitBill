@@ -2624,6 +2624,13 @@ function renderContasSaldos(lista, resumo) {
     resumo.innerHTML = '<div class="resumo-fluxo-wrap">' + linhas.join('') + '</div>';
 }
 
+// "Prescrição" é vocabulário de admin — o utilizador não deve perceber que a dívida
+// foi dada como perdida. Para ele é só um pagamento que falta confirmar.
+function notaPrescrita(pessoa, presc) {
+    if (isAdmin()) return 'Prescrita' + (presc && presc.data ? ' em ' + presc.data : '') + ' — confirmar se chegou a pagar';
+    return ehEu(pessoa) ? 'Confirma se já pagaste este valor' : 'Pagamento por confirmar';
+}
+
 function renderContasEventos(lista, resumo) {
     let eventosFechados = historico.filter(ev => ev.totalFatura && ev.pagador);
     // Não-admin sem nome associado: avisar
@@ -2695,7 +2702,7 @@ function renderContasEventos(lista, resumo) {
             return '<div class="contas-divida-item' + (isPrescrita ? ' prescrita' : '') + '" style="flex-wrap:wrap;">'
                 + '<span class="nome">' + p + '</span>'
                 + '<span class="valor ' + (isPrescrita ? 'prescrita' : (isPago ? 'pago' : 'pendente')) + '">\u20ac' + d.valor.toFixed(2) + (!isPago && restante < d.valor - 0.005 ? ' (resta \u20ac' + restante.toFixed(2) + ')' : '') + ' <span style="display:inline-block;width:24px;text-align:center;margin-left:6px;">' + icone + '</span></span>'
-                + (isPrescrita ? '<div class="nota-prescrita">Prescrita' + (prescricao.data ? ' em ' + prescricao.data : '') + ' — confirmar se chegou a pagar</div>' : '')
+                + (isPrescrita ? '<div class="nota-prescrita">' + notaPrescrita(p, prescricao) + '</div>' : '')
                 + (consumoStr ? '<div style="width:100%;font-size:11px;color:#7C8782;margin-top:2px;">' + consumoStr + '</div>' : '')
                 + '</div>';
         }).join('');
@@ -2854,7 +2861,9 @@ function renderContasPagamentos(lista, resumo) {
             if (p.eventoId) {
                 var evr = historico.find(function(e) { return e.id === p.eventoId; });
                 if (evr && evr.pagador && evr.pagador !== p.pessoa) {
-                    return ' <span style="font-size:10.5px;font-weight:400;color:' + (isPrescricao ? '#B8911F' : '#9AA5A0') + ';">' + (isPrescricao ? '(prescrita · devia a ' + evr.pagador + ')' : '(pagou ao ' + evr.pagador + ')') + '</span>';
+                    var etiqueta = !isPrescricao ? '(pagou ao ' + evr.pagador + ')'
+                        : (isAdmin() ? '(prescrita · devia a ' + evr.pagador + ')' : '(por confirmar · a ' + evr.pagador + ')');
+                    return ' <span style="font-size:10.5px;font-weight:400;color:' + (isPrescricao ? '#B8911F' : '#9AA5A0') + ';">' + etiqueta + '</span>';
                 }
             }
             return '';
@@ -2865,7 +2874,7 @@ function renderContasPagamentos(lista, resumo) {
             + '<div class="pgto-detalhe">' + eventoDesc + ' \u00b7 ' + p.data + '</div>'
             + (consumoStr ? '<div style="font-size:11px;color:#7C8782;margin-top:2px;">' + consumoStr + '</div>' : '')
             + '</div>'
-            + '<span class="pgto-valor' + (isPrescricao ? ' prescrita' : '') + '">\u20ac' + p.valor.toFixed(2) + '</span>'
+            + '<span class="pgto-valor' + (isPrescricao ? (isAdmin() ? ' prescrita' : ' por-confirmar') : '') + '">\u20ac' + p.valor.toFixed(2) + '</span>'
             + acoes
             + '</div>';
     }).join('');

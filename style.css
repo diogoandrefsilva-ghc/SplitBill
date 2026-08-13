@@ -817,8 +817,6 @@ html,body{touch-action:pan-x pan-y}
         .contas-divida-item .valor.pago { color: #0E7A4F; }
         /* Dívida prescrita: não é "paga", é uma nota em aberto — dourado, não verde nem vermelho */
         .contas-divida-item.prescrita {
-            background: #FDFAF0;
-            border-color: #E8DCB4;
             border-left: 3px solid #B8911F;
         }
         .contas-divida-item .valor.prescrita { color: #B8911F; }
@@ -1016,7 +1014,8 @@ html,body{touch-action:pan-x pan-y}
         .pgto-hist-item .pgto-detalhe { font-size: 11px; color: #7C8782; margin-top: 2px; }
         .pgto-hist-item .pgto-valor { font-weight: 700; color: #0E7A4F; min-width: 60px; text-align: right; margin-right: 8px; }
         .pgto-hist-item .pgto-valor.prescrita { color: #B8911F; text-decoration: line-through; }
-        .pgto-hist-item.prescrita { background: #FDFAF0; border-left: 3px solid #B8911F; }
+        .pgto-hist-item .pgto-valor.por-confirmar { color: #B8911F; }
+        .pgto-hist-item.prescrita { border-left: 3px solid #B8911F; }
         .pgto-hist-item .pgto-delete {
             background: #B3402F; color: white; border: none;
             width: 24px; height: 24px; border-radius: 50%;
