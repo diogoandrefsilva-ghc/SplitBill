@@ -26,6 +26,12 @@
 -- Corre tudo numa transação: ou passa inteiro, ou não muda nada. Não toca em
 -- dados (os valores antigos cabem todos em bigint) nem em políticas RLS.
 --
+-- TESTADO em PostgreSQL 16 contra uma réplica deste schema, nas duas
+-- variantes: ids `integer` simples e ids `serial`/`identity`. Em ambas, as
+-- chaves estrangeiras voltam com o ON DELETE CASCADE intacto, as políticas
+-- RLS ficam na mesma, as linhas antigas mantêm-se, a sequência continua a
+-- funcionar, e a segunda passagem não faz nada.
+--
 -- NOTA: se alguma VIEW depender destas colunas, o ALTER falha e o Postgres
 -- diz qual — larga a view, corre isto, recria a view.
 -- =====================================================================
