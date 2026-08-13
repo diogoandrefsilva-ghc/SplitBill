@@ -145,7 +145,15 @@ function carregarEvento(ev) {
     estado.pagador = ev.pagador || '';
     estado.dividas = ev.dividas ? JSON.parse(JSON.stringify(ev.dividas)) : {};
     amigos = ev.amigos ? JSON.parse(JSON.stringify(ev.amigos)) : [];
-    // O menu não é persistido na BD; se vier vazio, reconstrói-se a partir de
+    // Evento sem convocados e sem nada lançado: não há de onde os deduzir (é o
+    // caso dos eventos criados antes de db/convocados-menu.sql). Usa-se a
+    // sugestão por defeito, como já se faz com o menu — assim que houver ordens
+    // ou a lista for guardada, é essa que manda.
+    if (amigos.length === 0 && estado.ordens.length === 0 && estado.ofertas.length === 0) {
+        amigos = amigosPorDefeito();
+        if (estado.pagador && !amigos.includes(estado.pagador)) amigos.unshift(estado.pagador);
+    }
+    // O menu pode não estar persistido na BD; se vier vazio, reconstrói-se a partir de
     // todos os eventos (preço mais recente) para o dropdown de artigos funcionar.
     menu = (ev.menu && Object.keys(ev.menu).length) ? JSON.parse(JSON.stringify(ev.menu)) : menuAgregadoGlobal();
     modoReadOnly = !!ev.totalFatura;
@@ -904,8 +912,9 @@ function criarEvento(opts) {
     const arrow = document.getElementById('historico-toggle-arrow');
     if (panel) { panel.classList.remove('open'); }
     if (arrow) { arrow.style.transform = ''; }
-    // Persistir já na BD: o evento passa a existir mesmo sem ordens.
-    sbScheduleAutoSave();
+    // Persistir já na BD, sem esperar pelo debounce de 2s: o evento nasce no
+    // servidor com os convocados e o menu, mesmo sem uma única ordem lançada.
+    sbGuardarEvento(novoEvt).catch(() => {});
     return novoEvt;
 }
 
@@ -3884,16 +3893,45 @@ async function sbAposLogin() {
    uma vez por sessão, na carga dos eventos. */
 let FATURA_COL = true;
 
+/* Os convocados e o menu do evento vivem em colunas `amigos jsonb` / `menu jsonb`
+   da mesma tabela (migração db/convocados-menu.sql). Antes disto NÃO existiam
+   na BD: a lista era deduzida de quem aparecia nas ordens, logo um evento ainda
+   sem nada lançado voltava vazio do servidor e os amigos pré-preenchidos na
+   criação desapareciam ao recarregar a app. Mesmo padrão do FATURA_COL: se a
+   migração não estiver corrida, a app funciona na mesma (guarda só neste
+   dispositivo). Testa-se uma vez por carga dos eventos. */
+let AMIGOS_COL = true;
+let MENU_COL = true;
+
+// Lista de convocados de um evento vindo da BD = a coluna `amigos` (fonte de
+// verdade, editada nas Definições do evento) MAIS quem apareça nas ordens, nas
+// ofertas ou seja tesoureiro. A união cobre os eventos anteriores à migração
+// (coluna a null → sobra o que se deduz) e quem entre numa ordem sem estar na
+// lista. Ordem preservada: primeiro os convocados, depois os deduzidos.
+function convocadosDoEvento(guardados, evOrdens, evOfertas, pagador) {
+    const vistos = new Set(); const lista = [];
+    const add = a => { if (a && !vistos.has(a)) { vistos.add(a); lista.push(a); } };
+    (guardados || []).forEach(add);
+    (evOrdens || []).forEach(o => (o.amigos || []).forEach(add));
+    (evOfertas || []).forEach(o => { add(o.quem); (o.para || []).forEach(add); });
+    add(pagador);
+    return lista;
+}
+
 async function sbCarregarDados() {
     try {
         // Carregar eventos. `fatura` vem no select=* se a coluna existir; se a
         // migração não estiver corrida, as linhas simplesmente não a trazem.
         const evRes = await sbFetch(`${SB_URL}/rest/v1/eventos?select=*&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
         const eventos = await evRes.json();
-        FATURA_COL = Array.isArray(eventos) && eventos.length > 0
-            ? Object.prototype.hasOwnProperty.call(eventos[0], 'fatura')
-            : FATURA_COL;
+        if (Array.isArray(eventos) && eventos.length > 0) {
+            const tem = c => Object.prototype.hasOwnProperty.call(eventos[0], c);
+            FATURA_COL = tem('fatura');
+            AMIGOS_COL = tem('amigos');
+            MENU_COL = tem('menu');
+        }
         if (!FATURA_COL) console.warn('[SplitBill] coluna eventos.fatura ausente — corre db/fatura-detalhe.sql para guardar o detalhe da fatura no servidor');
+        if (!AMIGOS_COL || !MENU_COL) console.warn('[SplitBill] colunas eventos.amigos/menu ausentes — corre db/convocados-menu.sql para os convocados e o menu do evento viajarem entre dispositivos');
 
         // Carregar ordens + ordem_amigos
         const ordRes = await sbFetch(`${SB_URL}/rest/v1/ordens?select=*,ordem_amigos(amigo)&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
@@ -3911,8 +3949,16 @@ async function sbCarregarDados() {
         // Faturas já guardadas neste dispositivo: sem a migração o servidor não
         // as devolve, e o historico é reconstruído por cima — sem isto perdia-se
         // o detalhe a cada login.
-        const faturasLocais = {};
-        (historico || []).forEach(e => { if (e && e.fatura) faturasLocais[e.id] = e.fatura; });
+        // O mesmo vale para os convocados e o menu enquanto db/convocados-menu.sql
+        // não for corrida: sem as colunas, o servidor não os devolve e o histórico
+        // reconstruído por cima levava-os à frente.
+        const faturasLocais = {}, amigosLocais = {}, menusLocais = {};
+        (historico || []).forEach(e => {
+            if (!e) return;
+            if (e.fatura) faturasLocais[e.id] = e.fatura;
+            if (Array.isArray(e.amigos) && e.amigos.length) amigosLocais[e.id] = e.amigos;
+            if (e.menu && Object.keys(e.menu).length) menusLocais[e.id] = e.menu;
+        });
 
         historico = eventos.map(ev => {
             const evOrdens = ordens.filter(o => o.evento_id === ev.id).map(o => ({
@@ -3944,8 +3990,10 @@ async function sbCarregarDados() {
                 pagador: ev.pagador,
                 ordens: evOrdens,
                 ofertas: evOfertas,
-                amigos: [...new Set(evOrdens.flatMap(o => o.amigos))],
-                menu: {},
+                amigos: convocadosDoEvento(
+                    (AMIGOS_COL && Array.isArray(ev.amigos)) ? ev.amigos : amigosLocais[ev.id],
+                    evOrdens, evOfertas, ev.pagador),
+                menu: (MENU_COL && ev.menu && typeof ev.menu === 'object') ? ev.menu : (menusLocais[ev.id] || {}),
                 dividas: evDividas,
                 fatura: (FATURA_COL && ev.fatura) ? ev.fatura : (faturasLocais[ev.id] || null),
                 substituto: ev.substituto_email || null
@@ -4093,6 +4141,10 @@ async function sbGuardarEvento(ev) {
         // rejeitava o pedido inteiro (PGRST204) e o evento não se gravava.
         const campos = { descricao: ev.descricao, data: ev.data, total_fatura: ev.totalFatura, pagador: ev.pagador };
         if (FATURA_COL) campos.fatura = ev.fatura ?? null;
+        // Convocados e menu: idem — só entram se as colunas existirem, senão o
+        // PostgREST rejeitava o pedido inteiro (PGRST204) e o evento não gravava.
+        if (AMIGOS_COL) campos.amigos = ev.amigos || [];
+        if (MENU_COL) campos.menu = ev.menu || {};
         // sbOk: se a linha-pai não gravar, as ordens seguintes rebentam na chave
         // estrangeira. Sem esta verificação a causa real ficava escondida e só
         // se via o erro derivado (ou nada).
