@@ -4021,6 +4021,9 @@ function sbErroLegivel(e) {
             return 'sem permissão de escrita (RLS) — a tua conta pode ler mas não gravar';
         case e.status === 404 || e.code === 'PGRST205':
             return 'tabela não encontrada no schema `splitbill`';
+        case e.code === '22003':
+            // Date.now() tem 13 dígitos e não cabe em int4 (max ~2,1e9).
+            return 'coluna de id é `integer` e não chega para os ids da app — corre db/ids-bigint.sql';
         case e.code === 'PGRST204':
             return 'coluna em falta na tabela — falta correr uma migração em db/';
         case e.code === '23503':
@@ -4607,9 +4610,11 @@ async function sbDiagnostico() {
     const rodape = document.createElement('div');
     rodape.style.cssText = 'font-size:11.5px;color:#7C8782;padding-top:10px;line-height:1.5;';
     rodape.innerHTML = 'Passos a vermelho = é aí que a escrita parte. '
-        + '<b>Sem permissão (RLS)</b> resolve-se no SQL Editor do Supabase, com uma política '
-        + 'para o comando em falta (INSERT/UPDATE/DELETE) na tabela indicada — o upsert precisa '
-        + 'das políticas de INSERT <i>e</i> de UPDATE. <b>Coluna em falta</b> resolve-se correndo a migração em <code>db/</code>.';
+        + '<b>out of range for type integer</b> (22003): as colunas de id são <code>integer</code> e os ids '
+        + 'da app têm 13 dígitos — corre <code>db/ids-bigint.sql</code>. '
+        + '<b>Sem permissão (RLS)</b>: falta uma política para o comando indicado (INSERT/UPDATE/DELETE) '
+        + 'na tabela indicada — o upsert precisa das de INSERT <i>e</i> de UPDATE. '
+        + '<b>Coluna em falta</b>: falta correr uma migração em <code>db/</code>.';
     out.appendChild(rodape);
 }
 
