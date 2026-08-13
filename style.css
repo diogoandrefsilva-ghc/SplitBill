@@ -815,6 +815,21 @@ html,body{touch-action:pan-x pan-y}
         .contas-divida-item .valor { font-weight: 700; min-width: 70px; text-align: right; margin-left: auto; padding-left: 10px; }
         .contas-divida-item .valor.pendente { color: #B3402F; }
         .contas-divida-item .valor.pago { color: #0E7A4F; }
+        /* Dívida prescrita: não é "paga", é uma nota em aberto — dourado, não verde nem vermelho */
+        .contas-divida-item.prescrita {
+            background: #FDFAF0;
+            border-color: #E8DCB4;
+            border-left: 3px solid #B8911F;
+        }
+        .contas-divida-item .valor.prescrita { color: #B8911F; }
+        .icone-prescrita { color: #B8911F; font-size: 16px; font-weight: 700; }
+        .nota-prescrita {
+            width: 100%;
+            font-size: 11px;
+            color: #8A6D14;
+            margin-top: 3px;
+            font-style: italic;
+        }
         .contas-divida-item .btn-toggle-pago {
             padding: 4px 10px;
             font-size: 11px;
@@ -1000,6 +1015,8 @@ html,body{touch-action:pan-x pan-y}
         .pgto-hist-item .pgto-nome { font-weight: 600; }
         .pgto-hist-item .pgto-detalhe { font-size: 11px; color: #7C8782; margin-top: 2px; }
         .pgto-hist-item .pgto-valor { font-weight: 700; color: #0E7A4F; min-width: 60px; text-align: right; margin-right: 8px; }
+        .pgto-hist-item .pgto-valor.prescrita { color: #B8911F; text-decoration: line-through; }
+        .pgto-hist-item.prescrita { background: #FDFAF0; border-left: 3px solid #B8911F; }
         .pgto-hist-item .pgto-delete {
             background: #B3402F; color: white; border: none;
             width: 24px; height: 24px; border-radius: 50%;
