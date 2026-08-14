@@ -1,6 +1,6 @@
 // supabase/functions/push-notificar/index.ts
 // SplitBill — Envia notificações Web Push (Notification/Push API, sem
-// Telegram). Três momentos, todos chamados pela app:
+// Telegram). Quatro momentos, todos chamados pela app:
 //   'divida'              fecharComFatura() → todos os devedores do evento
 //                          que acabou de fechar (fire-and-forget)
 //   'pagamento_declarado' declararPagamento() → o pagador/tesoureiro do
@@ -9,6 +9,9 @@
 //   'lembrete'             enviarLembretePagamento() → o devedor, quando o
 //                          credor pede manualmente para o lembrar
 //                          (utilizador espera pelo resultado)
+//   'pedido_acesso'        sbSolicitarAcesso() → avisa o ADMIN_EMAIL quando
+//                          alguém pede acesso à app pela primeira vez
+//                          (fire-and-forget)
 //
 // Resolve amigo→email via `amigo_users` (mesma tabela usada nas outras
 // políticas de equivalência) e manda o push a cada `push_subscriptions`
@@ -19,7 +22,10 @@
 //
 // Chamada pelo browser com o JWT do utilizador (verify_jwt fica LIGADO no
 // deploy). Por cima disso confirma-se que o email consta de
-// `splitbill.allowed_users`, tal como a `fatura-restaurante`.
+// `splitbill.allowed_users`, tal como a `fatura-restaurante` — EXCETO em
+// 'pedido_acesso': é precisamente quem ainda NÃO está em allowed_users que
+// tem de poder chamar isto (é o próprio pedido de acesso a disparar o
+// aviso), por isso aí só se exige um JWT válido.
 //
 // Secrets necessários (Edge Functions -> Secrets):
 //   VAPID_PUBLIC_KEY   par de chaves só para isto (não é a chave do Supabase)
@@ -36,6 +42,10 @@ const SB_SRV = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const VAPID_PUBLIC = Deno.env.get("VAPID_PUBLIC_KEY")!;
 const VAPID_PRIVATE = Deno.env.get("VAPID_PRIVATE_KEY")!;
 const VAPID_SUBJECT = Deno.env.get("VAPID_SUBJECT") || "mailto:admin@splitbill.app";
+// Mesmo valor do ADMIN_EMAIL em app.js — não é secret (já vai no código
+// público do frontend), só se mantém aqui para saber a quem mandar os
+// pushes de 'pedido_acesso'.
+const ADMIN_EMAIL = "diogo.andre.f.silva@gmail.com";
 
 webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
 
@@ -53,24 +63,73 @@ const sbHeaders = {
   "Content-Type": "application/json",
 };
 
-async function emailAutorizado(auth: string): Promise<string | null> {
+type Sub = { endpoint: string; email: string; p256dh: string; auth_key: string };
+
+async function emailDoToken(auth: string): Promise<string | null> {
   const u = await fetch(`${SB_URL}/auth/v1/user`, {
     headers: { apikey: SB_SRV, Authorization: auth },
   });
   if (!u.ok) return null;
   const email = ((await u.json()).email ?? "").toLowerCase();
-  if (!email) return null;
+  return email || null;
+}
+
+async function estaAutorizado(email: string): Promise<boolean> {
   const r = await fetch(
     `${SB_URL}/rest/v1/allowed_users?email=eq.${encodeURIComponent(email)}&select=email`,
     { headers: sbHeaders },
   );
-  if (!r.ok) return null;
+  if (!r.ok) return false;
   const rows = await r.json();
-  return Array.isArray(rows) && rows.length > 0 ? email : null;
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+async function subscriptionsDe(emails: string[]): Promise<Sub[]> {
+  if (!emails.length) return [];
+  const orEmails = emails.map((e) => `"${e.replace(/"/g, '\\"')}"`).join(",");
+  const r = await fetch(
+    `${SB_URL}/rest/v1/push_subscriptions?email=in.(${orEmails})&select=endpoint,email,p256dh,auth_key`,
+    { headers: sbHeaders },
+  );
+  return r.ok ? await r.json() : [];
+}
+
+async function apagarSubsMortas(endpoints: string[]) {
+  if (!endpoints.length) return;
+  const orMortos = endpoints.map((e) => `"${e.replace(/"/g, '\\"')}"`).join(",");
+  await fetch(`${SB_URL}/rest/v1/push_subscriptions?endpoint=in.(${orMortos})`, {
+    method: "DELETE",
+    headers: sbHeaders,
+  }).catch(() => {});
+}
+
+// Manda o mesmo payload a uma lista de subscriptions; devolve {enviados,
+// falhados} e apaga as que já não existem do lado do browser (404/410).
+async function enviarParaSubs(subs: Sub[], payload: string) {
+  let enviados = 0;
+  let falhados = 0;
+  const mortos: string[] = [];
+  await Promise.all(
+    subs.map(async (s) => {
+      try {
+        await webpush.sendNotification(
+          { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth_key } },
+          payload,
+        );
+        enviados++;
+      } catch (e) {
+        const status = (e as { statusCode?: number }).statusCode;
+        if (status === 404 || status === 410) mortos.push(s.endpoint);
+        falhados++;
+      }
+    }),
+  );
+  await apagarSubsMortas(mortos);
+  return { enviados, falhados };
 }
 
 type Pessoa = { amigo: string; valor: number };
-type Tipo = "divida" | "pagamento_declarado" | "lembrete";
+type Tipo = "divida" | "pagamento_declarado" | "lembrete" | "pedido_acesso";
 
 function montarMensagem(tipo: Tipo, p: Pessoa, descricao?: string, quem?: string) {
   const suf = descricao ? ` — ${descricao}` : "";
@@ -103,14 +162,31 @@ Deno.serve(async (req) => {
 
   try {
     const auth = req.headers.get("Authorization") ?? "";
-    if (!(await emailAutorizado(auth))) return json({ error: "não autorizado" }, 403);
+    const emailChamador = await emailDoToken(auth);
+    if (!emailChamador) return json({ error: "não autorizado" }, 403);
 
-    const { pessoas, descricao, quem, tipo } = (await req.json()) as {
+    const { pessoas, descricao, quem, tipo, email } = (await req.json()) as {
       pessoas?: Pessoa[];
       descricao?: string;
       quem?: string;
       tipo?: Tipo;
+      email?: string;
     };
+
+    // 'pedido_acesso': único caso em que NÃO se exige allowed_users — é
+    // precisamente quem ainda não tem acesso que dispara isto.
+    if (tipo === "pedido_acesso") {
+      const subs = await subscriptionsDe([ADMIN_EMAIL]);
+      const payload = JSON.stringify({
+        title: "🆕 Novo pedido de acesso",
+        body: `${email || emailChamador} pediu acesso ao SplitBill — aprova nas Definições`,
+        url: "/SplitBill/",
+      });
+      return json(await enviarParaSubs(subs, payload));
+    }
+
+    if (!(await estaAutorizado(emailChamador))) return json({ error: "não autorizado" }, 403);
+
     const tipoOk: Tipo = tipo === "pagamento_declarado" || tipo === "lembrete" ? tipo : "divida";
     if (!Array.isArray(pessoas) || pessoas.length === 0) return json({ enviados: 0, falhados: 0 });
 
@@ -127,55 +203,23 @@ Deno.serve(async (req) => {
     const emails = [...new Set(pessoas.map((p) => emailPorAmigo.get(p.amigo)).filter(Boolean))] as string[];
     if (emails.length === 0) return json({ enviados: 0, falhados: 0 });
 
-    const orEmails = emails.map((e) => `"${e.replace(/"/g, '\\"')}"`).join(",");
-    const subR = await fetch(
-      `${SB_URL}/rest/v1/push_subscriptions?email=in.(${orEmails})&select=endpoint,email,p256dh,auth_key`,
-      { headers: sbHeaders },
-    );
-    const subs: { endpoint: string; email: string; p256dh: string; auth_key: string }[] =
-      subR.ok ? await subR.json() : [];
+    const subs = await subscriptionsDe(emails);
 
     let enviados = 0;
     let falhados = 0;
-    const mortos: string[] = [];
-
     await Promise.all(
       pessoas.map(async (p) => {
-        const email = emailPorAmigo.get(p.amigo);
-        if (!email) return;
-        const minhasSubs = subs.filter((s) => s.email === email);
+        const emailP = emailPorAmigo.get(p.amigo);
+        if (!emailP) return;
         const payload = JSON.stringify({
           ...montarMensagem(tipoOk, p, descricao, quem),
           url: "/SplitBill/",
         });
-        await Promise.all(
-          minhasSubs.map(async (s) => {
-            try {
-              await webpush.sendNotification(
-                {
-                  endpoint: s.endpoint,
-                  keys: { p256dh: s.p256dh, auth: s.auth_key },
-                },
-                payload,
-              );
-              enviados++;
-            } catch (e) {
-              const status = (e as { statusCode?: number }).statusCode;
-              if (status === 404 || status === 410) mortos.push(s.endpoint);
-              falhados++;
-            }
-          }),
-        );
+        const r = await enviarParaSubs(subs.filter((s) => s.email === emailP), payload);
+        enviados += r.enviados;
+        falhados += r.falhados;
       }),
     );
-
-    if (mortos.length) {
-      const orMortos = mortos.map((e) => `"${e.replace(/"/g, '\\"')}"`).join(",");
-      await fetch(`${SB_URL}/rest/v1/push_subscriptions?endpoint=in.(${orMortos})`, {
-        method: "DELETE",
-        headers: sbHeaders,
-      }).catch(() => {});
-    }
 
     return json({ enviados, falhados });
   } catch (e) {
