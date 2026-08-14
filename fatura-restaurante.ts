@@ -155,10 +155,11 @@ ${menu.map((a) => `  · ${a.nome}${a.preco != null ? ` (€${a.preco.toFixed(2)}
 - Se algo não se ler com confiança, usa null nesse campo em vez de adivinhar.
 Responde só com o JSON.`;
 
-async function emailAutorizado(auth: string): Promise<boolean> {
+async function emailAutorizado(auth: string, signal: AbortSignal): Promise<boolean> {
   // 1) quem é o utilizador deste token?
   const u = await fetch(`${SB_URL}/auth/v1/user`, {
     headers: { apikey: SB_SRV, Authorization: auth },
+    signal,
   });
   if (!u.ok) return false;
   const email = ((await u.json()).email ?? "").toLowerCase();
@@ -172,6 +173,7 @@ async function emailAutorizado(auth: string): Promise<boolean> {
         Authorization: `Bearer ${SB_SRV}`,
         "Accept-Profile": "splitbill",
       },
+      signal,
     },
   );
   if (!r.ok) return false;
@@ -187,9 +189,18 @@ Deno.serve(async (req) => {
       headers: { ...CORS, "Content-Type": "application/json" },
     });
 
+  // O Safari/iOS corta pedidos que passem dos ~60s ("Load failed", sem
+  // detalhe). Impomos um limite próprio mais curto para conseguir devolver
+  // um erro legível ANTES de o browser rebentar às cegas. Criado JÁ AQUI, à
+  // entrada do pedido, e usado em TODOS os fetch feitos a seguir (auth,
+  // ListModels, Gemini) — um único fetch sem este signal já chegou a deixar
+  // a função pendurada indefinidamente, sem nunca responder ao browser.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+
   try {
     const auth = req.headers.get("Authorization") ?? "";
-    if (!(await emailAutorizado(auth))) {
+    if (!(await emailAutorizado(auth, ctrl.signal))) {
       return json({ error: "não autorizado" }, 403);
     }
 
@@ -201,15 +212,6 @@ Deno.serve(async (req) => {
       { inline_data: { mime_type: mime || "image/jpeg", data: image } },
       { text: promptFatura(lerMenu(menu)) },
     ];
-
-    // O Safari/iOS corta pedidos que passem dos ~60s ("Load failed", sem
-    // detalhe). Impomos um limite próprio mais curto para conseguir devolver
-    // um erro legível ANTES de o browser rebentar às cegas. Criado JÁ AQUI
-    // (antes da descoberta de modelos) para cobrir também o ListModels — um
-    // ListModels preso sem o abort passar por ele deixava a função pendurada
-    // indefinidamente, sem nunca chegar a chamar o Gemini.
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
 
     const chamarGemini = (model: string, desligarThinking = true) => {
       const generationConfig: Record<string, unknown> = {
@@ -269,7 +271,6 @@ Deno.serve(async (req) => {
       if (g && !transitorio(g.status) && g.status !== 404) break; // erro real
       // caso contrário (503 persistente ou 404) → tenta o próximo candidato
     }
-    clearTimeout(timer);
 
     if (!g || !g.ok) {
       const status = g?.status ?? 502;
@@ -310,5 +311,10 @@ Deno.serve(async (req) => {
       }, 504);
     }
     return json({ error: err.message }, 500);
+  } finally {
+    // Limpo aqui (não logo a seguir ao Gemini responder) para o limite
+    // continuar a proteger a leitura do corpo da resposta (g.text()/g.json())
+    // — um corpo a chegar aos soluços também não pode ficar por prender.
+    clearTimeout(timer);
   }
 });
