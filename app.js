@@ -4976,6 +4976,10 @@ function sbLogout() {
 // Admin
 async function abrirAdmin() {
     document.getElementById('page-admin').style.display = 'flex';
+    // Refresca a cache de contas/equivalências a cada abertura — antes só se
+    // carregava uma vez no login, e contas aprovadas entretanto (ou o próprio
+    // admin noutra sessão) só apareciam depois de fechar/reabrir a app.
+    await sbCarregarConfigAcesso();
     renderVerComoSelect();
     const lista = document.getElementById('admin-lista');
     lista.innerHTML = '<p style="color:#999;font-size:14px;text-align:center;padding:24px 0;">A carregar…</p>';
@@ -5272,9 +5276,12 @@ function fecharDefinicoes() {
 }
 
 // ── Equivalências amigo ↔ conta (só admin) ──
-function abrirEquivalencias() {
+async function abrirEquivalencias() {
     if (!isAdmin()) return;
     document.getElementById('page-equivalencias').style.display = 'flex';
+    // Mesma razão que em abrirAdmin(): refrescar antes de desenhar, senão contas
+    // aprovadas entretanto só apareciam no combobox depois de fechar/reabrir a app.
+    await sbCarregarConfigAcesso();
     renderEquivalencias();
 }
 function fecharEquivalencias() {
