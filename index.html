@@ -1087,8 +1087,9 @@ if ('serviceWorker' in navigator) {
   }
 
   // Pedidos de pagamento declarados pelos utilizadores ("já paguei"), por
-  // confirmar pelo admin — ver declararPagamento()/confirmarPedidoPagamento()
-  // em app.js. Só aparece para o admin, e só quando há pedidos.
+  // confirmar pelo admin, substituto, ou pelo pagador desse evento em
+  // específico — ver declararPagamento()/confirmarPedidoPagamento() em app.js.
+  // Só aparece a quem tem pelo menos um pedido para agir.
   function cardPedidoPagamento(p){
     var ev = getHist().filter(function(h){ return String(h.id)===String(p.eventoId); })[0];
     var evNome = esc(ev ? (ev.descricao || 'Sem nome') : 'Evento removido');
@@ -1122,7 +1123,10 @@ if ('serviceWorker' in navigator) {
       h += '<div class="sbi-eyebrow">Em aberto <span class="sbi-count">'+abertos.length+'</span></div>';
       h += '<div class="sbi-list">'+abertos.map(cardAberto).join('')+'</div>';
     }
-    if (admin) h += pedidosPagamentoHtml();
+    // pedidosPagamentoHtml() já filtra por quem pode agir (admin vê todos, o
+    // pagador só os do(s) evento(s) que pagou) — chama-se sempre, devolve ''
+    // sozinha se não houver nada para este utilizador.
+    h += pedidosPagamentoHtml();
     h += '<div class="sbi-eyebrow">Atalhos</div>';
     h += '<div class="sbi-grid2">'+atalhos()+'</div>';
     h += statsConsumo();
