@@ -1636,7 +1636,11 @@ function faturaScore(a, b) {
 function faturaPick() {
     if (!eventoAtualId) { mostrarMensagem('⚠️ Cria ou abre um evento primeiro', false); return; }
     if (!podeEditarEventoAtual()) { mostrarMensagem('⚠️ Sem permissão para editar este evento', false); return; }
-    if (modoReadOnly) { mostrarMensagem('⚠️ Conta fechada — reabre-a para conferir a fatura', false); return; }
+    // Conta fechada não bloqueia a LEITURA — só as correções (faturaAplicarPrecos/
+    // faturaMarcarExtra/faturaUsarTotal continuam a recusar-se em modoReadOnly).
+    // É o caso de quem fechou a conta pelo total antes de a leitura por foto
+    // funcionar e agora só quer ver o detalhe artigo a artigo, sem mexer em nada
+    // do que já foi pago.
     if (!_sbSession) { mostrarMensagem('⚠️ Inicia sessão para usar a leitura da fatura', false); return; }
     const i = document.getElementById('fatura-file');
     if (i) i.click();
@@ -2110,10 +2114,12 @@ function atualizarReadOnly() {
     document.getElementById('btn-reabrir-evento').style.display = hasFatura ? '' : 'none';
     const _car = document.getElementById('talao-carimbo');
     if (_car) _car.style.display = hasFatura ? '' : 'none';
-    // Ler a fatura é o passo ANTES de fechar: com a conta fechada (ou sem
-    // permissão) o botão fica inativo, senão prometia correções que não pode aplicar.
+    // Ler a fatura continua disponível com a conta fechada — só para consulta:
+    // faturaRenderRecon() já esconde "Corrigir preços"/"Usar total"/"Apagar
+    // fatura" nesse caso (podeMexer = !modoReadOnly && podeEditarEventoAtual()),
+    // por isso importar aqui nunca mexe no que já foi pago.
     const _ocr = document.getElementById('btn-fatura-ocr');
-    if (_ocr) _ocr.disabled = modoReadOnly || !podeEditarEventoAtual();
+    if (_ocr) _ocr.disabled = !podeEditarEventoAtual();
 
     // Formulário de ofertas: escondido em evento fechado, visível ao desbloquear
     const ofertaForm = document.getElementById('oferta-form');
