@@ -1117,6 +1117,15 @@ function mostrarMensagem(msg, sucesso) {
     const div = document.getElementById('mensagem');
     div.className = sucesso ? 'sucesso' : 'aviso';
     div.textContent = msg;
+    // #mensagem fica perto do topo, mas há ações em blocos lá mais em baixo
+    // (fatura, pagamentos, ofertas) — sem isto a mensagem aparecia e
+    // desaparecia (3s) fora do ecrã, e parecia que a ação não tinha feito
+    // nada. Só faz scroll se já não estiver visível, para não interromper
+    // ações que acontecem perto do topo.
+    const rect = div.getBoundingClientRect();
+    if (rect.top < 0 || rect.bottom > window.innerHeight) {
+        div.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
     setTimeout(() => { div.textContent = ''; div.className = ''; }, 3000);
 }
 
@@ -1702,10 +1711,6 @@ async function faturaChosen(inp) {
         mostrarMensagem(rede
             ? `❌ A leitura demorou demasiado ou falhou a ligação [${nome || 'erro'}: ${m.slice(0, 80)}]. Tenta uma foto mais nítida ou volta a tentar.`
             : '❌ Não consegui ler a fatura: ' + m, false);
-        // O botão fica lá em baixo, no meio da página — sem isto o erro fica
-        // lá em cima fora do ecrã e passa despercebido (parece "não fez nada").
-        const msgDiv = document.getElementById('mensagem');
-        if (msgDiv) msgDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } finally {
         if (btn) { btn.disabled = false; btn.innerHTML = label; }
     }
