@@ -199,8 +199,11 @@ Deno.serve(async (req) => {
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
 
   try {
+    console.log("FATURA-RESTAURANTE start");
     const auth = req.headers.get("Authorization") ?? "";
-    if (!(await emailAutorizado(auth, ctrl.signal))) {
+    const ok = await emailAutorizado(auth, ctrl.signal);
+    console.log("FATURA-RESTAURANTE autorizado:", ok);
+    if (!ok) {
       return json({ error: "não autorizado" }, 403);
     }
 
