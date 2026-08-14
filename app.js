@@ -2952,7 +2952,7 @@ function renderContasPagamentos(lista, resumo) {
 
         var acoes;
         if (isPendente) {
-            if (isAdmin()) {
+            if (podeConfirmarPedidosDoEvento(p.eventoId)) {
                 acoes = '<button class="pgto-edit" onclick="confirmarPedidoPagamento(' + p.id + ')" title="Confirmar">\u2713</button><button class="pgto-delete" onclick="rejeitarPedidoPagamento(' + p.id + ')" title="Rejeitar">\u00d7</button>';
             } else if (p.declaradoPor && p.declaradoPor === emailSessao()) {
                 acoes = '<button class="pgto-delete" onclick="cancelarDeclaracaoPagamento(' + p.id + ')" title="Cancelar pedido">\u00d7</button>';
@@ -2967,7 +2967,7 @@ function renderContasPagamentos(lista, resumo) {
                 var evr = historico.find(function(e) { return e.id === p.eventoId; });
                 if (evr && evr.pagador && evr.pagador !== p.pessoa) {
                     var etiqueta;
-                    if (isPendente) etiqueta = isAdmin() ? '(pedido de pagamento · devia a ' + evr.pagador + ')' : '(por confirmar · a ' + evr.pagador + ')';
+                    if (isPendente) etiqueta = podeConfirmarPedidosDoEvento(p.eventoId) ? '(pedido de pagamento · devia a ' + evr.pagador + ')' : '(por confirmar · a ' + evr.pagador + ')';
                     else if (isPrescricao) etiqueta = isAdmin() ? '(prescrita · devia a ' + evr.pagador + ')' : '(por confirmar · a ' + evr.pagador + ')';
                     else etiqueta = '(pagou ao ' + evr.pagador + ')';
                     return ' <span style="font-size:10.5px;font-weight:400;color:' + ((isPrescricao || isPendente) ? '#B8911F' : '#9AA5A0') + ';">' + etiqueta + '</span>';
@@ -3288,17 +3288,20 @@ async function cancelarDeclaracaoPagamento(id) {
     mostrarMensagem('Pedido cancelado', true);
 }
 
+// Pedidos que ESTE utilizador pode agir: o admin (e o substituto, via
+// podeEditarPagamentoDoEvento) vê todos; o pagador só os do(s) evento(s) que
+// ele próprio pagou.
 function pedidosPagamentoPendentes() {
-    return pagamentos.filter(p => p.tipo === 'pendente');
+    return pagamentos.filter(p => p.tipo === 'pendente' && podeConfirmarPedidosDoEvento(p.eventoId));
 }
 
-// Admin confirma um pedido: grava como pagamento real (tipo='evento') e, se
-// existia uma prescrição anterior para o mesmo evento/pessoa, remove-a — o
-// utilizador estava precisamente a corrigi-la.
+// Admin, substituto ou o pagador do evento confirmam um pedido: grava como
+// pagamento real (tipo='evento') e, se existia uma prescrição anterior para
+// o mesmo evento/pessoa, remove-a — o utilizador estava a corrigi-la.
 async function confirmarPedidoPagamento(id) {
-    if (!isAdmin()) return;
     const p = pagamentos.find(pg => pg.id === id);
     if (!p || p.tipo !== 'pendente') return;
+    if (!podeConfirmarPedidosDoEvento(p.eventoId)) { mostrarMensagem('⚠️ Sem permissão para confirmar este pedido', false); return; }
     const ok = await mostrarModal({
         icon: '✅',
         title: 'Confirmar pagamento',
@@ -3316,19 +3319,19 @@ async function confirmarPedidoPagamento(id) {
     p.tipo = 'evento';
     p.declaradoPor = null;
     salvarPagamentos();
-    await sbGuardarPagamento(p);
+    await sbConfirmarPedidoPagamento(p.id);
     renderContas();
     renderHistoricoDropdown();
     refrescarInicioSeVisivel();
     mostrarMensagem('✓ Pagamento de ' + p.pessoa + ' confirmado', true);
 }
 
-// Admin rejeita: a dívida volta a ficar como estava antes (pendente, ou
-// prescrita se já o era — essa não é tocada).
+// Admin, substituto ou o pagador do evento rejeitam: a dívida volta a ficar
+// como estava antes (pendente, ou prescrita se já o era — essa não é tocada).
 async function rejeitarPedidoPagamento(id) {
-    if (!isAdmin()) return;
     const p = pagamentos.find(pg => pg.id === id);
     if (!p || p.tipo !== 'pendente') return;
+    if (!podeConfirmarPedidosDoEvento(p.eventoId)) { mostrarMensagem('⚠️ Sem permissão para rejeitar este pedido', false); return; }
     const ok = await mostrarModal({
         icon: '❌',
         title: 'Rejeitar pedido',
@@ -3967,6 +3970,18 @@ function podeEditarPagamentoDoEvento(eventoId) {
     if (isAdmin()) return true;
     const ev = historico.find(h => String(h.id) === String(eventoId));
     return ehSubstitutoDe(ev);
+}
+// Sou o pagador (tesoureiro) deste evento? É quem levou o dinheiro à mesa —
+// diferente do substituto (nomeado pelo admin para editar o evento todo).
+function ehPagadorDoEvento(eventoId) {
+    const ev = historico.find(h => String(h.id) === String(eventoId));
+    return !!(ev && ev.pagador && ehEu(ev.pagador));
+}
+// Pode confirmar/rejeitar pedidos de pagamento deste evento? Admin e
+// substituto (via podeEditarPagamentoDoEvento) sempre; o pagador só para os
+// pedidos DESTE evento — não ganha acesso aos outros.
+function podeConfirmarPedidosDoEvento(eventoId) {
+    return podeEditarPagamentoDoEvento(eventoId) || ehPagadorDoEvento(eventoId);
 }
 // Tem permissão para registar algum pagamento (admin ou tem eventos delegados)?
 function podeRegistarPagamentos() { return isAdmin() || eventosDelegados().length > 0; }
@@ -4685,6 +4700,33 @@ async function sbApagarOrdemPropria(id) {
     } catch(e) {
         console.error('Erro ao apagar ordem própria no Supabase:', e);
         mostrarMensagem('⚠️ Ordem NÃO removida da BD (erro de ligação)', false);
+        return false;
+    }
+}
+
+// PATCH dirigido (não upsert) para confirmar um pedido pendente. sbGuardarPagamento
+// usa POST + merge-duplicates (INSERT ... ON CONFLICT DO UPDATE), que o Postgres só
+// deixa passar com política de INSERT E de UPDATE — o admin tem as duas (política
+// antiga, permissiva), mas o pagador (db/pagamentos-pendentes.sql) só ganhou a de
+// UPDATE. Um PATCH simples só pede a de UPDATE, por isso funciona para os três.
+async function sbConfirmarPedidoPagamento(id) {
+    if (!_sbSession) { mostrarMensagem('⚠️ Sem sessão — pagamento NÃO confirmado na BD', false); return false; }
+    try {
+        const r = await sbFetch(`${SB_URL}/rest/v1/pagamentos?id=eq.${id}`, {
+            method: 'PATCH',
+            headers: sbHeaders({ 'Prefer': 'return=minimal' }),
+            body: JSON.stringify({ tipo: 'evento', declarado_por: null })
+        });
+        if (!r.ok) {
+            let msg = 'HTTP ' + r.status;
+            try { const j = await r.json(); msg = j.message || msg; } catch(_) {}
+            mostrarMensagem('⚠️ Pagamento NÃO confirmado na BD: ' + msg, false);
+            return false;
+        }
+        return true;
+    } catch(e) {
+        console.error('Erro ao confirmar pedido de pagamento no Supabase:', e);
+        mostrarMensagem('⚠️ Pagamento NÃO confirmado na BD (erro de ligação)', false);
         return false;
     }
 }
