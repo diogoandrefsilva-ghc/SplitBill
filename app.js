@@ -1682,11 +1682,15 @@ async function faturaChosen(inp) {
     } catch (e) {
         // "Load failed"/"Failed to fetch" é o erro genérico do browser quando o
         // pedido é cortado por timeout (~60s no iOS) ou a ligação cai a meio;
-        // AbortError é o nosso próprio timeout de 65s a disparar.
+        // AbortError é o nosso próprio timeout (65s no pedido, 15s na leitura
+        // da imagem/PDF) a disparar. Distinguir os dois no texto — um é
+        // "demorou mesmo muito", o outro é falha instantânea de rede/CORS —
+        // é o que falta para apanhar a causa real em vez de andar a adivinhar.
         const m = String(e && e.message || e);
-        const rede = /load failed|failed to fetch|networkerror|timed? ?out/i.test(m) || (e && e.name === 'AbortError');
+        const nome = e && e.name ? e.name : '';
+        const rede = /load failed|failed to fetch|networkerror|timed? ?out/i.test(m) || nome === 'AbortError';
         mostrarMensagem(rede
-            ? '❌ A leitura demorou demasiado ou falhou a ligação. Tenta uma foto mais nítida ou volta a tentar.'
+            ? `❌ A leitura demorou demasiado ou falhou a ligação [${nome || 'erro'}: ${m.slice(0, 80)}]. Tenta uma foto mais nítida ou volta a tentar.`
             : '❌ Não consegui ler a fatura: ' + m, false);
         // O botão fica lá em baixo, no meio da página — sem isto o erro fica
         // lá em cima fora do ecrã e passa despercebido (parece "não fez nada").
