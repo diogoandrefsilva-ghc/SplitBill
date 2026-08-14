@@ -246,6 +246,21 @@ window.sbEsconderSplash = function(){
     </div>
 </div>
 
+<!-- Modal: sugestão automática de notificações push, logo a seguir ao login -->
+<div class="modal-overlay" id="push-prompt-overlay">
+    <div class="modal-box">
+        <div class="modal-body">
+            <div class="modal-icon">🔔</div>
+            <div class="modal-title">Ativar notificações?</div>
+            <div class="modal-msg">Avisamos-te por notificação sempre que ficares a dever algo novo — sem teres de andar a verificar a app.</div>
+        </div>
+        <div class="modal-actions">
+            <button class="modal-cancel" onclick="pushPromptAdiar()">Agora não</button>
+            <button class="modal-confirm" onclick="pushPromptAtivar()">Ativar</button>
+        </div>
+    </div>
+</div>
+
 <div id="readonly-banner">
     <span>👁️ Modo leitura</span>
     <button onclick="desbloquearEvento()">🔓 Desbloquear para editar</button>

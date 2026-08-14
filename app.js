@@ -4304,6 +4304,7 @@ async function sbAposLogin() {
     await sbCarregarDados();
     init();
     verComoRestaurar();
+    pushSugerirAtivacao();
 }
 
 /* O detalhe da fatura vive numa coluna `fatura jsonb` da tabela `eventos`
@@ -5485,6 +5486,36 @@ async function pushAtivar() {
         mostrarMensagem('⚠️ Não foi possível ativar notificações: ' + e.message, false);
     }
     pushRenderStatus();
+}
+
+/* Sugestão automática logo a seguir ao login — para ninguém ter de descobrir
+   o botão nas Definições. Não é "obrigatório" no sentido técnico: nenhum
+   browser deixa um site ativar notificações sem o utilizador carregar em
+   algo (é proteção do próprio sistema, em iPhone e Android) — mas isto tira
+   o único clique extra que faltava para chegar lá. Se a permissão já foi
+   concedida antes (outro evento, ou já tinha dito que sim), subscreve logo
+   sem mostrar nada. Se já foi recusada, não insiste — o browser nem deixava. */
+async function pushSugerirAtivacao() {
+    if (!PUSH_COL || !pushSuportado() || verComoAtivo()) return;
+    if (Notification.permission === 'denied') return;
+    if (Notification.permission === 'granted') {
+        const sub = await pushSubscricaoAtual();
+        if (!sub) await pushAtivar();
+        return;
+    }
+    const overlay = document.getElementById('push-prompt-overlay');
+    if (overlay) overlay.classList.add('show');
+}
+
+function pushPromptAdiar() {
+    const overlay = document.getElementById('push-prompt-overlay');
+    if (overlay) overlay.classList.remove('show');
+}
+
+async function pushPromptAtivar() {
+    const overlay = document.getElementById('push-prompt-overlay');
+    if (overlay) overlay.classList.remove('show');
+    await pushAtivar();
 }
 
 async function pushDesativar() {
