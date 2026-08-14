@@ -5035,6 +5035,7 @@ async function sbSolicitarAcesso() {
             status.textContent = r.status === 409 ? '✓ O pedido já estava registado. Aguarda aprovação.' : '✓ Pedido enviado! Aguarda aprovação.';
             btn.style.display = 'none';
             btnV.style.display = '';
+            if (r.ok) sbNotificarPedidoAcesso(_sbSession.user.email);  // só em pedidos novos, não em repetidos
             return;
         }
         let msg = 'HTTP ' + r.status;
@@ -5581,6 +5582,24 @@ function sbNotificarPagamentoDeclarado(pessoa, eventoId, valor) {
     const ev = historico.find(h => h.id === eventoId);
     if (!ev || !ev.pagador) return;
     sbEnviarPush('pagamento_declarado', [{ amigo: ev.pagador, valor }], ev.descricao, pessoa);
+}
+
+// Fire-and-forget: avisa o admin quando alguém pede acesso à app pela
+// primeira vez. Corre mesmo para quem AINDA não está em allowed_users — é
+// precisamente essa pessoa que dispara o aviso (a Edge Function só exige
+// sessão válida para este tipo, não pertencer a allowed_users).
+function sbNotificarPedidoAcesso(email) {
+    if (!_sbSession) return;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+    sbFetch(`${SB_URL}/functions/v1/push-notificar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY },
+        body: JSON.stringify({ tipo: 'pedido_acesso', email }),
+        signal: ctrl.signal
+    })
+        .catch(e => console.warn('[SplitBill] notificação de pedido de acesso não enviada:', e.message))
+        .finally(() => clearTimeout(timer));
 }
 
 // 3) Pedido explícito do credor (pagador do evento, ou admin) para lembrar
