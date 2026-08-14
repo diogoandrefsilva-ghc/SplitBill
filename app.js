@@ -1696,9 +1696,12 @@ async function faturaChosen(inp) {
 // Lê um PDF em base64, sem transformação (o modelo aceita PDFs diretamente)
 function faturaLerPdf(file) {
     return new Promise((resolve, reject) => {
+        let feito = false;
+        const done = (fn, arg) => { if (!feito) { feito = true; clearTimeout(limite); fn(arg); } };
+        const limite = setTimeout(() => done(reject, new Error('demorei demasiado a ler o PDF')), 15000);
         const rd = new FileReader();
-        rd.onload = () => resolve({ b64: String(rd.result).split(',')[1], mime: 'application/pdf' });
-        rd.onerror = () => reject(new Error('não consegui ler o PDF'));
+        rd.onload = () => done(resolve, { b64: String(rd.result).split(',')[1], mime: 'application/pdf' });
+        rd.onerror = () => done(reject, new Error('não consegui ler o PDF'));
         rd.readAsDataURL(file);
     });
 }
@@ -1706,6 +1709,12 @@ function faturaLerPdf(file) {
 // modelo ler o talão e mantém o upload leve mesmo em rede móvel
 function faturaComprime(file) {
     return new Promise((resolve, reject) => {
+        // Alguns formatos que o telemóvel entrega (ex.: HEIC mal suportado)
+        // não disparam onload NEM onerror em certos browsers — sem este
+        // limite, a conversão ficava presa antes de sequer chegar à rede.
+        let feito = false;
+        const done = (fn, arg) => { if (!feito) { feito = true; clearTimeout(limite); fn(arg); } };
+        const limite = setTimeout(() => done(reject, new Error('demorei demasiado a processar a imagem')), 15000);
         const img = new Image();
         img.onload = () => {
             const MAX = 1600;
@@ -1714,9 +1723,9 @@ function faturaComprime(file) {
             const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
             cv.getContext('2d').drawImage(img, 0, 0, w, h);
             URL.revokeObjectURL(img.src);
-            resolve({ b64: cv.toDataURL('image/jpeg', 0.85).split(',')[1], mime: 'image/jpeg' });
+            done(resolve, { b64: cv.toDataURL('image/jpeg', 0.85).split(',')[1], mime: 'image/jpeg' });
         };
-        img.onerror = () => { URL.revokeObjectURL(img.src); reject(new Error('imagem inválida')); };
+        img.onerror = () => { URL.revokeObjectURL(img.src); done(reject, new Error('imagem inválida')); };
         img.src = URL.createObjectURL(file);
     });
 }
