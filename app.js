@@ -2656,6 +2656,11 @@ function renderContasSaldos(lista, resumo) {
                     ? '<div class="saldo-evento-pendente" onclick="event.stopPropagation()">\u23f3 Pedido enviado \u2014 a aguardar confirma\u00e7\u00e3o <button class="link-cancelar" onclick="cancelarDeclaracaoPagamento(' + pendenteAqui.id + ')">cancelar</button></div>'
                     : '<button class="btn-ja-paguei" onclick="event.stopPropagation();declararPagamento(\'' + pessoaEsc + '\',' + e.eventoId + ',' + e.restante + ')">\ud83d\udcb8 J\u00e1 paguei?</button>';
             }
+            // Bot\u00e3o de lembrete: s\u00f3 para quem tem o dinheiro a receber neste evento
+            // concreto (o pagador) ou o admin \u2014 nunca para a pr\u00f3pria pessoa devedora.
+            if ((ehEu(e.pagador) || isAdmin()) && !ehEu(pessoa) && PUSH_COL) {
+                acaoHtml += '<button class="btn-lembrar" onclick="event.stopPropagation();enviarLembretePagamento(\'' + pessoaEsc + '\',' + e.eventoId + ',' + e.restante + ')">\ud83d\udd14 Lembrar</button>';
+            }
             return '<div class="saldo-evento-row"' + (hasToken ? ' style="cursor:pointer;" onclick="abrirPagamentoPrePreenchido(\'' + pessoaEsc + '\',' + e.eventoId + ')" title="Clica para registar pagamento"' : '') + '>'
                 + '<div class="saldo-evento-info">'
                 + '<span class="saldo-evento-nome">\u26BD ' + e.descricao + '</span>'
@@ -3308,6 +3313,7 @@ async function declararPagamento(pessoa, eventoId, valor) {
     const okSb = await sbGuardarPagamento(novo);
     renderContas();
     refrescarInicioSeVisivel();
+    sbNotificarPagamentoDeclarado(pessoa, novo.eventoId, valor);  // fire-and-forget, não bloqueia UI
     if (okSb) mostrarMensagem('✓ Pedido enviado — aguarda confirmação do admin.', true);
 }
 
@@ -5538,26 +5544,65 @@ async function pushDesativar() {
     pushRenderStatus();
 }
 
-// Fire-and-forget: chamada no fim de fechar uma conta, para quem ficou a
-// dever. Nunca bloqueia nem incomoda o utilizador com erro — é só um extra.
-async function sbNotificarDividas(divisaoObj, descricao) {
-    if (!PUSH_COL || !_sbSession) return;
-    const pessoas = Object.entries(divisaoObj || {})
-        .filter(([, valor]) => valor > 0.005)
-        .map(([amigo, valor]) => ({ amigo, valor }));
-    if (!pessoas.length) return;
+// Base comum aos 3 momentos (divida/pagamento_declarado/lembrete) — chama a
+// Edge Function push-notificar, que decide o texto pelo `tipo` (nunca vem
+// livre do cliente). Devolve {enviados, falhados} ou null se falhou a
+// chamada em si (rede, timeout).
+async function sbEnviarPush(tipo, pessoas, descricao, quem) {
+    if (!PUSH_COL || !_sbSession || !pessoas || !pessoas.length) return null;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 15000);
     try {
-        await sbFetch(`${SB_URL}/functions/v1/push-notificar`, {
+        const r = await sbFetch(`${SB_URL}/functions/v1/push-notificar`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY },
-            body: JSON.stringify({ pessoas, descricao: descricao || '' }),
+            body: JSON.stringify({ tipo, pessoas, descricao: descricao || '', quem: quem || '' }),
             signal: ctrl.signal
         });
+        return await r.json().catch(() => null);
     } catch(e) {
         console.warn('[SplitBill] notificação push não enviada:', e.message);
+        return null;
     } finally { clearTimeout(timer); }
+}
+
+// 1) Fire-and-forget: chamada no fim de fechar uma conta, para quem ficou a
+// dever. Nunca bloqueia nem incomoda o utilizador com erro — é só um extra.
+function sbNotificarDividas(divisaoObj, descricao) {
+    const pessoas = Object.entries(divisaoObj || {})
+        .filter(([, valor]) => valor > 0.005)
+        .map(([amigo, valor]) => ({ amigo, valor }));
+    sbEnviarPush('divida', pessoas, descricao);
+}
+
+// 2) Fire-and-forget: chamada quando alguém declara "já paguei" — avisa o
+// pagador/tesoureiro do evento (é a pessoa que supostamente recebeu).
+function sbNotificarPagamentoDeclarado(pessoa, eventoId, valor) {
+    const ev = historico.find(h => h.id === eventoId);
+    if (!ev || !ev.pagador) return;
+    sbEnviarPush('pagamento_declarado', [{ amigo: ev.pagador, valor }], ev.descricao, pessoa);
+}
+
+// 3) Pedido explícito do credor (pagador do evento, ou admin) para lembrar
+// um devedor concreto — ao contrário dos outros dois, aqui espera-se pelo
+// resultado para dar feedback (a pessoa pode não ter notificações ativas).
+async function enviarLembretePagamento(pessoa, eventoId, valor) {
+    if (!PUSH_COL) { mostrarMensagem('⚠️ Notificações push indisponíveis — falta uma migração na BD', false); return; }
+    const ev = historico.find(h => h.id === eventoId);
+    if (!ev) return;
+    const ok = await mostrarModal({
+        icon: '🔔',
+        title: 'Enviar lembrete?',
+        msg: 'Mandar uma notificação a <strong>' + pessoa + '</strong> a lembrar que deve €' + valor.toFixed(2) + '?',
+        confirmText: 'Enviar lembrete',
+        cancelText: 'Cancelar'
+    });
+    if (!ok) return;
+    const quem = meusAmigos()[0] || ev.pagador || '';
+    const res = await sbEnviarPush('lembrete', [{ amigo: pessoa, valor }], ev.descricao, quem);
+    if (res && res.enviados > 0) mostrarMensagem('✓ Lembrete enviado a ' + pessoa, true);
+    else if (res) mostrarMensagem('⚠️ ' + pessoa + ' ainda não ativou notificações', false);
+    else mostrarMensagem('⚠️ Não foi possível enviar o lembrete', false);
 }
 
 /* ── FIM SUPABASE ───────────────────────────── */

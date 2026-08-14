@@ -1,13 +1,21 @@
 // supabase/functions/push-notificar/index.ts
 // SplitBill — Envia notificações Web Push (Notification/Push API, sem
-// Telegram) a quem ficou a dever num evento que acabou de fechar.
+// Telegram). Três momentos, todos chamados pela app:
+//   'divida'              fecharComFatura() → todos os devedores do evento
+//                          que acabou de fechar (fire-and-forget)
+//   'pagamento_declarado' declararPagamento() → o pagador/tesoureiro do
+//                          evento, quando alguém diz "já paguei"
+//                          (fire-and-forget)
+//   'lembrete'             enviarLembretePagamento() → o devedor, quando o
+//                          credor pede manualmente para o lembrar
+//                          (utilizador espera pelo resultado)
 //
-// Chamada pela app (fecharComFatura(), fire-and-forget) logo a seguir a
-// gravar a divisão em `eventos_divisao`. Recebe as pessoas ("amigos") com
-// dívida nova, resolve amigo→email via `amigo_users` (mesma tabela usada
-// nas outras políticas de equivalência) e manda o push a cada
-// `push_subscriptions` dessa pessoa. Subscriptions que já não existem do
-// lado do browser (404/410) são apagadas aqui mesmo.
+// Resolve amigo→email via `amigo_users` (mesma tabela usada nas outras
+// políticas de equivalência) e manda o push a cada `push_subscriptions`
+// dessa pessoa. Subscriptions que já não existem do lado do browser
+// (404/410) são apagadas aqui mesmo. O texto da notificação é sempre
+// escolhido AQUI (por `tipo`), nunca vindo livre do cliente — só os nomes/
+// valores são interpolados.
 //
 // Chamada pelo browser com o JWT do utilizador (verify_jwt fica LIGADO no
 // deploy). Por cima disso confirma-se que o email consta de
@@ -62,6 +70,28 @@ async function emailAutorizado(auth: string): Promise<string | null> {
 }
 
 type Pessoa = { amigo: string; valor: number };
+type Tipo = "divida" | "pagamento_declarado" | "lembrete";
+
+function montarMensagem(tipo: Tipo, p: Pessoa, descricao?: string, quem?: string) {
+  const suf = descricao ? ` — ${descricao}` : "";
+  const valor = p.valor.toFixed(2);
+  if (tipo === "pagamento_declarado") {
+    return {
+      title: "✅ Pagamento declarado",
+      body: `${quem || "Alguém"} diz que já te pagou €${valor}${suf} — confirma na app`,
+    };
+  }
+  if (tipo === "lembrete") {
+    return {
+      title: "🔔 Lembrete de pagamento",
+      body: `${quem || "Alguém"} lembra-te que ainda deves €${valor}${suf}`,
+    };
+  }
+  return {
+    title: "💸 Nova dívida no SplitBill",
+    body: `${p.amigo}, ficaste a dever €${valor}${suf}`,
+  };
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -75,10 +105,13 @@ Deno.serve(async (req) => {
     const auth = req.headers.get("Authorization") ?? "";
     if (!(await emailAutorizado(auth))) return json({ error: "não autorizado" }, 403);
 
-    const { pessoas, descricao } = (await req.json()) as {
+    const { pessoas, descricao, quem, tipo } = (await req.json()) as {
       pessoas?: Pessoa[];
       descricao?: string;
+      quem?: string;
+      tipo?: Tipo;
     };
+    const tipoOk: Tipo = tipo === "pagamento_declarado" || tipo === "lembrete" ? tipo : "divida";
     if (!Array.isArray(pessoas) || pessoas.length === 0) return json({ enviados: 0, falhados: 0 });
 
     // amigo → email (só os amigos pedidos)
@@ -112,8 +145,7 @@ Deno.serve(async (req) => {
         if (!email) return;
         const minhasSubs = subs.filter((s) => s.email === email);
         const payload = JSON.stringify({
-          title: "💸 Nova dívida no SplitBill",
-          body: `${p.amigo}, ficaste a dever €${p.valor.toFixed(2)}${descricao ? ` — ${descricao}` : ""}`,
+          ...montarMensagem(tipoOk, p, descricao, quem),
           url: "/SplitBill/",
         });
         await Promise.all(

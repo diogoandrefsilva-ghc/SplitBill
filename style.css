@@ -1030,6 +1030,18 @@ html,body{touch-action:pan-x pan-y}
         }
         .link-declarar { color: #0E7A4F; }
         .link-cancelar { color: #B3402F; }
+        .btn-lembrar {
+            width: 100%;
+            margin-top: 6px;
+            padding: 7px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 5px;
+            border: 1px solid var(--dourado);
+            background: var(--dourado-claro);
+            color: #8A6D14;
+            cursor: pointer;
+        }
         .pgto-hist-item {
             display: flex;
             justify-content: space-between;
