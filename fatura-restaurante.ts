@@ -52,7 +52,10 @@ function rankFlash(names: string[]): string[] {
   };
   return ok.sort((a, b) => score(b) - score(a) || a.localeCompare(b));
 }
-async function descobrirFlash(): Promise<string[]> {
+// `signal` liga esta descoberta ao MESMO limite de tempo da chamada ao Gemini
+// (ver TIMEOUT_MS mais abaixo) — sem isto, um ListModels preso ficava fora do
+// alcance do timeout e a função inteira pendurava-se sem nunca responder.
+async function descobrirFlash(signal: AbortSignal): Promise<string[]> {
   if (_models) return _models;
   try {
     const names: string[] = [];
@@ -60,6 +63,7 @@ async function descobrirFlash(): Promise<string[]> {
     for (let i = 0; i < 3; i++) {
       const r = await fetch(
         `${GAPI}/models?pageSize=200${page ? `&pageToken=${page}` : ""}&key=${GEMINI_KEY}`,
+        { signal },
       );
       if (!r.ok) break;
       const d = await r.json();
@@ -73,16 +77,16 @@ async function descobrirFlash(): Promise<string[]> {
     }
     const ranked = rankFlash(names);
     if (ranked.length) _models = ranked;
-  } catch (_) { /* fica o fallback */ }
+  } catch (_) { /* fica o fallback (inclui abort do timeout) */ }
   return _models ?? [];
 }
 // Aliases estáveis do Gemini, por ordem de preferência. São apontadores que a
 // Google mantém a apontar para o modelo flash atual — ao contrário dos nomes
 // datados (ex.: gemini-2.0-flash-001), que são reformados e passam a dar 404.
 const ESTAVEIS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash"];
-async function candidatosModelo(): Promise<string[]> {
+async function candidatosModelo(signal: AbortSignal): Promise<string[]> {
   const pinned = Deno.env.get("GEMINI_MODEL");
-  const descobertos = await descobrirFlash();
+  const descobertos = await descobrirFlash(signal);
   const vistos = new Set<string>();
   const lista = [...(pinned ? [pinned] : []), ...ESTAVEIS, ...descobertos]
     .filter((m) => (vistos.has(m) ? false : vistos.add(m)));
@@ -200,7 +204,10 @@ Deno.serve(async (req) => {
 
     // O Safari/iOS corta pedidos que passem dos ~60s ("Load failed", sem
     // detalhe). Impomos um limite próprio mais curto para conseguir devolver
-    // um erro legível ANTES de o browser rebentar às cegas.
+    // um erro legível ANTES de o browser rebentar às cegas. Criado JÁ AQUI
+    // (antes da descoberta de modelos) para cobrir também o ListModels — um
+    // ListModels preso sem o abort passar por ele deixava a função pendurada
+    // indefinidamente, sem nunca chegar a chamar o Gemini.
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
 
@@ -229,7 +236,11 @@ Deno.serve(async (req) => {
     // Percorre os modelos flash disponíveis. Para cada um tolera uma repetição
     // em erros transitórios (com pequeno backoff); se persistir, cai para o
     // modelo seguinte.
-    const candidatos = await candidatosModelo();
+    const candidatos = await candidatosModelo(ctrl.signal);
+    // A descoberta de modelos engole o AbortError (fica só com o fallback) —
+    // se o timeout já disparou durante ela, trata-se igual a estoirar o
+    // timeout na chamada ao Gemini, em vez de um 502 genérico sem explicação.
+    if (ctrl.signal.aborted) throw new DOMException("timeout", "AbortError");
     console.log("FATURA-RESTAURANTE candidatos:", candidatos.join(", "));
     let model = candidatos[0] ?? "gemini-flash-latest";
     let g: Response | null = null;

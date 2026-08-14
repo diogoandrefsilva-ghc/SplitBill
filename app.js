@@ -1658,11 +1658,21 @@ async function faturaChosen(inp) {
         const body = { image: b64, mime };
         const arts = Object.keys(menu).slice(0, 200).map(n => ({ nome: n, preco: menu[n] }));
         if (arts.length) body.menu = arts;
-        const r = await sbFetch(`${SB_URL}/functions/v1/fatura-restaurante`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY },
-            body: JSON.stringify(body)
-        });
+        // Rede de segurança própria: a Edge Function tem um limite interno de 50s,
+        // mas se o pedido nem lá chegar a responder (rede caída, função presa),
+        // sem isto o botão ficava a "pensar" para sempre. 65s dá margem ao limite
+        // interno mais o tempo de rede.
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 65000);
+        let r;
+        try {
+            r = await sbFetch(`${SB_URL}/functions/v1/fatura-restaurante`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY },
+                body: JSON.stringify(body),
+                signal: ctrl.signal
+            });
+        } finally { clearTimeout(timer); }
         if (!r.ok) {
             const e = await r.json().catch(() => ({}));
             if (r.status === 404) throw new Error('a função de leitura ainda não está publicada no Supabase');
@@ -1671,9 +1681,10 @@ async function faturaChosen(inp) {
         faturaAplicar(await r.json());
     } catch (e) {
         // "Load failed"/"Failed to fetch" é o erro genérico do browser quando o
-        // pedido é cortado por timeout (~60s no iOS) ou a ligação cai a meio.
+        // pedido é cortado por timeout (~60s no iOS) ou a ligação cai a meio;
+        // AbortError é o nosso próprio timeout de 65s a disparar.
         const m = String(e && e.message || e);
-        const rede = /load failed|failed to fetch|networkerror|timed? ?out/i.test(m);
+        const rede = /load failed|failed to fetch|networkerror|timed? ?out/i.test(m) || (e && e.name === 'AbortError');
         mostrarMensagem(rede
             ? '❌ A leitura demorou demasiado ou falhou a ligação. Tenta uma foto mais nítida ou volta a tentar.'
             : '❌ Não consegui ler a fatura: ' + m, false);
