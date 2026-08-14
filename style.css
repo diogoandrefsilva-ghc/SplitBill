@@ -998,6 +998,38 @@ html,body{touch-action:pan-x pan-y}
             margin-top: 4px;
             font-size: 13px;
         }
+        .btn-ja-paguei {
+            width: 100%;
+            margin-top: 6px;
+            padding: 7px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 5px;
+            border: 1px solid #0E7A4F;
+            background: #E2EFE8;
+            color: #0E5C3F;
+            cursor: pointer;
+        }
+        .saldo-evento-pendente {
+            width: 100%;
+            margin-top: 6px;
+            font-size: 11.5px;
+            color: #8A6D14;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .link-cancelar, .link-declarar {
+            background: none;
+            border: none;
+            padding: 0;
+            font: inherit;
+            text-decoration: underline;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        .link-declarar { color: #0E7A4F; }
+        .link-cancelar { color: #B3402F; }
         .pgto-hist-item {
             display: flex;
             justify-content: space-between;

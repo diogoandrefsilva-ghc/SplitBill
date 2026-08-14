@@ -283,6 +283,17 @@ function atualizarBotaoOferta() {
     btn.disabled = qtd <= 0 || !temAmigos;
 }
 
+// Atualiza só o espelho local do historico com as ordens atuais, sem disparar
+// o autosave do evento inteiro (PATCH a `eventos` + upsert/prune de TODAS as
+// ordens) — esse caminho precisa de permissão de editar o evento, que um
+// convocado normal não tem. Usado por quem só grava a própria ordem.
+function _sincronizarOrdensNoHistorico() {
+    if (!eventoAtualId) return;
+    const idx = historico.findIndex(e => e.id === eventoAtualId);
+    if (idx >= 0) historico[idx].ordens = JSON.parse(JSON.stringify(estado.ordens));
+    salvarHistoricoLocal();
+}
+
 function adicionarOrdem() {
     const item = document.getElementById('item').value.trim();
     const quantidade = parseInt(document.getElementById('quantidade').value || 1);
@@ -302,6 +313,14 @@ function adicionarOrdem() {
         return;
     }
 
+    const ev = historico.find(h => h.id === eventoAtualId);
+    const podeTudo = podeEditarEventoAtual();
+    const podePropria = !podeTudo && podeAdicionarOrdemPropria(ev);
+    if (!podeTudo && !podePropria) {
+        mostrarMensagem('⚠️ Sem permissão para adicionar ordens a este evento', false);
+        return;
+    }
+
     const precoUnitario = menu[item];
     const precoTotal = precoUnitario * quantidade;
 
@@ -314,9 +333,15 @@ function adicionarOrdem() {
         amigos: Array.from(estado.amigosSelecionados),
         hora: new Date().toLocaleString('pt-PT', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'})
     };
+    if (podePropria) ordem.criadoPor = emailSessao();
 
     estado.ordens.push(ordem);
-    salvarNoLocalStorage();
+    if (podeTudo) {
+        salvarNoLocalStorage();
+    } else {
+        _sincronizarOrdensNoHistorico();
+        sbCriarOrdemPropria(ordem, eventoAtualId);
+    }
     atualizarUI();
 
     // Limpar formulário
@@ -332,6 +357,13 @@ function adicionarOrdem() {
 function removerOrdem(id) {
     const ordem = estado.ordens.find(o => o.id === id);
     if (!ordem) return;
+
+    const ev = historico.find(h => h.id === eventoAtualId);
+    const podeTudo = podeEditarEventoAtual();
+    if (!podeTudo && !ehOrdemPropria(ordem, ev)) {
+        mostrarMensagem('⚠️ Só podes remover as tuas próprias ordens', false);
+        return;
+    }
 
     // Verificar se alguma oferta ficaria inválida
     const problemasOferta = [];
@@ -356,7 +388,12 @@ function removerOrdem(id) {
     }
 
     estado.ordens = estado.ordens.filter(o => o.id !== id);
-    salvarNoLocalStorage();
+    if (podeTudo) {
+        salvarNoLocalStorage();
+    } else {
+        _sincronizarOrdensNoHistorico();
+        sbApagarOrdemPropria(id);
+    }
     atualizarUI();
     mostrarMensagem('✓ Ordem removida', true);
 }
@@ -374,7 +411,11 @@ function _atualizarUIInner() {
     if (estado.ordens.length === 0) {
         lista.innerHTML = '<p style="color: #7C8782; font-size: 13px; text-align: center;">Nenhuma ordem registada ainda</p>';
     } else {
-        lista.innerHTML = estado.ordens.map(ordem => `
+        const _evAtual = historico.find(h => h.id === eventoAtualId);
+        const _podeTudo = podeEditarEventoAtual();
+        lista.innerHTML = estado.ordens.map(ordem => {
+            const podeEditarEsta = !modoReadOnly && (_podeTudo || ehOrdemPropria(ordem, _evAtual));
+            return `
             <div class="ordem" id="ordem-${ordem.id}" style="flex-wrap:wrap;">
                 <div class="ordem-info">
                     <div class="ordem-item">${ordem.item} (${ordem.quantidade}x €${ordem.precoUnitario.toFixed(2)})</div>
@@ -382,9 +423,10 @@ function _atualizarUIInner() {
                     <div class="ordem-hora">${ordem.hora || ''}</div>
                 </div>
                 <div class="ordem-preco">€${ordem.precoTotal.toFixed(2)}</div>
-                ${modoReadOnly ? '' : `<button class="secondary" style="width:28px;height:28px;padding:0;font-size:14px;border-radius:50%;margin-right:4px;" onclick="toggleEditOrdem(${ordem.id})">✏️</button><button class="ordem-delete" onclick="removerOrdem(${ordem.id})">×</button>`}
+                ${podeEditarEsta ? `<button class="secondary" style="width:28px;height:28px;padding:0;font-size:14px;border-radius:50%;margin-right:4px;" onclick="toggleEditOrdem(${ordem.id})">✏️</button><button class="ordem-delete" onclick="removerOrdem(${ordem.id})">×</button>` : ''}
             </div>
-        `).join('');
+        `;
+        }).join('');
     }
 
     // Cálculos
@@ -2120,13 +2162,26 @@ function aplicarPermissoesEdicao() {
     renderSubstitutoBox(ev);
 
     if (!editavel) {
-        // Consulta total na página de eventos
-        ['section-adicionar', 'section-ofertas', 'section-config'].forEach(id => {
+        // Consulta total na página de eventos — exceto "Adiciona uma ordem" para
+        // um convocado, que pode lançar (só) a própria ordem num evento em aberto.
+        const podeOrdemPropria = podeAdicionarOrdemPropria(ev);
+        ['section-ofertas', 'section-config'].forEach(id => {
             const el = document.getElementById(id);
             if (!el) return;
             el.classList.add('readonly-overlay');
             el.querySelectorAll('button, input, select, textarea').forEach(c => c.disabled = true);
         });
+        const secAdicionar = document.getElementById('section-adicionar');
+        if (secAdicionar) {
+            if (podeOrdemPropria) {
+                secAdicionar.classList.remove('readonly-overlay');
+                secAdicionar.querySelectorAll('button, input, select, textarea').forEach(c => c.disabled = false);
+                atualizarBotaoOrdem();
+            } else {
+                secAdicionar.classList.add('readonly-overlay');
+                secAdicionar.querySelectorAll('button, input, select, textarea').forEach(c => c.disabled = true);
+            }
+        }
         const desc = document.getElementById('descricao-evento');
         if (desc) desc.disabled = true;
         ['btn-fechar-evento', 'btn-reabrir-evento'].forEach(id => {
@@ -2447,8 +2502,10 @@ function calcularSaldos() {
         let totalDivida = eventos.reduce((s, e) => s + e.valor, 0);
         let totalPago = 0;
 
-        // Cada pagamento abate a dívida do seu evento concreto
-        pgtos.filter(p => p.tipo === 'evento' || p.eventoId).forEach(p => {
+        // Cada pagamento abate a dívida do seu evento concreto. tipo='pendente' é
+        // só uma declaração do utilizador ("já paguei") por confirmar pelo admin —
+        // não abate nada enquanto não for confirmada (vira tipo='evento' nessa altura).
+        pgtos.filter(p => p.tipo !== 'pendente' && (p.tipo === 'evento' || p.eventoId)).forEach(p => {
             const ev = eventos.find(e => e.eventoId === p.eventoId);
             if (ev) {
                 const abate = Math.min(ev.restante, p.valor);
@@ -2556,7 +2613,15 @@ function renderContasSaldos(lista, resumo) {
                 }).join(', ');
             }
             const hasToken = podeEditarPagamentoDoEvento(e.eventoId);
-            return '<div class="saldo-evento-row"' + (hasToken ? ' style="cursor:pointer;" onclick="abrirPagamentoPrePreenchido(\'' + pessoa.replace(/'/g, "\\'") + '\',' + e.eventoId + ')" title="Clica para registar pagamento"' : '') + '>'
+            const pessoaEsc = pessoa.replace(/'/g, "\\'");
+            let acaoHtml = '';
+            if (!hasToken && ehEu(pessoa) && PAGAMENTOS_PENDENTE_COL) {
+                const pendenteAqui = pagamentos.find(p => p.tipo === 'pendente' && p.pessoa === pessoa && String(p.eventoId) === String(e.eventoId));
+                acaoHtml = pendenteAqui
+                    ? '<div class="saldo-evento-pendente" onclick="event.stopPropagation()">\u23f3 Pedido enviado \u2014 a aguardar confirma\u00e7\u00e3o <button class="link-cancelar" onclick="cancelarDeclaracaoPagamento(' + pendenteAqui.id + ')">cancelar</button></div>'
+                    : '<button class="btn-ja-paguei" onclick="event.stopPropagation();declararPagamento(\'' + pessoaEsc + '\',' + e.eventoId + ',' + e.restante + ')">\ud83d\udcb8 J\u00e1 paguei?</button>';
+            }
+            return '<div class="saldo-evento-row"' + (hasToken ? ' style="cursor:pointer;" onclick="abrirPagamentoPrePreenchido(\'' + pessoaEsc + '\',' + e.eventoId + ')" title="Clica para registar pagamento"' : '') + '>'
                 + '<div class="saldo-evento-info">'
                 + '<span class="saldo-evento-nome">\u26BD ' + e.descricao + '</span>'
                 + '<span class="saldo-evento-data">' + (e.data || '\u2014') + '</span>'
@@ -2565,6 +2630,7 @@ function renderContasSaldos(lista, resumo) {
                 + '<div class="saldo-evento-valor" style="text-align:right;">\u20ac' + e.restante.toFixed(2)
                 + (e.restante < e.valor - 0.005 ? ' <span style="color:#0E7A4F;font-size:10px;">(parcial)</span>' : '')
                 + '</div>'
+                + acaoHtml
                 + '</div>';
         };
 
@@ -2649,6 +2715,15 @@ function notaPrescrita(pessoa, presc) {
     return ehEu(pessoa) ? 'Confirma se já pagaste este valor' : 'Pagamento por confirmar';
 }
 
+// Link "declarar pagamento"/"cancelar pedido" a seguir à nota de dívida prescrita —
+// só para a própria pessoa, e só se a migração db/pagamentos-pendentes.sql já correu.
+function notaAcaoHtml(pessoa, ev, dividaObj) {
+    if (isAdmin() || !ehEu(pessoa) || !PAGAMENTOS_PENDENTE_COL) return '';
+    const pendenteAqui = pagamentos.find(pg => pg.tipo === 'pendente' && pg.pessoa === pessoa && String(pg.eventoId) === String(ev.id));
+    if (pendenteAqui) return ' · <button class="link-cancelar" onclick="cancelarDeclaracaoPagamento(' + pendenteAqui.id + ')">cancelar pedido</button>';
+    return ' · <button class="link-declarar" onclick="declararPagamento(\'' + pessoa.replace(/'/g, "\\'") + '\',' + ev.id + ',' + dividaObj.valor + ')">declarar pagamento</button>';
+}
+
 function renderContasEventos(lista, resumo) {
     let eventosFechados = historico.filter(ev => ev.totalFatura && ev.pagador);
     // Não-admin sem nome associado: avisar
@@ -2720,7 +2795,7 @@ function renderContasEventos(lista, resumo) {
             return '<div class="contas-divida-item' + (isPrescrita ? ' prescrita' : '') + '" style="flex-wrap:wrap;">'
                 + '<span class="nome">' + p + '</span>'
                 + '<span class="valor ' + (isPrescrita ? 'prescrita' : (isPago ? 'pago' : 'pendente')) + '">\u20ac' + d.valor.toFixed(2) + (!isPago && restante < d.valor - 0.005 ? ' (resta \u20ac' + restante.toFixed(2) + ')' : '') + ' <span style="display:inline-block;width:24px;text-align:center;margin-left:6px;">' + icone + '</span></span>'
-                + (isPrescrita ? '<div class="nota-prescrita">' + notaPrescrita(p, prescricao) + '</div>' : '')
+                + (isPrescrita ? '<div class="nota-prescrita">' + notaPrescrita(p, prescricao) + notaAcaoHtml(p, ev, d) + '</div>' : '')
                 + (consumoStr ? '<div style="width:100%;font-size:11px;color:#7C8782;margin-top:2px;">' + consumoStr + '</div>' : '')
                 + '</div>';
         }).join('');
@@ -2853,6 +2928,7 @@ function renderContasPagamentos(lista, resumo) {
         var eventoDesc = (function() { var ev = historico.find(function(e) { return e.id === p.eventoId; }); return ev ? (ev.descricao || 'Sem nome') : 'Evento removido'; })();
 
         var isPrescricao = p.tipo === 'prescricao';
+        var isPendente = p.tipo === 'pendente';
 
         // Consumption detail
         var consumoStr = '';
@@ -2874,25 +2950,38 @@ function renderContasPagamentos(lista, resumo) {
             }
         }
 
-        var acoes = podeEditarPagamentoDoEvento(p.eventoId) ? '<button class="pgto-edit" onclick="editarPagamento(' + p.id + ')" title="Editar data">\u270e</button><button class="pgto-delete" onclick="removerPagamento(' + p.id + ')" title="Remover">\u00d7</button>' : '';
+        var acoes;
+        if (isPendente) {
+            if (isAdmin()) {
+                acoes = '<button class="pgto-edit" onclick="confirmarPedidoPagamento(' + p.id + ')" title="Confirmar">\u2713</button><button class="pgto-delete" onclick="rejeitarPedidoPagamento(' + p.id + ')" title="Rejeitar">\u00d7</button>';
+            } else if (p.declaradoPor && p.declaradoPor === emailSessao()) {
+                acoes = '<button class="pgto-delete" onclick="cancelarDeclaracaoPagamento(' + p.id + ')" title="Cancelar pedido">\u00d7</button>';
+            } else {
+                acoes = '';
+            }
+        } else {
+            acoes = podeEditarPagamentoDoEvento(p.eventoId) ? '<button class="pgto-edit" onclick="editarPagamento(' + p.id + ')" title="Editar data">\u270e</button><button class="pgto-delete" onclick="removerPagamento(' + p.id + ')" title="Remover">\u00d7</button>' : '';
+        }
         var recebedorStr = (function() {
             if (p.eventoId) {
                 var evr = historico.find(function(e) { return e.id === p.eventoId; });
                 if (evr && evr.pagador && evr.pagador !== p.pessoa) {
-                    var etiqueta = !isPrescricao ? '(pagou ao ' + evr.pagador + ')'
-                        : (isAdmin() ? '(prescrita · devia a ' + evr.pagador + ')' : '(por confirmar · a ' + evr.pagador + ')');
-                    return ' <span style="font-size:10.5px;font-weight:400;color:' + (isPrescricao ? '#B8911F' : '#9AA5A0') + ';">' + etiqueta + '</span>';
+                    var etiqueta;
+                    if (isPendente) etiqueta = isAdmin() ? '(pedido de pagamento · devia a ' + evr.pagador + ')' : '(por confirmar · a ' + evr.pagador + ')';
+                    else if (isPrescricao) etiqueta = isAdmin() ? '(prescrita · devia a ' + evr.pagador + ')' : '(por confirmar · a ' + evr.pagador + ')';
+                    else etiqueta = '(pagou ao ' + evr.pagador + ')';
+                    return ' <span style="font-size:10.5px;font-weight:400;color:' + ((isPrescricao || isPendente) ? '#B8911F' : '#9AA5A0') + ';">' + etiqueta + '</span>';
                 }
             }
             return '';
         })();
-        return '<div class="pgto-hist-item' + (isPrescricao ? ' prescrita' : '') + '" id="pgto-item-' + p.id + '" style="flex-wrap:wrap;">'
+        return '<div class="pgto-hist-item' + ((isPrescricao || isPendente) ? ' prescrita' : '') + '" id="pgto-item-' + p.id + '" style="flex-wrap:wrap;">'
             + '<div class="pgto-info-col">'
             + '<div class="pgto-nome">' + p.pessoa + recebedorStr + '</div>'
             + '<div class="pgto-detalhe">' + eventoDesc + ' \u00b7 ' + p.data + '</div>'
             + (consumoStr ? '<div style="font-size:11px;color:#7C8782;margin-top:2px;">' + consumoStr + '</div>' : '')
             + '</div>'
-            + '<span class="pgto-valor' + (isPrescricao ? (isAdmin() ? ' prescrita' : ' por-confirmar') : '') + '">\u20ac' + p.valor.toFixed(2) + '</span>'
+            + '<span class="pgto-valor' + ((isPrescricao || isPendente) ? (isAdmin() ? ' prescrita' : ' por-confirmar') : '') + '">\u20ac' + p.valor.toFixed(2) + '</span>'
             + acoes
             + '</div>';
     }).join('');
@@ -2901,8 +2990,8 @@ function renderContasPagamentos(lista, resumo) {
         ? '<div class="contas-vazio">Nenhum resultado encontrado</div>'
         : itemsHtml);
 
-    var totalFiltrado = filtrados.filter(function(p) { return p.tipo !== 'prescricao'; }).reduce(function(s, p) { return s + p.valor; }, 0);
-    var totalGeral = basePagamentos.filter(function(p) { return p.tipo !== 'prescricao'; }).reduce(function(s, p) { return s + p.valor; }, 0);
+    var totalFiltrado = filtrados.filter(function(p) { return p.tipo !== 'prescricao' && p.tipo !== 'pendente'; }).reduce(function(s, p) { return s + p.valor; }, 0);
+    var totalGeral = basePagamentos.filter(function(p) { return p.tipo !== 'prescricao' && p.tipo !== 'pendente'; }).reduce(function(s, p) { return s + p.valor; }, 0);
     var isFiltered = _pgtoFilterPessoa || _pgtoFilterEvento;
     var showTotal = isFiltered ? totalFiltrado : totalGeral;
     var showCount = isFiltered ? filtrados.length : basePagamentos.length;
@@ -3145,6 +3234,118 @@ function mostrarPgtoMsg(msg, ok) {
     setTimeout(() => { div.textContent = ''; div.className = ''; }, 3000);
 }
 
+/* ── PEDIDOS DE PAGAMENTO (declarados pelo utilizador, por confirmar) ──
+   Um utilizador sem permissão para registar pagamentos (não é admin nem
+   substituto) pode dizer "já paguei" a uma dívida sua — pendente ou já
+   prescrita. Isso cria um pagamento tipo='pendente' que NÃO abate a dívida
+   (ver calcularSaldos) até o admin confirmar (vira tipo='evento') ou rejeitar
+   (é removido). Precisa da migração db/pagamentos-pendentes.sql — sem ela
+   PAGAMENTOS_PENDENTE_COL fica false e os controlos escondem-se. */
+
+function refrescarInicioSeVisivel() {
+    try { if (typeof renderInicio === 'function') renderInicio(); } catch(e) {}
+}
+
+async function declararPagamento(pessoa, eventoId, valor) {
+    if (!PAGAMENTOS_PENDENTE_COL) { mostrarMensagem('⚠️ Funcionalidade indisponível — falta uma migração na BD', false); return; }
+    if (!ehEu(pessoa)) { mostrarMensagem('⚠️ Só podes declarar os teus próprios pagamentos', false); return; }
+    const jaPendente = pagamentos.find(p => p.tipo === 'pendente' && p.pessoa === pessoa && String(p.eventoId) === String(eventoId));
+    if (jaPendente) { mostrarMensagem('⏳ Já enviaste este pedido — aguarda confirmação do admin.', false); return; }
+
+    const ok = await mostrarModal({
+        icon: '💸',
+        title: 'Já pagaste?',
+        msg: 'Confirmas que já pagaste os <strong>€' + valor.toFixed(2) + '</strong>?<br><br>Fica pendente até o admin confirmar — não é definitivo.',
+        confirmText: 'Sim, já paguei',
+        cancelText: 'Cancelar'
+    });
+    if (!ok) return;
+
+    const novo = {
+        id: nextId(),
+        pessoa, valor, tipo: 'pendente',
+        eventoId: parseInt(eventoId),
+        data: new Date().toLocaleDateString('pt-PT', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}),
+        declaradoPor: emailSessao()
+    };
+    pagamentos.push(novo);
+    salvarPagamentos();
+    const okSb = await sbGuardarPagamento(novo);
+    renderContas();
+    refrescarInicioSeVisivel();
+    if (okSb) mostrarMensagem('✓ Pedido enviado — aguarda confirmação do admin.', true);
+}
+
+// Anula a própria declaração (antes de o admin decidir). Só quem a fez pode.
+async function cancelarDeclaracaoPagamento(id) {
+    const p = pagamentos.find(pg => pg.id === id);
+    if (!p || p.tipo !== 'pendente' || p.declaradoPor !== emailSessao()) return;
+    pagamentos = pagamentos.filter(pg => pg.id !== id);
+    salvarPagamentos();
+    await sbApagarPagamento(id);
+    renderContas();
+    refrescarInicioSeVisivel();
+    mostrarMensagem('Pedido cancelado', true);
+}
+
+function pedidosPagamentoPendentes() {
+    return pagamentos.filter(p => p.tipo === 'pendente');
+}
+
+// Admin confirma um pedido: grava como pagamento real (tipo='evento') e, se
+// existia uma prescrição anterior para o mesmo evento/pessoa, remove-a — o
+// utilizador estava precisamente a corrigi-la.
+async function confirmarPedidoPagamento(id) {
+    if (!isAdmin()) return;
+    const p = pagamentos.find(pg => pg.id === id);
+    if (!p || p.tipo !== 'pendente') return;
+    const ok = await mostrarModal({
+        icon: '✅',
+        title: 'Confirmar pagamento',
+        msg: 'Confirmas que <strong>' + p.pessoa + '</strong> pagou os €' + p.valor.toFixed(2) + '?',
+        confirmText: 'Confirmar',
+        cancelText: 'Cancelar'
+    });
+    if (!ok) return;
+
+    const presc = pagamentos.find(pg => pg.tipo === 'prescricao' && pg.pessoa === p.pessoa && String(pg.eventoId) === String(p.eventoId));
+    if (presc) {
+        pagamentos = pagamentos.filter(pg => pg.id !== presc.id);
+        sbApagarPagamento(presc.id);
+    }
+    p.tipo = 'evento';
+    p.declaradoPor = null;
+    salvarPagamentos();
+    await sbGuardarPagamento(p);
+    renderContas();
+    renderHistoricoDropdown();
+    refrescarInicioSeVisivel();
+    mostrarMensagem('✓ Pagamento de ' + p.pessoa + ' confirmado', true);
+}
+
+// Admin rejeita: a dívida volta a ficar como estava antes (pendente, ou
+// prescrita se já o era — essa não é tocada).
+async function rejeitarPedidoPagamento(id) {
+    if (!isAdmin()) return;
+    const p = pagamentos.find(pg => pg.id === id);
+    if (!p || p.tipo !== 'pendente') return;
+    const ok = await mostrarModal({
+        icon: '❌',
+        title: 'Rejeitar pedido',
+        msg: 'Rejeitar o pedido de pagamento de <strong>' + p.pessoa + '</strong> (€' + p.valor.toFixed(2) + ')?<br><br>A dívida volta a ficar por confirmar.',
+        confirmText: 'Rejeitar',
+        cancelText: 'Cancelar',
+        danger: true
+    });
+    if (!ok) return;
+    pagamentos = pagamentos.filter(pg => pg.id !== id);
+    salvarPagamentos();
+    await sbApagarPagamento(id);
+    renderContas();
+    refrescarInicioSeVisivel();
+    mostrarMensagem('Pedido rejeitado', true);
+}
+
 // Calculate final amounts for any event
 // Distribui o total pelos não-pagadores usando o método Hamilton (maior resto).
 // Resultado: soma dos valores == Math.round(sum_bruta * 100)/100
@@ -3285,6 +3486,12 @@ function toggleEditOrdem(id) {
     btnGuardar.textContent = '✓ Guardar';
     btnGuardar.onclick = () => {
         if (selAmigos.size === 0) { alert('Seleciona pelo menos um amigo'); return; }
+        const evAtual = historico.find(h => h.id === eventoAtualId);
+        const podeTudo = podeEditarEventoAtual();
+        if (!podeTudo && !ehOrdemPropria(ordem, evAtual)) {
+            mostrarMensagem('⚠️ Só podes editar as tuas próprias ordens', false);
+            return;
+        }
         const idx = estado.ordens.findIndex(o => o.id === id);
         const novoItem = selItem.value;
         const novaQtd = parseInt(selQtd.value);
@@ -3296,7 +3503,12 @@ function toggleEditOrdem(id) {
             precoTotal: menu[novoItem] * novaQtd,
             amigos: Array.from(selAmigos)
         };
-        salvarNoLocalStorage();
+        if (podeTudo) {
+            salvarNoLocalStorage();
+        } else {
+            _sincronizarOrdensNoHistorico();
+            sbAtualizarOrdemPropria(estado.ordens[idx]);
+        }
         atualizarUI();
         mostrarMensagem('✓ Ordem atualizada!', true);
     };
@@ -3729,6 +3941,21 @@ function podeEditarEvento(ev) { return isAdmin() || ehSubstitutoDe(ev); }
 function podeEditarEventoAtual() {
     return podeEditarEvento(historico.find(h => h.id === eventoAtualId));
 }
+// Convocado (não admin/substituto) pode adicionar UMA ordem própria a este
+// evento? Só se: o evento está em aberto (sem fatura), a migração
+// db/ordens-proprias.sql já correu (senão o servidor recusa a escrita), e a
+// pessoa está na lista de convocados do evento.
+function podeAdicionarOrdemPropria(ev) {
+    if (!ev || ev.totalFatura || !ORDENS_CRIADO_POR_COL) return false;
+    const meus = meusAmigos();
+    if (!meus.length) return false;
+    return (ev.amigos || []).some(a => meus.includes(a));
+}
+// Esta ordem concreta foi criada por mim (via podeAdicionarOrdemPropria) e o
+// evento continua em aberto? É o que autoriza editar/apagar só ESTA ordem.
+function ehOrdemPropria(ordem, ev) {
+    return !!(ordem && ordem.criadoPor && ordem.criadoPor === emailSessao() && ev && !ev.totalFatura);
+}
 // Eventos delegados a este utilizador
 function eventosDelegados() {
     const e = emailAtual();
@@ -4051,6 +4278,19 @@ let FATURA_COL = true;
 let AMIGOS_COL = true;
 let MENU_COL = true;
 
+/* Autoria das ordens (`ordens.criado_por`, migração db/ordens-proprias.sql) —
+   é o que permite a um convocado (não admin/substituto) adicionar/editar/apagar
+   as SUAS próprias ordens num evento em aberto: sem a coluna e as políticas RLS
+   que a migração cria, o servidor recusa a escrita e a app esconde os controlos
+   para não prometer uma ação que ia falhar. */
+let ORDENS_CRIADO_POR_COL = true;
+
+/* Pedidos de pagamento por confirmar (`pagamentos.declarado_por`, migração
+   db/pagamentos-pendentes.sql) — permite a um utilizador declarar que já pagou
+   uma dívida (pendente ou prescrita); fica tipo='pendente' até o admin
+   confirmar ou rejeitar. Mesmo padrão de degradação sem a migração. */
+let PAGAMENTOS_PENDENTE_COL = true;
+
 // Lista de convocados de um evento vindo da BD = a coluna `amigos` (fonte de
 // verdade, editada nas Definições do evento) MAIS quem apareça nas ordens, nas
 // ofertas ou seja tesoureiro. A união cobre os eventos anteriores à migração
@@ -4084,6 +4324,10 @@ async function sbCarregarDados() {
         // Carregar ordens + ordem_amigos
         const ordRes = await sbFetch(`${SB_URL}/rest/v1/ordens?select=*,ordem_amigos(amigo)&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
         const ordens = await ordRes.json();
+        if (Array.isArray(ordens) && ordens.length > 0) {
+            ORDENS_CRIADO_POR_COL = Object.prototype.hasOwnProperty.call(ordens[0], 'criado_por');
+        }
+        if (!ORDENS_CRIADO_POR_COL) console.warn('[SplitBill] coluna ordens.criado_por ausente — corre db/ordens-proprias.sql para os convocados poderem adicionar as próprias ordens');
 
         // Carregar ofertas + oferta_para
         const ofRes = await sbFetch(`${SB_URL}/rest/v1/ofertas?select=*,oferta_para(amigo)&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
@@ -4092,6 +4336,10 @@ async function sbCarregarDados() {
         // Carregar pagamentos
         const pgRes = await sbFetch(`${SB_URL}/rest/v1/pagamentos?select=*&order=id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
         const pags = await pgRes.json();
+        if (Array.isArray(pags) && pags.length > 0) {
+            PAGAMENTOS_PENDENTE_COL = Object.prototype.hasOwnProperty.call(pags[0], 'declarado_por');
+        }
+        if (!PAGAMENTOS_PENDENTE_COL) console.warn('[SplitBill] coluna pagamentos.declarado_por ausente — corre db/pagamentos-pendentes.sql para os utilizadores poderem declarar pagamentos por confirmar');
 
         // Reconstruir historico no formato esperado pela app
         // Faturas já guardadas neste dispositivo: sem a migração o servidor não
@@ -4116,7 +4364,8 @@ async function sbCarregarDados() {
                 precoUnitario: parseFloat(o.preco_unitario),
                 precoTotal: parseFloat(o.preco_total),
                 hora: o.hora,
-                amigos: (o['ordem_amigos'] || []).map(a => a.amigo)
+                amigos: (o['ordem_amigos'] || []).map(a => a.amigo),
+                criadoPor: o.criado_por || null
             }));
             const evOfertas = ofertas.filter(o => o.evento_id === ev.id).map(o => ({
                 id: o.id,
@@ -4154,7 +4403,8 @@ async function sbCarregarDados() {
             valor: parseFloat(p.valor),
             tipo: p.tipo,
             eventoId: p.evento_id,
-            data: p.data
+            data: p.data,
+            declaradoPor: p.declarado_por || null
         }));
 
         // Carregar divisões fixadas
@@ -4362,13 +4612,94 @@ async function sbGuardarEvento(ev, opts) {
     }
 }
 
+/* Escrita DIRIGIDA de uma única ordem (não o evento inteiro) — usada por quem
+   só pode mexer na PRÓPRIA ordem (convocado sem ser admin/substituto).
+   Ao contrário de sbGuardarEvento/sbSyncFilhos (que fazem PATCH ao evento
+   inteiro + upsert/prune de TODAS as ordens), aqui só se toca na linha desta
+   pessoa: um convocado normal não tem — nem deve ter — permissão para mexer no
+   evento nem nas ordens dos outros (ver db/ordens-proprias.sql). */
+async function sbCriarOrdemPropria(ordem, eventoId) {
+    if (!_sbSession) { mostrarMensagem('⚠️ Sem sessão — ordem NÃO gravada na BD', false); return false; }
+    try {
+        await sbOk(await sbFetch(`${SB_URL}/rest/v1/ordens`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+            body: JSON.stringify({
+                id: ordem.id, evento_id: eventoId, item: ordem.item, quantidade: ordem.quantidade,
+                preco_unitario: ordem.precoUnitario, preco_total: ordem.precoTotal, hora: ordem.hora,
+                criado_por: ordem.criadoPor
+            })
+        }), 'criar ordem própria');
+        const filhos = (ordem.amigos || []).map(a => ({ ordem_id: ordem.id, amigo: a }));
+        if (filhos.length > 0) {
+            await sbOk(await sbFetch(`${SB_URL}/rest/v1/ordem_amigos`, {
+                method: 'POST', headers: sbHeaders({ 'Prefer': 'return=minimal' }),
+                body: JSON.stringify(filhos)
+            }), 'gravar amigos da ordem própria');
+        }
+        return true;
+    } catch(e) {
+        console.error('Erro ao criar ordem própria no Supabase:', e);
+        mostrarMensagem('⚠️ Ordem NÃO gravada no servidor: ' + sbErroLegivel(e), false);
+        return false;
+    }
+}
+
+async function sbAtualizarOrdemPropria(ordem) {
+    if (!_sbSession) { mostrarMensagem('⚠️ Sem sessão — ordem NÃO gravada na BD', false); return false; }
+    try {
+        await sbOk(await sbFetch(`${SB_URL}/rest/v1/ordens?id=eq.${ordem.id}`, {
+            method: 'PATCH',
+            headers: sbHeaders({ 'Prefer': 'return=minimal' }),
+            body: JSON.stringify({ item: ordem.item, quantidade: ordem.quantidade, preco_unitario: ordem.precoUnitario, preco_total: ordem.precoTotal })
+        }), 'atualizar ordem própria');
+        await sbOk(await sbFetch(`${SB_URL}/rest/v1/ordem_amigos?ordem_id=eq.${ordem.id}`, {
+            method: 'DELETE', headers: sbHeaders()
+        }), 'limpar amigos da ordem própria');
+        const filhos = (ordem.amigos || []).map(a => ({ ordem_id: ordem.id, amigo: a }));
+        if (filhos.length > 0) {
+            await sbOk(await sbFetch(`${SB_URL}/rest/v1/ordem_amigos`, {
+                method: 'POST', headers: sbHeaders({ 'Prefer': 'return=minimal' }),
+                body: JSON.stringify(filhos)
+            }), 'gravar amigos da ordem própria');
+        }
+        return true;
+    } catch(e) {
+        console.error('Erro ao atualizar ordem própria no Supabase:', e);
+        mostrarMensagem('⚠️ Ordem NÃO atualizada no servidor: ' + sbErroLegivel(e), false);
+        return false;
+    }
+}
+
+async function sbApagarOrdemPropria(id) {
+    if (!_sbSession) return false;
+    try {
+        const r = await sbFetch(`${SB_URL}/rest/v1/ordens?id=eq.${id}`, { method: 'DELETE', headers: sbHeaders() });
+        if (!r.ok) {
+            let msg = 'HTTP ' + r.status;
+            try { const j = await r.json(); msg = j.message || msg; } catch(_) {}
+            mostrarMensagem('⚠️ Ordem NÃO removida da BD: ' + msg, false);
+            return false;
+        }
+        return true;
+    } catch(e) {
+        console.error('Erro ao apagar ordem própria no Supabase:', e);
+        mostrarMensagem('⚠️ Ordem NÃO removida da BD (erro de ligação)', false);
+        return false;
+    }
+}
+
 async function sbGuardarPagamento(p) {
     if (!_sbSession) { mostrarMensagem('⚠️ Sem sessão — pagamento NÃO gravado na BD', false); return false; }
     try {
+        const campos = { id: p.id, evento_id: p.eventoId, pessoa: p.pessoa, valor: p.valor, tipo: p.tipo, data: p.data };
+        // declarado_por só entra se a coluna existir — senão o PostgREST rejeita
+        // o pedido inteiro (PGRST204) e o pagamento nem sequer se grava.
+        if (PAGAMENTOS_PENDENTE_COL) campos.declarado_por = p.declaradoPor ?? null;
         const r = await sbFetch(`${SB_URL}/rest/v1/pagamentos`, {
             method: 'POST',
             headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
-            body: JSON.stringify({ id: p.id, evento_id: p.eventoId, pessoa: p.pessoa, valor: p.valor, tipo: p.tipo, data: p.data })
+            body: JSON.stringify(campos)
         });
         if (!r.ok) {
             let msg = 'HTTP ' + r.status;
