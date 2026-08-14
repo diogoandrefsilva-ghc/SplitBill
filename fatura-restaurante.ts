@@ -156,13 +156,20 @@ ${menu.map((a) => `  · ${a.nome}${a.preco != null ? ` (€${a.preco.toFixed(2)}
 Responde só com o JSON.`;
 
 async function emailAutorizado(auth: string, signal: AbortSignal): Promise<boolean> {
+  console.log("FATURA-RESTAURANTE auth header presente:", !!auth, "tamanho:", auth.length);
   // 1) quem é o utilizador deste token?
   const u = await fetch(`${SB_URL}/auth/v1/user`, {
     headers: { apikey: SB_SRV, Authorization: auth },
     signal,
   });
-  if (!u.ok) return false;
-  const email = ((await u.json()).email ?? "").toLowerCase();
+  console.log("FATURA-RESTAURANTE /user status:", u.status, "ok:", u.ok);
+  if (!u.ok) {
+    console.log("FATURA-RESTAURANTE /user erro:", (await u.text().catch(() => "")).slice(0, 300));
+    return false;
+  }
+  const uj = await u.json();
+  const email = (uj.email ?? "").toLowerCase();
+  console.log("FATURA-RESTAURANTE email presente:", !!email, "sub presente:", !!uj.id);
   if (!email) return false;
   // 2) consta de splitbill.allowed_users?
   const r = await fetch(
@@ -176,9 +183,12 @@ async function emailAutorizado(auth: string, signal: AbortSignal): Promise<boole
       signal,
     },
   );
+  console.log("FATURA-RESTAURANTE allowed_users status:", r.status, "ok:", r.ok);
   if (!r.ok) return false;
   const rows = await r.json();
-  return Array.isArray(rows) && rows.length > 0;
+  const permitido = Array.isArray(rows) && rows.length > 0;
+  console.log("FATURA-RESTAURANTE permitido:", permitido);
+  return permitido;
 }
 
 Deno.serve(async (req) => {
