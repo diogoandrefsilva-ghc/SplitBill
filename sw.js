@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v45';
+const CACHE_VERSION = 'v46';
 const CACHE_NAME = `splitbill-${CACHE_VERSION}`;
 
 // Assets to cache on install
@@ -7,7 +7,8 @@ const ASSETS = [
   '/index.html',
   '/style.css',
   '/app.js',
-  '/apple-touch-icon.png'
+  '/apple-touch-icon.png',
+  '/leao.png'
 ];
 
 self.addEventListener('install', (e) => {

@@ -1166,6 +1166,19 @@ html,body{touch-action:pan-x pan-y}
             line-height: 1;
             margin-bottom: 0;
         }
+        /* Leão à esquerda: altura casada com título+subtítulo, sem engordar a barra */
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            min-width: 0;
+        }
+        .header-leao {
+            height: 42px;
+            width: auto;
+            flex-shrink: 0;
+            display: block;
+        }
         .header h1 small {
             display: block;
             font-size: 11px;
@@ -1593,6 +1606,8 @@ html,body{touch-action:pan-x pan-y}
             body { padding: 0 8px 24px; }
             .header, .top-nav, #header-evento-context { margin-left: -8px; margin-right: -8px; }
             .header h1 { font-size: 24px; }
+            .header-leao { height: 39px; }
+            .header-brand { gap: 9px; }
         }
 
         /* ═══════════ Modo "ver como" (admin a simular outro utilizador) ═══════════ */
