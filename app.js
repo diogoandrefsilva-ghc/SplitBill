@@ -1389,6 +1389,7 @@ async function fecharComFatura() {
     atualizarReadOnly();
     renderContas();
     sbGuardarDivisao(eventoAtualId, divisaoHamilton);  // fire-and-forget, não bloqueia UI
+    sbNotificarDividas(divisaoHamilton, estado.descricaoEvento);  // idem — notificação é um extra
     mostrarMensagem('✓ Conta fechada — €' + fatura.toFixed(2) + ' (paga por ' + pagador + ')', true);
 }
 
@@ -3875,6 +3876,9 @@ function toggleAjuda() {
 const SB_URL = 'https://gjweqwfbnkgnibhajldc.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdqd2Vxd2ZibmtnbmliaGFqbGRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDk4NzUsImV4cCI6MjA5NjY4NTg3NX0.h6st-RayGhQdsqH7E2Ko-rPWk2QZUpTevO6cbjvlSnk';
 const ADMIN_EMAIL = 'diogo.andre.f.silva@gmail.com';
+// Par de chaves só para notificações Web Push (não é a chave do Supabase).
+// A privada vive só como secret da Edge Function push-notificar.
+const VAPID_PUBLIC_KEY = 'BFiwf_z5NJzkXFP6gzxS_naH9cNC2MfCEmejJf32MID8Y_1i49cb8sGINYhH-aFAZmFQLf3V__2ZyeotQIZYQ0U';
 
 let _sbSession = null;
 let amigoUsers = {};          // equivalência { nomeAmigo: email }  (gerida só pelo admin)
@@ -4334,6 +4338,11 @@ let ORDENS_CRIADO_POR_COL = true;
    confirmar ou rejeitar. Mesmo padrão de degradação sem a migração. */
 let PAGAMENTOS_PENDENTE_COL = true;
 
+/* Notificações push (tabela `push_subscriptions`, migração
+   db/push-subscriptions.sql) — sem ela o botão "Ativar notificações" nas
+   Definições esconde-se. Mesmo padrão de degradação sem a migração. */
+let PUSH_COL = true;
+
 // Lista de convocados de um evento vindo da BD = a coluna `amigos` (fonte de
 // verdade, editada nas Definições do evento) MAIS quem apareça nas ordens, nas
 // ofertas ou seja tesoureiro. A união cobre os eventos anteriores à migração
@@ -4383,6 +4392,14 @@ async function sbCarregarDados() {
             PAGAMENTOS_PENDENTE_COL = Object.prototype.hasOwnProperty.call(pags[0], 'declarado_por');
         }
         if (!PAGAMENTOS_PENDENTE_COL) console.warn('[SplitBill] coluna pagamentos.declarado_por ausente — corre db/pagamentos-pendentes.sql para os utilizadores poderem declarar pagamentos por confirmar');
+
+        // Tabela push_subscriptions (não coluna): existe ou não existe.
+        try {
+            const pushR = await sbFetch(`${SB_URL}/rest/v1/push_subscriptions?select=endpoint&limit=1`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+            PUSH_COL = pushR.ok;
+        } catch(e) { PUSH_COL = false; }
+        if (!PUSH_COL) console.warn('[SplitBill] tabela push_subscriptions ausente — corre db/push-subscriptions.sql para ativar notificações push');
+        pushRenderStatus();
 
         // Reconstruir historico no formato esperado pela app
         // Faturas já guardadas neste dispositivo: sem a migração o servidor não
@@ -5051,6 +5068,7 @@ async function abrirAdmin() {
     // admin noutra sessão) só apareciam depois de fechar/reabrir a app.
     await sbCarregarConfigAcesso();
     renderVerComoSelect();
+    pushRenderStatus();
     const lista = document.getElementById('admin-lista');
     lista.innerHTML = '<p style="color:#999;font-size:14px;text-align:center;padding:24px 0;">A carregar…</p>';
     try {
@@ -5339,6 +5357,7 @@ function abrirDefinicoes() {
     const emailEl = document.getElementById('def-conta-email');
     if (emailEl) { const e = emailAtual(); emailEl.textContent = e ? 'Sessão iniciada como ' + e : ''; }
     document.getElementById('page-definicoes').style.display = 'flex';
+    pushRenderStatus();
 }
 
 function fecharDefinicoes() {
@@ -5385,6 +5404,123 @@ async function guardarEquivalencia(amigo, email) {
     if (!isAdmin()) return;
     await sbGuardarAmigoUser(amigo, email);
     mostrarMensagem(email ? ('✓ ' + amigo + ' ↔ ' + email) : ('✓ Equivalência de ' + amigo + ' removida'), true);
+}
+
+/* ── NOTIFICAÇÕES PUSH (Web Push, sem Telegram) ──────────────────────────
+   Ativado por conta+dispositivo em Definições (pushAtivar/pushDesativar,
+   tabela push_subscriptions — migração db/push-subscriptions.sql). Ao
+   fechar uma conta, fecharComFatura() chama sbNotificarDividas() para quem
+   ficou a dever; a Edge Function push-notificar resolve amigo→email e manda
+   o push a cada dispositivo subscrito dessa pessoa. Sem a migração
+   (PUSH_COL=false) os controlos escondem-se e a chamada não sai. */
+
+function pushSuportado() {
+    return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+
+function _urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(base64);
+    return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+async function pushSubscricaoAtual() {
+    if (!pushSuportado()) return null;
+    try {
+        const reg = await navigator.serviceWorker.ready;
+        return await reg.pushManager.getSubscription();
+    } catch(e) { return null; }
+}
+
+// Atualiza os controlos nos painéis de Definições (admin + utilizador normal
+// têm cada um a sua caixa .push-toggle-box, por isso itera todas).
+async function pushRenderStatus() {
+    const els = document.querySelectorAll('.push-toggle-box');
+    if (!els.length) return;
+    const suportado = pushSuportado();
+    const email = emailSessao();
+    const sub = suportado ? await pushSubscricaoAtual() : null;
+    const ativo = !!sub;
+    els.forEach(box => {
+        if (!PUSH_COL || !suportado || !email) { box.style.display = 'none'; return; }
+        box.style.display = '';
+        const btn = box.querySelector('.push-toggle-btn');
+        const msg = box.querySelector('.push-toggle-msg');
+        if (btn) {
+            btn.textContent = ativo ? '🔕 Desativar notificações' : '🔔 Ativar notificações';
+            btn.onclick = ativo ? pushDesativar : pushAtivar;
+        }
+        if (msg) msg.textContent = ativo
+            ? 'Notificações ativas neste dispositivo.'
+            : 'Recebe um aviso quando ficares a dever algo novo.';
+    });
+}
+
+async function pushAtivar() {
+    if (!pushSuportado()) { mostrarMensagem('⚠️ Este browser não suporta notificações push', false); return; }
+    const email = emailSessao();
+    if (!email) return;
+    try {
+        const permissao = await Notification.requestPermission();
+        if (permissao !== 'granted') { mostrarMensagem('⚠️ Permissão de notificações recusada', false); return; }
+        const reg = await navigator.serviceWorker.ready;
+        let sub = await reg.pushManager.getSubscription();
+        if (!sub) {
+            sub = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: _urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+            });
+        }
+        const json = sub.toJSON();
+        const r = await sbFetch(`${SB_URL}/rest/v1/push_subscriptions`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+            body: JSON.stringify({ endpoint: sub.endpoint, email, p256dh: json.keys.p256dh, auth_key: json.keys.auth })
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        mostrarMensagem('✓ Notificações ativadas neste dispositivo', true);
+    } catch(e) {
+        console.error('Erro ao ativar notificações:', e);
+        mostrarMensagem('⚠️ Não foi possível ativar notificações: ' + e.message, false);
+    }
+    pushRenderStatus();
+}
+
+async function pushDesativar() {
+    try {
+        const sub = await pushSubscricaoAtual();
+        if (sub) {
+            await sbFetch(`${SB_URL}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(sub.endpoint)}`, { method: 'DELETE', headers: sbHeaders() });
+            await sub.unsubscribe();
+        }
+        mostrarMensagem('Notificações desativadas neste dispositivo', true);
+    } catch(e) {
+        console.error('Erro ao desativar notificações:', e);
+    }
+    pushRenderStatus();
+}
+
+// Fire-and-forget: chamada no fim de fechar uma conta, para quem ficou a
+// dever. Nunca bloqueia nem incomoda o utilizador com erro — é só um extra.
+async function sbNotificarDividas(divisaoObj, descricao) {
+    if (!PUSH_COL || !_sbSession) return;
+    const pessoas = Object.entries(divisaoObj || {})
+        .filter(([, valor]) => valor > 0.005)
+        .map(([amigo, valor]) => ({ amigo, valor }));
+    if (!pessoas.length) return;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+    try {
+        await sbFetch(`${SB_URL}/functions/v1/push-notificar`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY },
+            body: JSON.stringify({ pessoas, descricao: descricao || '' }),
+            signal: ctrl.signal
+        });
+    } catch(e) {
+        console.warn('[SplitBill] notificação push não enviada:', e.message);
+    } finally { clearTimeout(timer); }
 }
 
 /* ── FIM SUPABASE ───────────────────────────── */

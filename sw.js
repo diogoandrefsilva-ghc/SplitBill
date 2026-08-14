@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v52';
+const CACHE_VERSION = 'v53';
 const CACHE_NAME = `splitbill-${CACHE_VERSION}`;
 
 // Assets to cache on install
@@ -97,6 +97,35 @@ self.addEventListener('fetch', (e) => {
           return response;
         })
       );
+    })
+  );
+});
+
+// Notificações push (novo valor a pagamento) — a Edge Function push-notificar
+// manda um payload {title, body, url}; aqui só se mostra a notificação.
+self.addEventListener('push', (e) => {
+  let data = { title: 'SplitBill', body: 'Tens uma novidade na app.', url: '/SplitBill/' };
+  try { Object.assign(data, e.data.json()); } catch (err) { /* payload vazio ou não-JSON */ }
+  e.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: '/SplitBill/apple-touch-icon.png',
+      badge: '/SplitBill/apple-touch-icon.png',
+      data: { url: data.url || '/SplitBill/' }
+    })
+  );
+});
+
+// Clique na notificação: foca uma janela já aberta da app, ou abre uma nova.
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/SplitBill/';
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const c of clients) {
+        if (c.url.includes('/SplitBill/') && 'focus' in c) return c.focus();
+      }
+      return self.clients.openWindow(url);
     })
   );
 });

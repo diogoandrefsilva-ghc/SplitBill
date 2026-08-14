@@ -105,6 +105,10 @@ window.sbEsconderSplash = function(){
             <select id="vercomo-sel" onchange="entrarVerComo(this.value)" style="width:100%;box-sizing:border-box;-webkit-appearance:none;appearance:none;padding:10px 12px;border:1px solid #C8D0C8;border-radius:9px;font-size:14px;background:#fff;"></select>
             <p style="font-size:11px;color:#7C8782;margin:8px 0 0;line-height:1.4;">Vês a app como essa pessoa a vê (menus, saldos, permissões). Nada é gravado enquanto estiveres no modo — sais pela barra no topo.</p>
         </div>
+        <div class="push-toggle-box" style="display:none;padding:0 16px 14px;border-top:1px solid #DEE3DD;padding-top:14px;">
+            <button class="push-toggle-btn" style="width:100%;padding:11px;background:#0E7A4F;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:6px;">🔔 Ativar notificações</button>
+            <p class="push-toggle-msg" style="font-size:11px;color:#7C8782;margin:0;line-height:1.4;"></p>
+        </div>
         <div style="padding:0 16px 16px;border-top:1px solid #DEE3DD;padding-top:14px;">
             <button onclick="abrirEquivalencias()" style="width:100%;padding:11px;background:#0B3B2B;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:10px;">👥 Equivalências amigo ↔ conta</button>
             <button onclick="exportarJSON()" style="width:100%;padding:11px;background:#fff;color:#0E7A4F;border:1.5px solid #0E7A4F;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;">💾 Descarregar backup (JSON)</button>
@@ -144,6 +148,10 @@ window.sbEsconderSplash = function(){
         </div>
         <div style="padding:16px;overflow-y:auto;">
             <p id="def-conta-email" style="font-size:13px;color:#5B6661;margin:0 0 14px;text-align:center;"></p>
+            <div class="push-toggle-box" style="display:none;margin-bottom:14px;">
+                <button class="push-toggle-btn" style="width:100%;padding:12px;background:#0E7A4F;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:6px;">🔔 Ativar notificações</button>
+                <p class="push-toggle-msg" style="font-size:11px;color:#7C8782;margin:0;line-height:1.4;text-align:center;"></p>
+            </div>
             <button onclick="sbLogout()" style="width:100%;padding:12px;background:transparent;color:#B3402F;border:1.5px solid #E3C9C4;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;">🚪 Terminar sessão</button>
         </div>
     </div>
