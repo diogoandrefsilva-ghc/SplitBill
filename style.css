@@ -1564,6 +1564,18 @@ html,body{touch-action:pan-x pan-y}
         .fr-det { color: var(--ink-soft); font-size: 11px; line-height: 1.5; margin-top: 1px; }
         .fr-det .neg { color: var(--rubro); font-weight: 600; }
         .fr-det .pos { color: var(--verde); font-weight: 600; }
+        .fr-reatr-lista { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+        .fr-reatr-item { display: inline-flex; align-items: center; gap: 4px; }
+        .fr-reatribuir {
+            font-family: var(--mono);
+            font-size: 10.5px;
+            color: var(--ink-soft);
+            background: #fff;
+            border: 1px solid var(--linha);
+            border-radius: 4px;
+            padding: 1px 3px;
+            max-width: 150px;
+        }
         .fr-tag {
             display: inline-block;
             font-size: 9.5px;

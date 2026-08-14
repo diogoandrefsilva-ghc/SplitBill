@@ -1605,6 +1605,11 @@ const _frR2 = v => Math.round(v * 100) / 100;
 function _frEsc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 }
+// Nome vindo da leitura, pronto a meter dentro de onchange="fn('...')": escapa
+// para literal JS de aspa simples primeiro, depois para atributo HTML.
+function _frJsArg(s) {
+    return _frEsc(String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+}
 // Chave de comparação: minúsculas, sem acentos, sem pontuação
 function faturaKey(s) {
     return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -1827,14 +1832,23 @@ function faturaConferir() {
     // pode vir em duas linhas da conta)
     const fat = {};
     r.linhas.forEach(l => {
-        let item = porChave[faturaKey(l.nome)] || null;
-        if (!item) {
-            // Sem nome igual: escolhe o mais parecido, primeiro entre o que foi
-            // consumido e só depois no resto do menu
-            let best = null, bs = 0;
-            Object.keys(cons).forEach(it => { const s = faturaScore(it, l.nome); if (s > bs) { bs = s; best = it; } });
-            if (bs < 0.6) Object.keys(menu).forEach(it => { const s = faturaScore(it, l.nome); if (s > bs) { bs = s; best = it; } });
-            if (bs >= 0.6) item = best;
+        // Reatribuição manual (faturaReatribuirLinha) manda sobre o emparelhamento
+        // automático — é o que corrige casos como "Caneca Stout" a ser apanhada
+        // por engano para dentro de "Caneca" só por partilharem a palavra.
+        const ov = r.overrides && r.overrides[faturaKey(l.nome)];
+        let item;
+        if (ov !== undefined) {
+            item = ov || null;   // override '' = item à parte, propositadamente sem par
+        } else {
+            item = porChave[faturaKey(l.nome)] || null;
+            if (!item) {
+                // Sem nome igual: escolhe o mais parecido, primeiro entre o que foi
+                // consumido e só depois no resto do menu
+                let best = null, bs = 0;
+                Object.keys(cons).forEach(it => { const s = faturaScore(it, l.nome); if (s > bs) { bs = s; best = it; } });
+                if (bs < 0.6) Object.keys(menu).forEach(it => { const s = faturaScore(it, l.nome); if (s > bs) { bs = s; best = it; } });
+                if (bs >= 0.6) item = best;
+            }
         }
         const key = item || ('~' + faturaKey(l.nome));
         const f = fat[key] || (fat[key] = { item, nome: item || l.nome, qtd: 0, total: 0, nomes: [] });
@@ -1899,6 +1913,10 @@ function faturaRenderRecon() {
     }
     _faturaRows = c.rows;
     const podeMexer = !modoReadOnly && podeEditarEventoAtual();
+    // Conta fechada: nada que mexa em ordens/total, mas ainda se pode sugerir o
+    // preço novo para o menu (referência futura) e corrigir o emparelhamento.
+    const podeSugerirPreco = modoReadOnly && podeEditarEventoAtual();
+    const podeReatribuir = podeEditarEventoAtual();
     // Já há fatura guardada: importar outra é substituí-la, e o botão diz isso
     if (btnImp) btnImp.innerHTML = '🔄 Ler outra fatura<span>substitui a que está guardada neste evento</span>';
 
@@ -1963,7 +1981,7 @@ function faturaRenderRecon() {
             const cl = x.du > 0 ? 'neg' : 'pos';
             det = x.qtdF + ' un · marcado €' + x.unitC.toFixed(2) + ' → fatura €' + x.unitF.toFixed(2)
                 + ' <span class="' + cl + '">(' + (x.du > 0 ? '+' : '−') + '€' + Math.abs(_frR2(x.totF - x.totC)).toFixed(2) + ')</span>';
-            if (podeMexer) chk = '<input type="checkbox" class="fr-chk" ' + (_faturaSemAplicar.has(x.item) ? '' : 'checked')
+            if (podeMexer || podeSugerirPreco) chk = '<input type="checkbox" class="fr-chk" ' + (_faturaSemAplicar.has(x.item) ? '' : 'checked')
                 + ' onchange="faturaTogglePreco(' + i + ')">';
         } else if (x.tipo === 'qtd') {
             const cl = x.dq > 0 ? 'neg' : 'pos';
@@ -1975,9 +1993,17 @@ function faturaRenderRecon() {
         } else {
             det = 'marcado: ' + x.qtdC + ' × €' + x.unitC.toFixed(2) + ' = €' + x.totC.toFixed(2) + ' · não aparece na fatura';
         }
-        // Nome que veio impresso, quando difere do artigo da app
+        // Nome(s) que vieram impressos, quando diferem do artigo da app. Com
+        // permissão, cada um vira um <select> — é o que deixa desfazer um
+        // emparelhamento errado (ex.: "Caneca Stout" apanhado para "Caneca").
         const alias = (x.nomesFatura || []).filter(n => faturaKey(n) !== faturaKey(x.nome));
-        const sub = alias.length ? '<div class="fr-det">na fatura: ' + _frEsc(alias.join(', ')) + '</div>' : '';
+        let sub = '';
+        if (alias.length) {
+            sub = podeReatribuir
+                ? '<div class="fr-det fr-reatr-lista">na fatura: ' + alias.map(n =>
+                    '<span class="fr-reatr-item">' + _frEsc(n) + ' ' + faturaOpcoesReatribuir(n) + '</span>').join(' · ') + '</div>'
+                : '<div class="fr-det">na fatura: ' + _frEsc(alias.join(', ')) + '</div>';
+        }
         return '<div class="fr-linha">' + chk
             + '<div class="fr-body"><div class="fr-nome">' + _frEsc(x.nome)
             + '<span class="fr-tag ' + x.tipo + '">' + tag[x.tipo] + '</span></div>'
@@ -1991,6 +2017,8 @@ function faturaRenderRecon() {
         if (c.nPreco) btns.push('<button onclick="faturaAplicarPrecos()">💶 Corrigir preços</button>');
         if (r.total != null) btns.push('<button class="fr-sec" onclick="faturaUsarTotal()">🧾 Usar total €' + r.total.toFixed(2) + '</button>');
         btns.push('<button class="fr-sec" onclick="faturaApagar()">🗑️ Apagar fatura</button>');
+    } else if (podeSugerirPreco && c.nPreco) {
+        btns.push('<button class="fr-sec" onclick="faturaAtualizarMenuPrecos()">📋 Atualizar preços no menu (não mexe no já fechado)</button>');
     }
 
     // Barra de resumo — fica sempre visível quando o evento tem fatura guardada.
@@ -2029,6 +2057,39 @@ function faturaTogglePreco(i) {
     else _faturaSemAplicar.add(x.item);
 }
 
+// Emparelhamento automático (faturaKey + faturaScore) por vezes junta linhas
+// que não são o mesmo artigo — ex.: "Caneca Stout" cai para dentro de "Caneca"
+// só por partilharem a palavra. Isto deixa corrigir à mão, por LINHA lida (não
+// por artigo da app): "automático" volta ao critério normal, "item à parte"
+// força a linha a nunca se juntar a nada, ou escolhe-se outro artigo do menu.
+// Guarda-se em estado.fatura.overrides (chave = faturaKey do nome lido) — fica
+// preso a ESTA leitura; importar outra fatura de raiz começa sem overrides.
+function faturaReatribuirLinha(nomeOriginal, valor) {
+    if (!podeEditarEventoAtual()) { mostrarMensagem('⚠️ Sem permissão para editar este evento', false); return; }
+    if (!estado.fatura) return;
+    const key = faturaKey(nomeOriginal);
+    if (!estado.fatura.overrides) estado.fatura.overrides = {};
+    if (valor === '__auto') delete estado.fatura.overrides[key];
+    else if (valor === '__none') estado.fatura.overrides[key] = '';
+    else estado.fatura.overrides[key] = valor;
+    salvarNoLocalStorage();
+    faturaRenderRecon();
+}
+
+// <select> com as opções de reatribuição para uma linha lida em concreto.
+function faturaOpcoesReatribuir(nomeOriginal) {
+    const key = faturaKey(nomeOriginal);
+    const overrides = estado.fatura && estado.fatura.overrides;
+    const temOverride = overrides && Object.prototype.hasOwnProperty.call(overrides, key);
+    const atual = temOverride ? (overrides[key] || '__none') : '__auto';
+    const itens = Object.keys(menu).sort((a, b) => a.localeCompare(b, 'pt'));
+    const opts = ['<option value="__auto"' + (atual === '__auto' ? ' selected' : '') + '>— automático —</option>',
+                  '<option value="__none"' + (atual === '__none' ? ' selected' : '') + '>é um item à parte</option>']
+        .concat(itens.map(it => '<option value="' + _frEsc(it) + '"' + (atual === it ? ' selected' : '') + '>' + _frEsc(it) + '</option>'));
+    return '<select class="fr-reatribuir" onchange="faturaReatribuirLinha(\'' + _frJsArg(nomeOriginal) + '\', this.value)">'
+        + opts.join('') + '</select>';
+}
+
 // Corrige o preço dos artigos escolhidos NESTE evento: menu do evento + todas as
 // ordens desse artigo. Não toca noutros eventos — o menu é guardado por evento.
 function faturaAplicarPrecos() {
@@ -2051,6 +2112,21 @@ function faturaAplicarPrecos() {
     atualizarPreco();
     if (document.getElementById('total-fatura').value) atualizarAjuste();
     mostrarMensagem('✓ ' + alvos.length + (alvos.length === 1 ? ' preço corrigido' : ' preços corrigidos') + ' neste evento', true);
+}
+
+// Versão para conta FECHADA: atualiza só o preço de referência no menu deste
+// evento, para a próxima vez que o vires — nunca mexe nas ordens já marcadas
+// nem no total fechado, por isso não desalinha nada do que já foi pago.
+function faturaAtualizarMenuPrecos() {
+    if (!podeEditarEventoAtual()) { mostrarMensagem('⚠️ Sem permissão para editar este evento', false); return; }
+    const alvos = _faturaRows.filter(x => x.tipo === 'preco' && x.item && !_faturaSemAplicar.has(x.item));
+    if (!alvos.length) { mostrarMensagem('⚠️ Nenhum preço selecionado', false); return; }
+    alvos.forEach(x => { menu[x.item] = x.unitF; });
+    salvarNoLocalStorage();
+    renderDropdownItens();
+    renderConfigMenu();
+    mostrarMensagem('✓ ' + alvos.length + (alvos.length === 1 ? ' preço atualizado' : ' preços atualizados')
+        + ' no menu — as ordens e o total já fechado não foram tocados', true);
 }
 
 // Artigo que está na fatura mas ninguém marcou: acrescenta-o ao menu com o preço
