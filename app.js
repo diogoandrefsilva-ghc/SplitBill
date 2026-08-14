@@ -1688,6 +1688,10 @@ async function faturaChosen(inp) {
         mostrarMensagem(rede
             ? '❌ A leitura demorou demasiado ou falhou a ligação. Tenta uma foto mais nítida ou volta a tentar.'
             : '❌ Não consegui ler a fatura: ' + m, false);
+        // O botão fica lá em baixo, no meio da página — sem isto o erro fica
+        // lá em cima fora do ecrã e passa despercebido (parece "não fez nada").
+        const msgDiv = document.getElementById('mensagem');
+        if (msgDiv) msgDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } finally {
         if (btn) { btn.disabled = false; btn.innerHTML = label; }
     }
