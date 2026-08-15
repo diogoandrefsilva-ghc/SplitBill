@@ -2735,7 +2735,7 @@ function renderContasSaldos(lista, resumo) {
                     return (Number.isInteger(qtd) ? qtd : qtd.toFixed(1)) + '\u00d7 ' + item;
                 }).join(', ');
             }
-            const hasToken = podeEditarPagamentoDoEvento(e.eventoId);
+            const hasToken = podeRegistarDiretamente(pessoa, e.eventoId);
             const pessoaEsc = pessoa.replace(/'/g, "\\'");
             let acaoHtml = '';
             if (!hasToken && ehEu(pessoa) && PAGAMENTOS_PENDENTE_COL) {
@@ -3191,7 +3191,7 @@ function renderPgtoEventoSelect() {
         return dB.localeCompare(dA);
     });
     eventosOrdenados.forEach(e => {
-        if (!podeEditarPagamentoDoEvento(e.eventoId)) return;
+        if (!podeRegistarDiretamente(pessoa, e.eventoId)) return;
         const ev = historico.find(h => h.id === e.eventoId);
         const dataStr = ev && ev.data ? ' · ' + ev.data : '';
         const opt = document.createElement('option');
@@ -3363,12 +3363,14 @@ function mostrarPgtoMsg(msg, ok) {
 }
 
 /* ── PEDIDOS DE PAGAMENTO (declarados pelo utilizador, por confirmar) ──
-   Um utilizador sem permissão para registar pagamentos (não é admin nem
-   substituto) pode dizer "já paguei" a uma dívida sua — pendente ou já
-   prescrita. Isso cria um pagamento tipo='pendente' que NÃO abate a dívida
-   (ver calcularSaldos) até o admin confirmar (vira tipo='evento') ou rejeitar
-   (é removido). Precisa da migração db/pagamentos-pendentes.sql — sem ela
-   PAGAMENTOS_PENDENTE_COL fica false e os controlos escondem-se. */
+   Quem deve uma dívida sua pode dizer "já paguei" — pendente ou já prescrita
+   — mesmo sendo admin ou substituto do evento (ver podeRegistarDiretamente):
+   ninguém confirma pagamentos a si mesmo só por ter permissões de gestão.
+   Isso cria um pagamento tipo='pendente' que NÃO abate a dívida (ver
+   calcularSaldos) até quem pagou a conta (ou o admin, como alternativa)
+   confirmar (vira tipo='evento') ou rejeitar (é removido). Precisa da
+   migração db/pagamentos-pendentes.sql — sem ela PAGAMENTOS_PENDENTE_COL
+   fica false e os controlos escondem-se (volta ao registo direto). */
 
 function refrescarInicioSeVisivel() {
     try { if (typeof renderInicio === 'function') renderInicio(); } catch(e) {}
@@ -4108,6 +4110,13 @@ function podeEditarPagamentoDoEvento(eventoId) {
 function ehPagadorDoEvento(eventoId) {
     const ev = historico.find(h => String(h.id) === String(eventoId));
     return !!(ev && ev.pagador && ehEu(ev.pagador));
+}
+// Pode marcar esta dívida como paga diretamente (sem pedido pendente)? Ter
+// permissão de admin/substituto no evento não chega quando a dívida é a
+// própria — mesmo o admin tem de pedir "Já paguei?" e deixar quem pagou a
+// conta confirmar, para não se auto-confirmar pagamentos a si mesmo.
+function podeRegistarDiretamente(pessoa, eventoId) {
+    return podeEditarPagamentoDoEvento(eventoId) && !(ehEu(pessoa) && PAGAMENTOS_PENDENTE_COL);
 }
 // Pode confirmar/rejeitar pedidos de pagamento deste evento? Admin e
 // substituto (via podeEditarPagamentoDoEvento) sempre; o pagador só para os

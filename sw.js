@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v59';
+const CACHE_VERSION = 'v60';
 const CACHE_NAME = `splitbill-${CACHE_VERSION}`;
 
 // Assets to cache on install
