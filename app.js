@@ -768,6 +768,16 @@ function mostrarModal(opts) {
         cancelBtn.textContent = opts.cancelText || 'Cancelar';
         cancelBtn.onclick = () => { fecharModalComResultado(false); };
         actions.appendChild(cancelBtn);
+        // Terceira escolha opcional (ex.: "Corrigir só no menu"), a par de
+        // Cancelar/Confirmar — resolve com a string 'extra', sem mexer no
+        // contrato true/false que os outros chamadores já usam.
+        if (opts.extraText) {
+            const extraBtn = document.createElement('button');
+            extraBtn.className = 'modal-cancel';
+            extraBtn.textContent = opts.extraText;
+            extraBtn.onclick = () => { fecharModalComResultado('extra'); };
+            actions.appendChild(extraBtn);
+        }
         const confirmBtn = document.createElement('button');
         confirmBtn.className = opts.danger ? 'modal-danger' : 'modal-confirm';
         confirmBtn.textContent = opts.confirmText || 'Confirmar';
@@ -1608,7 +1618,6 @@ function aplicarColapsosSecoes() {
    é volátil — isso é só ecrã. */
 let _faturaPainel = false;  // detalhe expandido? (UI, não se guarda)
 let _faturaRows = [];       // linhas da conferência, recalculadas a cada render
-let _faturaSemAplicar = new Set();   // artigos com a correção de preço desmarcada
 
 const _frR2 = v => Math.round(v * 100) / 100;
 function _frEsc(s) {
@@ -1650,9 +1659,10 @@ function faturaScore(a, b) {
 function faturaPick() {
     if (!eventoAtualId) { mostrarMensagem('⚠️ Cria ou abre um evento primeiro', false); return; }
     if (!podeEditarEventoAtual()) { mostrarMensagem('⚠️ Sem permissão para editar este evento', false); return; }
-    // Conta fechada não bloqueia a LEITURA — só as correções (faturaAplicarPrecos/
-    // faturaMarcarExtra/faturaUsarTotal continuam a recusar-se em modoReadOnly).
-    // É o caso de quem fechou a conta pelo total antes de a leitura por foto
+    // Conta fechada não bloqueia a LEITURA — só as correções que mexem em ordens
+    // (faturaMarcarExtra/faturaUsarTotal continuam a recusar-se em modoReadOnly;
+    // faturaCorrigirPrecoItem em conta fechada só deixa corrigir no menu). É o
+    // caso de quem fechou a conta pelo total antes de a leitura por foto
     // funcionar e agora só quer ver o detalhe artigo a artigo, sem mexer em nada
     // do que já foi pago.
     if (!_sbSession) { mostrarMensagem('⚠️ Inicia sessão para usar a leitura da fatura', false); return; }
@@ -1780,7 +1790,6 @@ function faturaAplicar(d) {
         total, linhas, semPreco,
         lidaEm: new Date().toISOString()
     };
-    _faturaSemAplicar = new Set();
     _faturaPainel = true;
     salvarNoLocalStorage();
     faturaRenderRecon();
@@ -1805,7 +1814,6 @@ async function faturaApagar() {
     if (!ok) return;
     estado.fatura = null;
     _faturaPainel = false;
-    _faturaSemAplicar = new Set();
     salvarNoLocalStorage();
     faturaRenderRecon();
     mostrarMensagem('✓ Fatura apagada', true);
@@ -1918,9 +1926,10 @@ function faturaRenderRecon() {
     }
     _faturaRows = c.rows;
     const podeMexer = !modoReadOnly && podeEditarEventoAtual();
-    // Conta fechada: nada que mexa em ordens/total, mas ainda se pode sugerir o
-    // preço novo para o menu (referência futura) e corrigir o emparelhamento.
-    const podeSugerirPreco = modoReadOnly && podeEditarEventoAtual();
+    // Corrigir preço (🔄 por linha) e reatribuir o emparelhamento continuam
+    // disponíveis com a conta fechada — cada um decide por si como aplicar
+    // sem mexer em ordens/total já fechados (faturaCorrigirPrecoItem trata
+    // disso com o popup; a reatribuição nem sequer toca em preços/ordens).
     const podeReatribuir = podeEditarEventoAtual();
     // Já há fatura guardada: importar outra é substituí-la, e o botão diz isso
     if (btnImp) btnImp.innerHTML = '🔄 Ler outra fatura<span>substitui a que está guardada neste evento</span>';
@@ -1986,8 +1995,7 @@ function faturaRenderRecon() {
             const cl = x.du > 0 ? 'neg' : 'pos';
             det = x.qtdF + ' un · marcado €' + x.unitC.toFixed(2) + ' → fatura €' + x.unitF.toFixed(2)
                 + ' <span class="' + cl + '">(' + (x.du > 0 ? '+' : '−') + '€' + Math.abs(_frR2(x.totF - x.totC)).toFixed(2) + ')</span>';
-            if (podeMexer || podeSugerirPreco) chk = '<input type="checkbox" class="fr-chk" ' + (_faturaSemAplicar.has(x.item) ? '' : 'checked')
-                + ' onchange="faturaTogglePreco(' + i + ')">';
+            if (podeReatribuir) acao = '<button class="fr-acao" onclick="faturaCorrigirPrecoItem(' + i + ')" title="Corrigir preço">🔄</button>';
         } else if (x.tipo === 'qtd') {
             const cl = x.dq > 0 ? 'neg' : 'pos';
             det = 'marcado ' + x.qtdC + ' × €' + x.unitC.toFixed(2) + ' · fatura ' + x.qtdF + ' × €' + x.unitF.toFixed(2)
@@ -2017,13 +2025,11 @@ function faturaRenderRecon() {
 
     // Com a conta fechada (ou sem permissão) a fatura vê-se na mesma — é para
     // isso que fica guardada — mas sem botões que só iam recusar-se a agir.
+    // Correções de preço já não vivem aqui: são o 🔄 por linha (faturaCorrigirPrecoItem).
     const btns = [];
     if (podeMexer) {
-        if (c.nPreco) btns.push('<button onclick="faturaAplicarPrecos()">💶 Corrigir preços</button>');
         if (r.total != null) btns.push('<button class="fr-sec" onclick="faturaUsarTotal()">🧾 Usar total €' + r.total.toFixed(2) + '</button>');
         btns.push('<button class="fr-sec" onclick="faturaApagar()">🗑️ Apagar fatura</button>');
-    } else if (podeSugerirPreco && c.nPreco) {
-        btns.push('<button class="fr-sec" onclick="faturaAtualizarMenuPrecos()">📋 Atualizar preços no menu (não mexe no já fechado)</button>');
     }
 
     // Barra de resumo — fica sempre visível quando o evento tem fatura guardada.
@@ -2053,13 +2059,6 @@ function _frDataCurta(iso) {
     const d = new Date(iso);
     if (isNaN(d.getTime())) return '';
     return d.toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-}
-
-function faturaTogglePreco(i) {
-    const x = _faturaRows[i];
-    if (!x || !x.item) return;
-    if (_faturaSemAplicar.has(x.item)) _faturaSemAplicar.delete(x.item);
-    else _faturaSemAplicar.add(x.item);
 }
 
 // Emparelhamento automático (faturaKey + faturaScore) por vezes junta linhas
@@ -2095,43 +2094,52 @@ function faturaOpcoesReatribuir(nomeOriginal) {
         + opts.join('') + '</select>';
 }
 
-// Corrige o preço dos artigos escolhidos NESTE evento: menu do evento + todas as
-// ordens desse artigo. Não toca noutros eventos — o menu é guardado por evento.
-function faturaAplicarPrecos() {
+// Botão 🔄 de uma linha com preço diferente: popup a perguntar ONDE corrigir.
+// "Neste evento" só se oferece com a conta aberta (atualiza ordens + total já
+// lançados); "Só no menu" fica sempre disponível e nunca mexe em ordens nem
+// no total — é só o preço de referência para a próxima vez que abrires o
+// artigo. Em conta fechada a única opção sensata é logo essa.
+async function faturaCorrigirPrecoItem(i) {
+    const x = _faturaRows[i];
+    if (!x || x.tipo !== 'preco' || !x.item) return;
     if (!podeEditarEventoAtual()) { mostrarMensagem('⚠️ Sem permissão para editar este evento', false); return; }
-    if (modoReadOnly) { mostrarMensagem('⚠️ Conta fechada — reabre-a primeiro', false); return; }
-    const alvos = _faturaRows.filter(x => x.tipo === 'preco' && x.item && !_faturaSemAplicar.has(x.item));
-    if (!alvos.length) { mostrarMensagem('⚠️ Nenhum preço selecionado', false); return; }
-    alvos.forEach(x => {
-        menu[x.item] = x.unitF;
+    const podeNesteEvento = !modoReadOnly;
+    const msg = 'A fatura mostra <b>' + _frEsc(x.item) + '</b> a €' + x.unitF.toFixed(2)
+        + ', mas está marcado a €' + x.unitC.toFixed(2) + '.<br><br>'
+        + (podeNesteEvento
+            ? 'Corrigir <b>neste evento</b> atualiza as ordens já lançadas e o total. Corrigir <b>só no menu</b> fica como referência para a próxima vez, sem mexer no que já está marcado aqui.'
+            : 'A conta está fechada — só dá para atualizar o preço de referência no menu, para a próxima vez. As ordens e o total já fechado não são tocados.');
+    const res = await mostrarModal({
+        icon: '💶',
+        title: 'Corrigir preço — ' + x.item,
+        msg,
+        cancelText: 'Cancelar',
+        extraText: podeNesteEvento ? 'Só no menu' : undefined,
+        confirmText: podeNesteEvento ? 'Neste evento' : 'Corrigir no menu'
+    });
+    if (res === false) return;
+    const soMenu = res === 'extra' || !podeNesteEvento;
+    menu[x.item] = x.unitF;
+    if (!soMenu) {
         estado.ordens.forEach(o => {
             if (o.item !== x.item) return;
             o.precoUnitario = x.unitF;
             o.precoTotal = _frR2(x.unitF * o.quantidade);
         });
-    });
+    }
     salvarNoLocalStorage();
     renderDropdownItens();
     renderConfigMenu();
-    atualizarUI();   // refaz também a conferência com os preços novos
-    atualizarPreco();
-    if (document.getElementById('total-fatura').value) atualizarAjuste();
-    mostrarMensagem('✓ ' + alvos.length + (alvos.length === 1 ? ' preço corrigido' : ' preços corrigidos') + ' neste evento', true);
-}
-
-// Versão para conta FECHADA: atualiza só o preço de referência no menu deste
-// evento, para a próxima vez que o vires — nunca mexe nas ordens já marcadas
-// nem no total fechado, por isso não desalinha nada do que já foi pago.
-function faturaAtualizarMenuPrecos() {
-    if (!podeEditarEventoAtual()) { mostrarMensagem('⚠️ Sem permissão para editar este evento', false); return; }
-    const alvos = _faturaRows.filter(x => x.tipo === 'preco' && x.item && !_faturaSemAplicar.has(x.item));
-    if (!alvos.length) { mostrarMensagem('⚠️ Nenhum preço selecionado', false); return; }
-    alvos.forEach(x => { menu[x.item] = x.unitF; });
-    salvarNoLocalStorage();
-    renderDropdownItens();
-    renderConfigMenu();
-    mostrarMensagem('✓ ' + alvos.length + (alvos.length === 1 ? ' preço atualizado' : ' preços atualizados')
-        + ' no menu — as ordens e o total já fechado não foram tocados', true);
+    if (!soMenu) {
+        atualizarUI();   // refaz também a conferência com o preço novo
+        atualizarPreco();
+        if (document.getElementById('total-fatura').value) atualizarAjuste();
+    } else {
+        faturaRenderRecon();
+    }
+    mostrarMensagem(soMenu
+        ? '✓ Preço de "' + x.item + '" atualizado no menu — as ordens e o total não foram tocados'
+        : '✓ Preço de "' + x.item + '" corrigido neste evento', true);
 }
 
 // Artigo que está na fatura mas ninguém marcou: acrescenta-o ao menu com o preço
@@ -2176,7 +2184,6 @@ function faturaTogglePainel() {
 function faturaFecharRecon() {
     _faturaPainel = false;
     _faturaRows = [];
-    _faturaSemAplicar = new Set();
     faturaRenderRecon();
 }
 

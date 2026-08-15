@@ -1557,7 +1557,6 @@ html,body{touch-action:pan-x pan-y}
             border-bottom: 1px dashed #E0DAC4;
         }
         .fr-linha:first-of-type { border-top: 1px dashed #E0DAC4; }
-        .fr-chk { margin-top: 3px; flex: 0 0 auto; width: 15px; height: 15px; accent-color: var(--dourado); }
         .fr-chk-off { flex: 0 0 15px; }
         .fr-body { flex: 1; min-width: 0; }
         .fr-nome { font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
