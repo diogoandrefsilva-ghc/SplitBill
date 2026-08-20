@@ -2363,7 +2363,14 @@ async function definirSubstituto() {
     const sel = document.getElementById('subst-select');
     const email = sel ? (sel.value || null) : null;
     ev.substituto = email;
-    salvarHistoricoLocal();
+    // O substituto passa a pagador por defeito deste evento (continua
+    // alterável no seletor de pagador); sem substituto, volta a ser o admin.
+    const novoPagador = email ? amigosDoEmail(email)[0] : meusAmigos()[0];
+    if (novoPagador) {
+        estado.pagador = novoPagador;
+        renderPagadorSelect();
+    }
+    salvarNoLocalStorage();
     await sbDefinirSubstituto(ev.id, email);
     renderSubstitutoBox(ev);
     mostrarMensagem(email ? ('✓ Substituto definido: ' + email) : '✓ Substituto removido', true);
@@ -4131,11 +4138,15 @@ function ehEu(amigo) {
     const e = emailAtual();
     return !!(e && amigoUsers[amigo] && amigoUsers[amigo].toLowerCase() === e);
 }
-// Todos os nomes de amigo associados à conta atual (próprio + eventuais nomes extra mapeados ao mesmo email)
-function meusAmigos() {
-    const e = emailAtual();
-    if (!e) return [];
+// Todos os nomes de amigo associados a um email (próprio + eventuais nomes extra mapeados ao mesmo email)
+function amigosDoEmail(email) {
+    if (!email) return [];
+    const e = email.toLowerCase();
     return Object.keys(amigoUsers).filter(a => (amigoUsers[a] || '').toLowerCase() === e);
+}
+// Todos os nomes de amigo associados à conta atual
+function meusAmigos() {
+    return amigosDoEmail(emailAtual());
 }
 // Aviso quando um não-admin ainda não tem nome associado (senão veria tudo vazio sem perceber porquê)
 function _avisoSemAmigo() {
