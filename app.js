@@ -1156,6 +1156,36 @@ function pdfCabecalho(totalMesa, fatura, racio, diff, pct, sinal, corAjuste) {
     </div>`;
 }
 
+// Detalhe da fatura lida (Gemini), para anexar aos PDFs — só aparece se
+// houver uma fatura guardada no evento (estado.fatura) com linhas.
+function pdfDetalheFatura() {
+    const f = estado.fatura;
+    if (!f || !f.linhas || !f.linhas.length) return '';
+    const linhas = f.linhas.map((l, i) => `
+        <tr style="background:${i % 2 === 0 ? '#fff' : '#F7F8F4'}">
+            <td style="padding:8px 10px;font-weight:600;">${l.nome}</td>
+            <td style="padding:8px 10px;text-align:center;">${l.qtd}x</td>
+            <td style="padding:8px 10px;text-align:right;color:#4A534E;">€${l.unit.toFixed(2)}</td>
+            <td style="padding:8px 10px;text-align:right;font-weight:700;color:#B8911F;">€${l.total.toFixed(2)}</td>
+        </tr>`).join('');
+    const totalLinhas = f.linhas.reduce((s, l) => s + l.total, 0);
+    return `<div style="font-size:12px;font-weight:700;color:#0B3B2B;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;margin-top:24px;">🧾 Detalhe da fatura${f.restaurante ? ' — ' + f.restaurante : ''}</div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+            <thead><tr style="background:#B8911F;color:white;">
+                <th style="padding:9px 10px;text-align:left;">Artigo</th>
+                <th style="padding:9px 10px;text-align:center;">Qtd</th>
+                <th style="padding:9px 10px;text-align:right;">Preço unit.</th>
+                <th style="padding:9px 10px;text-align:right;">Total</th>
+            </tr></thead>
+            <tbody>${linhas}</tbody>
+            <tfoot><tr style="background:#EFF1EC;">
+                <td colspan="3" style="padding:10px;font-weight:700;">Total das linhas</td>
+                <td style="padding:10px;text-align:right;font-weight:800;color:#B8911F;">€${totalLinhas.toFixed(2)}</td>
+            </tr></tfoot>
+        </table>
+        ${f.data ? `<div style="font-size:11px;color:#8A938D;margin-top:6px;">Data na fatura: ${f.data}</div>` : ''}`;
+}
+
 function abrirJanelaPDF(html, titulo) {
     const docHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${titulo}</title>
         <style>
@@ -1266,6 +1296,7 @@ function exportarPDFConta() {
             </tr></thead>
             <tbody>${linhasItens}</tbody>
         </table>
+        ${pdfDetalheFatura()}
     </div>`;
 
     abrirJanelaPDF(html, 'conta_restaurante.pdf');
@@ -1361,6 +1392,7 @@ function exportarPDFDivisao() {
             <thead>${cabPessoas}</thead>
             <tbody>${linhasPessoas}</tbody>
         </table>
+        ${pdfDetalheFatura()}
     </div>`;
 
     abrirJanelaPDF(html, 'divisao_contas.pdf');
