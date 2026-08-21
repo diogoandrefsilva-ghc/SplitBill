@@ -1181,7 +1181,20 @@ if ('serviceWorker' in navigator) {
   };
   window.sbiHistorico = function(){
     var fechados = getHist().filter(function(ev){ return !!ev.totalFatura; });
-    if (fechados.length && typeof carregarEvento==='function') carregarEvento(fechados[fechados.length-1]);
+    if (fechados.length && typeof carregarEvento==='function') {
+      carregarEvento(fechados[fechados.length-1]);
+      // Mesma sequência de refresco do navegarHistorico()/sbiAbrirEvento() — sem
+      // isto o ecrã ficava com os amigos e a lista de ordens do evento anterior
+      // (o jogo em aberto), só o total é que atualizava (é escrito diretamente
+      // no input dentro de carregarEvento()).
+      if (typeof atualizarReadOnly==='function') atualizarReadOnly();
+      if (typeof renderDropdownItens==='function') renderDropdownItens();
+      if (typeof renderAmigosBotoes==='function') renderAmigosBotoes();
+      if (typeof renderOfertaDropdowns==='function') renderOfertaDropdowns();
+      if (typeof renderOfertaAmigos==='function') renderOfertaAmigos();
+      if (typeof renderPagadorSelect==='function') renderPagadorSelect();
+      if (typeof atualizarUI==='function') atualizarUI();
+    }
     if (typeof mudarPagina==='function') mudarPagina('eventos');
     var p = document.getElementById('historico-panel');
     if (p && p.classList.contains('open') && typeof toggleHistoricoPanel==='function') toggleHistoricoPanel();
