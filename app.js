@@ -1159,31 +1159,44 @@ function pdfCabecalho(totalMesa, fatura, racio, diff, pct, sinal, corAjuste) {
 // Detalhe da fatura lida (Gemini), para anexar aos PDFs — só aparece se
 // houver uma fatura guardada no evento (estado.fatura) com linhas. Usa a
 // conferência (faturaConferir) em vez das linhas cruas: dá um artigo por
-// linha (agregado, tal como no ecrã) e permite anotar divergências de
-// quantidade/preço face ao que foi marcado. 'falta' (marcado mas ausente
-// da fatura) fica de fora — não é conteúdo da fatura.
+// linha (agregado, tal como no ecrã) e anota as divergências face ao que
+// foi marcado — unidades a mais/menos e preço unitário diferente.
 function pdfDetalheFatura() {
     const f = estado.fatura;
     if (!f || !f.linhas || !f.linhas.length) return '';
     const c = faturaConferir();
-    const rows = c ? c.rows.filter(x => x.tipo !== 'falta') : [];
-    if (!rows.length) return '';
+    if (!c || !c.rows.length) return '';
+    // Artigos marcados que não vêm na fatura ('falta') vão para o fim: leem-se
+    // depois de tudo o que está impresso no talão, com quantidade e preço a zero.
+    const rows = c.rows.filter(x => x.tipo !== 'falta').concat(c.rows.filter(x => x.tipo === 'falta'));
+    const delta = (v, txt) => ` <span style="font-size:10px;font-weight:700;color:${v > 0 ? '#B3402F' : '#0E7A4F'};">(${v > 0 ? '+' : '−'}${txt})</span>`;
     const linhas = rows.map((x, i) => {
-        const qtdDelta = x.tipo === 'qtd'
-            ? ` <span style="font-size:10px;font-weight:700;color:${x.dq > 0 ? '#B3402F' : '#0E7A4F'};">(${x.dq > 0 ? '+' : '−'}${Math.abs(x.dq)})</span>`
-            : '';
-        const precoDelta = x.tipo === 'preco'
-            ? ` <span style="font-size:10px;font-weight:700;color:${x.du > 0 ? '#B3402F' : '#0E7A4F'};">(${x.du > 0 ? '+' : '−'}€${Math.abs(x.du).toFixed(2)})</span>`
+        const naFatura = x.tipo !== 'falta';
+        const qtdF = naFatura ? x.qtdF : 0;
+        const unitF = naFatura ? x.unitF : 0;
+        const totF = naFatura ? x.totF : 0;
+        // Unidades a mais/menos: 'extra' não tem consumo marcado (tudo o que
+        // vem na fatura está a mais) e 'falta' não vem na fatura (tudo o que
+        // foi marcado está a menos).
+        let dq = 0;
+        if (x.tipo === 'qtd') dq = x.dq;
+        else if (x.tipo === 'extra') dq = x.qtdF;
+        else if (x.tipo === 'falta') dq = -x.qtdC;
+        // Diferença de preço unitário — também nas linhas onde é a quantidade
+        // que salta à vista, se o preço divergir na mesma.
+        const du = (naFatura && x.unitC != null) ? _frR2(x.unitF - x.unitC) : 0;
+        const nota = x.tipo === 'extra' ? 'ninguém marcou este artigo'
+            : x.tipo === 'falta' ? 'marcado ' + x.qtdC + ' × €' + x.unitC.toFixed(2) + ' · não vem na fatura'
             : '';
         return `
         <tr style="background:${i % 2 === 0 ? '#fff' : '#F7F8F4'}">
-            <td style="padding:8px 10px;font-weight:600;">${x.nome}</td>
-            <td style="padding:8px 10px;text-align:center;">${x.qtdF}x${qtdDelta}</td>
-            <td style="padding:8px 10px;text-align:right;color:#4A534E;">€${x.unitF.toFixed(2)}${precoDelta}</td>
-            <td style="padding:8px 10px;text-align:right;font-weight:700;color:#B8911F;">€${x.totF.toFixed(2)}</td>
+            <td style="padding:8px 10px;font-weight:600;">${_frEsc(x.nome)}${nota ? `<div style="font-size:10px;font-weight:400;color:#8A938D;margin-top:2px;">${nota}</div>` : ''}</td>
+            <td style="padding:8px 10px;text-align:center;vertical-align:top;">${qtdF}x${dq ? delta(dq, Math.abs(dq)) : ''}</td>
+            <td style="padding:8px 10px;text-align:right;vertical-align:top;color:#4A534E;">€${unitF.toFixed(2)}${Math.abs(du) >= 0.01 ? `<div style="margin-top:2px;">${delta(du, '€' + Math.abs(du).toFixed(2))}</div>` : ''}</td>
+            <td style="padding:8px 10px;text-align:right;vertical-align:top;font-weight:700;color:#B8911F;">€${totF.toFixed(2)}</td>
         </tr>`;
     }).join('');
-    return `<div style="font-size:12px;font-weight:700;color:#0B3B2B;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;margin-top:24px;">🧾 Detalhe da fatura${f.restaurante ? ' — ' + f.restaurante : ''}</div>
+    return `<div style="font-size:12px;font-weight:700;color:#0B3B2B;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;margin-top:24px;">🧾 Detalhe da fatura${f.restaurante ? ' — ' + _frEsc(f.restaurante) : ''}</div>
         <table style="width:100%;border-collapse:collapse;font-size:13px;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);">
             <thead><tr style="background:#B8911F;color:white;">
                 <th style="padding:9px 10px;text-align:left;">Artigo</th>
