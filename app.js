@@ -1157,18 +1157,32 @@ function pdfCabecalho(totalMesa, fatura, racio, diff, pct, sinal, corAjuste) {
 }
 
 // Detalhe da fatura lida (Gemini), para anexar aos PDFs — só aparece se
-// houver uma fatura guardada no evento (estado.fatura) com linhas.
+// houver uma fatura guardada no evento (estado.fatura) com linhas. Usa a
+// conferência (faturaConferir) em vez das linhas cruas: dá um artigo por
+// linha (agregado, tal como no ecrã) e permite anotar divergências de
+// quantidade/preço face ao que foi marcado. 'falta' (marcado mas ausente
+// da fatura) fica de fora — não é conteúdo da fatura.
 function pdfDetalheFatura() {
     const f = estado.fatura;
     if (!f || !f.linhas || !f.linhas.length) return '';
-    const linhas = f.linhas.map((l, i) => `
+    const c = faturaConferir();
+    const rows = c ? c.rows.filter(x => x.tipo !== 'falta') : [];
+    if (!rows.length) return '';
+    const linhas = rows.map((x, i) => {
+        const qtdDelta = x.tipo === 'qtd'
+            ? ` <span style="font-size:10px;font-weight:700;color:${x.dq > 0 ? '#B3402F' : '#0E7A4F'};">(${x.dq > 0 ? '+' : '−'}${Math.abs(x.dq)})</span>`
+            : '';
+        const precoDelta = x.tipo === 'preco'
+            ? ` <span style="font-size:10px;font-weight:700;color:${x.du > 0 ? '#B3402F' : '#0E7A4F'};">(${x.du > 0 ? '+' : '−'}€${Math.abs(x.du).toFixed(2)})</span>`
+            : '';
+        return `
         <tr style="background:${i % 2 === 0 ? '#fff' : '#F7F8F4'}">
-            <td style="padding:8px 10px;font-weight:600;">${l.nome}</td>
-            <td style="padding:8px 10px;text-align:center;">${l.qtd}x</td>
-            <td style="padding:8px 10px;text-align:right;color:#4A534E;">€${l.unit.toFixed(2)}</td>
-            <td style="padding:8px 10px;text-align:right;font-weight:700;color:#B8911F;">€${l.total.toFixed(2)}</td>
-        </tr>`).join('');
-    const totalLinhas = f.linhas.reduce((s, l) => s + l.total, 0);
+            <td style="padding:8px 10px;font-weight:600;">${x.nome}</td>
+            <td style="padding:8px 10px;text-align:center;">${x.qtdF}x${qtdDelta}</td>
+            <td style="padding:8px 10px;text-align:right;color:#4A534E;">€${x.unitF.toFixed(2)}${precoDelta}</td>
+            <td style="padding:8px 10px;text-align:right;font-weight:700;color:#B8911F;">€${x.totF.toFixed(2)}</td>
+        </tr>`;
+    }).join('');
     return `<div style="font-size:12px;font-weight:700;color:#0B3B2B;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;margin-top:24px;">🧾 Detalhe da fatura${f.restaurante ? ' — ' + f.restaurante : ''}</div>
         <table style="width:100%;border-collapse:collapse;font-size:13px;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);">
             <thead><tr style="background:#B8911F;color:white;">
@@ -1180,7 +1194,7 @@ function pdfDetalheFatura() {
             <tbody>${linhas}</tbody>
             <tfoot><tr style="background:#EFF1EC;">
                 <td colspan="3" style="padding:10px;font-weight:700;">Total das linhas</td>
-                <td style="padding:10px;text-align:right;font-weight:800;color:#B8911F;">€${totalLinhas.toFixed(2)}</td>
+                <td style="padding:10px;text-align:right;font-weight:800;color:#B8911F;">€${c.totalLinhas.toFixed(2)}</td>
             </tr></tfoot>
         </table>
         ${f.data ? `<div style="font-size:11px;color:#8A938D;margin-top:6px;">Data na fatura: ${f.data}</div>` : ''}`;
