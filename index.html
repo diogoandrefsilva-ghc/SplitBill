@@ -111,6 +111,7 @@ window.sbEsconderSplash = function(){
         </div>
         <div style="padding:0 16px 16px;border-top:1px solid #DEE3DD;padding-top:14px;">
             <button onclick="abrirEquivalencias()" style="width:100%;padding:11px;background:#0B3B2B;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:10px;">👥 Equivalências amigo ↔ conta</button>
+            <button onclick="abrirConvocados()" style="width:100%;padding:11px;background:#0B3B2B;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:10px;">📋 Convocados por defeito</button>
             <button onclick="exportarJSON()" style="width:100%;padding:11px;background:#fff;color:#0E7A4F;border:1.5px solid #0E7A4F;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;">💾 Descarregar backup (JSON)</button>
             <p style="font-size:11px;color:#7C8782;text-align:center;margin:8px 0 14px;">O plano gratuito do Supabase não faz backups automáticos.</p>
             <button onclick="sbDiagnostico()" style="width:100%;padding:11px;background:#fff;color:#0B3B2B;border:1.5px solid #C8D0C8;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;">🩺 Diagnóstico da BD</button>
@@ -133,6 +134,28 @@ window.sbEsconderSplash = function(){
         </div>
         <p style="font-size:12px;color:#5B6661;margin:0;padding:12px 16px 0;">Associa cada amigo da divisão de contas à conta de utilizador (email) correspondente. Só o admin pode alterar.</p>
         <div id="equiv-lista" style="padding:14px 16px;overflow-y:auto;"></div>
+    </div>
+</div>
+
+<!-- ═══ PAINEL CONVOCADOS POR DEFEITO — só admin ═══ -->
+<div id="page-convocados" style="display:none;position:fixed;inset:0;background:rgba(11,59,43,0.45);z-index:9997;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)fecharConvocados()">
+    <div style="background:#EFF1EC;width:100%;max-width:520px;max-height:85vh;border-radius:16px 16px 0 0;display:flex;flex-direction:column;overflow:hidden;">
+        <div style="background:#0B3B2B;color:#fff;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:18px;">📋</span>
+                <h2 style="font-size:16px;font-weight:700;margin:0;">Convocados por defeito</h2>
+            </div>
+            <button onclick="fecharConvocados()" aria-label="Fechar" style="background:rgba(255,255,255,0.12);border:none;color:#fff;border-radius:50%;width:34px;height:34px;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;-webkit-tap-highlight-color:transparent;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
+        </div>
+        <p style="font-size:12px;color:#5B6661;margin:0;padding:12px 16px 0;line-height:1.45;">Quem entra por omissão num evento novo. Podes sempre acrescentar ou tirar gente no próprio evento — isto é só o ponto de partida.</p>
+        <div id="conv-lista" style="padding:12px 16px 4px;overflow-y:auto;flex:1;min-height:0;"></div>
+        <div style="padding:10px 16px 16px;border-top:1px solid #DEE3DD;flex-shrink:0;background:#EFF1EC;">
+            <div style="display:flex;gap:8px;margin-bottom:10px;">
+                <input type="text" id="conv-novo" placeholder="Acrescentar outro nome" autocomplete="off" style="flex:1;min-width:0;font-size:14px;" onkeydown="if(event.key==='Enter'){event.preventDefault();convAdicionar();}">
+                <button onclick="convAdicionar()" style="flex:0 0 auto;padding:10px 14px;background:#fff;color:#0E7A4F;border:1.5px solid #0E7A4F;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;">Juntar</button>
+            </div>
+            <button id="conv-guardar" onclick="convGuardar()" style="width:100%;padding:11px;background:#0E7A4F;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;">Guardar</button>
+        </div>
     </div>
 </div>
 
@@ -1140,7 +1163,9 @@ if ('serviceWorker' in navigator) {
   // Quantos jogos futuros ficam à vista antes de colapsar o resto. Com o
   // calendário da época inteira criado de uma vez, mostrar todos enchia o ecrã
   // e escondia o que interessa mesmo — o evento por fechar.
-  var FUTUROS_A_MOSTRAR = 3;
+  // Quantos jogos futuros ficam à vista antes de colapsar o resto. Com o
+  // calendário da época inteira criado de uma vez, mostrar todos enchia o ecrã.
+  var FUTUROS_A_MOSTRAR = 2;
   var _futAberto = false;   // o "mais N jogos" está expandido? (só ecrã)
 
   function tsEvento(ev){
@@ -1159,53 +1184,62 @@ if ('serviceWorker' in navigator) {
     btn.textContent = (_futAberto ? '▴ mostrar menos' : '▾ mais ' + btn.getAttribute('data-n') + ' jogos');
   };
 
+  /* "Próximos Jogos em Alvalade" — vive no FIM do ecrã, a seguir ao consumo:
+     é agenda, não é trabalho por fazer, e não deve empurrar para baixo o que
+     precisa de atenção hoje. Aparece SEMPRE (mesmo sem jogos), porque é aqui
+     que o admin tem o botão para ir buscar o calendário. */
+  function proximosAlvalade(futuros, admin){
+    var h = '<div class="sbi-eyebrow">Próximos Jogos em Alvalade'
+          + (futuros.length ? ' <span class="sbi-count">'+futuros.length+'</span>' : '')
+          + '</div>';
+    if (futuros.length){
+      var visiveis = futuros.slice(0, FUTUROS_A_MOSTRAR);
+      var resto = futuros.slice(FUTUROS_A_MOSTRAR);
+      h += '<div class="sbi-list">'+visiveis.map(cardAberto).join('')+'</div>';
+      if (resto.length){
+        h += '<div class="sbi-list" id="sbi-futuros-mais" style="margin-top:9px;"'+(_futAberto?'':' hidden')+'>'
+           + resto.map(cardAberto).join('') + '</div>';
+        h += '<button class="sbi-mais" id="sbi-futuros-btn" data-n="'+resto.length+'" onclick="sbiToggleFuturos()">'
+           + (_futAberto ? '▴ mostrar menos' : '▾ mais '+resto.length+' jogos') + '</button>';
+      }
+    } else {
+      h += '<div class="sbi-vazio">Nenhum jogo em Alvalade por acontecer.'
+         + (admin ? ' Vai buscá-los ao calendário aqui em baixo.' : '') + '</div>';
+    }
+    if (admin){
+      h += '<div class="sbi-list" style="margin-top:9px;"><button class="sbi-tap sbi-row" id="cal-sync-btn" onclick="calSincronizar()">'
+         + '<span class="sbi-ico g">'+ICO.bola+'</span>'
+         + '<span class="sbi-rtext"><span class="sbi-rname">Sincronizar com o calendário</span>'
+         + '<span class="sbi-rdesc">Procura os jogos oficiais do Sporting e sugere os que faltam e as datas que mudaram</span></span>'
+         + '<span class="sbi-chev green">'+CHEV+'</span></button></div>';
+      h += '<div id="cal-sync-box" class="calsug" style="display:none;"></div>';
+    }
+    return h;
+  }
+
   window.renderInicio = function(){
     var el = document.getElementById('page-inicio');
     if (!el) return;
     var admin = ehAdmin();
     var abertos = eventosAbertos();
+    var hoje = inicioDeHoje();
+    var futuros = [], porFechar = [];
+    abertos.forEach(function(ev){ (tsEvento(ev) > hoje ? futuros : porFechar).push(ev); });
+    porFechar.sort(function(a,b){ return tsEvento(b) - tsEvento(a); });  // mais recente primeiro
+    futuros.sort(function(a,b){ return tsEvento(a) - tsEvento(b); });    // mais perto primeiro
     var h = '';
-    if (abertos.length){
-      var hoje = inicioDeHoje();
-      var futuros = [], porFechar = [];
-      abertos.forEach(function(ev){ (tsEvento(ev) > hoje ? futuros : porFechar).push(ev); });
-      // Por fechar: do mais recente para trás — é onde está o trabalho.
-      porFechar.sort(function(a,b){ return tsEvento(b) - tsEvento(a); });
-      // Próximos: o mais perto primeiro.
-      futuros.sort(function(a,b){ return tsEvento(a) - tsEvento(b); });
-      if (porFechar.length){
-        h += '<div class="sbi-eyebrow">Em aberto <span class="sbi-count">'+porFechar.length+'</span></div>';
-        h += '<div class="sbi-list">'+porFechar.map(cardAberto).join('')+'</div>';
-      }
-      if (futuros.length){
-        var visiveis = futuros.slice(0, FUTUROS_A_MOSTRAR);
-        var resto = futuros.slice(FUTUROS_A_MOSTRAR);
-        h += '<div class="sbi-eyebrow">Próximos jogos <span class="sbi-count">'+futuros.length+'</span></div>';
-        h += '<div class="sbi-list">'+visiveis.map(cardAberto).join('')+'</div>';
-        if (resto.length){
-          h += '<div class="sbi-list" id="sbi-futuros-mais" style="margin-top:9px;"'+(_futAberto?'':' hidden')+'>'
-             + resto.map(cardAberto).join('') + '</div>';
-          h += '<button class="sbi-mais" id="sbi-futuros-btn" data-n="'+resto.length+'" onclick="sbiToggleFuturos()">'
-             + (_futAberto ? '▴ mostrar menos' : '▾ mais '+resto.length+' jogos') + '</button>';
-        }
-      }
+    if (porFechar.length){
+      h += '<div class="sbi-eyebrow">Em aberto <span class="sbi-count">'+porFechar.length+'</span></div>';
+      h += '<div class="sbi-list">'+porFechar.map(cardAberto).join('')+'</div>';
     }
     // pedidosPagamentoHtml() já filtra por quem pode agir (admin vê todos, o
     // pagador só os do(s) evento(s) que pagou) — chama-se sempre, devolve ''
     // sozinha se não houver nada para este utilizador.
     h += pedidosPagamentoHtml();
-    if (admin){
-      h += '<div class="sbi-eyebrow">Calendário</div>';
-      h += '<div class="sbi-list"><button class="sbi-tap sbi-row" id="cal-sync-btn" onclick="calSincronizar()">'
-         + '<span class="sbi-ico g">'+ICO.bola+'</span>'
-         + '<span class="sbi-rtext"><span class="sbi-rname">Jogos em Alvalade</span>'
-         + '<span class="sbi-rdesc">Procura o calendário do Sporting e sugere os eventos que faltam e as datas que mudaram</span></span>'
-         + '<span class="sbi-chev green">'+CHEV+'</span></button></div>';
-      h += '<div id="cal-sync-box" class="calsug" style="display:none;"></div>';
-    }
     h += '<div class="sbi-eyebrow">Atalhos</div>';
     h += '<div class="sbi-grid2">'+atalhos()+'</div>';
     h += statsConsumo();
+    h += proximosAlvalade(futuros, admin);
     el.innerHTML = h;
     // O painel de sugestões vive em estado (não no DOM) — repõe-se a seguir a
     // cada render, senão desaparecia a meio da conferência.

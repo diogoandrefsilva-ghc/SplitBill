@@ -52,16 +52,46 @@ IA e um evento com a data errada estraga o dia de jogo todo.
 Com o calendário criado de uma vez, "eventos em aberto" passou a incluir meia
 época de jogos por acontecer. Por isso:
 - **Ecrã inicial** (`renderInicio`, no `index.html`): "Em aberto" só leva os de
-  hoje/passado (é onde há conta por fechar); os futuros vão para "Próximos
-  jogos", com `FUTUROS_A_MOSTRAR` (3) à vista e o resto atrás de "mais N jogos".
+  hoje/passado (é onde há conta por fechar). Os futuros vivem em **"Próximos
+  Jogos em Alvalade"** (`proximosAlvalade()`), no **fim do ecrã, a seguir ao
+  Consumo** — é agenda, não é trabalho por fazer, e não deve empurrar para baixo
+  o que precisa de atenção hoje. `FUTUROS_A_MOSTRAR` (2) à vista, o resto atrás
+  de "mais N jogos". A secção aparece **sempre**, mesmo sem jogos: é lá que o
+  admin tem o botão de sincronizar (e só o admin o vê).
 - **Painel do histórico** (`renderHistoricoDropdown`): ordenado por **data** e já
   não por ordem de criação, com os "Por jogar" num bloco à cabeça (2 à vista,
   resto colapsado) e os "Já jogados" a seguir.
 - `eventoPorDefeito()` substituiu o "último do histórico" no arranque e nos
   fallbacks: o último a ser CRIADO passou a ser o último jogo da época. Agora
   abre-se o evento mais próximo de hoje, com preferência pelo passado.
-- `amigosPorDefeito()` olha para os últimos 10 eventos **com consumo**, não para
-  as últimas 10 linhas — senão os jogos futuros vazios zeravam a contagem.
+- `amigosPorDefeito()` devolve a lista fixa de `splitbill.config` quando existe
+  (ver abaixo); sem ela cai na heurística antiga, que olha para os últimos 10
+  eventos **com consumo** e não para as últimas 10 linhas — senão os jogos
+  futuros vazios zeravam a contagem.
+
+## Convocados por defeito (Definições › Convocados por defeito, só admin)
+Quem entra por omissão num evento novo. Antes era **adivinhado** (quem tivesse
+aparecido em ≥3 dos últimos 10 eventos com consumo): funcionava, mas mudava
+sozinho conforme quem faltasse e ninguém percebia porquê.
+- Vive em `splitbill.config`, chave `convocados_default`
+  (`{"amigos":[...]}`, migração `db/config-convocados.sql`). Tabela genérica de
+  chave/valor de propósito — a próxima definição global entra lá sem migração.
+- `CONVOCADOS_DEFAULT` guarda a lista; `null` = migração por correr, e aí a app
+  comporta-se exactamente como antes (`amigosPorDefeito()` cai na heurística).
+- O painel (`abrirConvocados`) relê do servidor **antes** de desenhar: gravar
+  por cima de memória velha apagaria o que tivesse sido mudado noutro
+  dispositivo. A edição vive em `_convSel` até se carregar em Guardar.
+
+## Duas armadilhas do CSS global (já mordidas)
+- **`input, select { appearance: none }`** (para os campos de texto) apaga o
+  desenho nativo das **checkboxes**: elas mudam de estado mas ficam visualmente
+  iguais — carrega-se e "não acontece nada". Qualquer checkbox nova precisa de
+  `appearance: checkbox` e de desfazer padding/borda/fundo/cantos herdados (ver
+  `.calsug-row input`, `.conv-row input`).
+- **`button:hover { background:#0B6340 }`** ganha em especificidade a qualquer
+  classe de botão que definas, e no telemóvel o `:hover` fica colado depois do
+  toque — o botão fica verde escuro com o texto ilegível. Neutraliza sempre com
+  uma regra `.a-tua-classe, .a-tua-classe:hover { … }`.
 
 ## Regras técnicas (não partir a app)
 - `app.js` carrega como `<script src>` **normal, NÃO module** — há `onclick="…"` no HTML, logo as funções têm de ser **globais**. Não converter para módulo.

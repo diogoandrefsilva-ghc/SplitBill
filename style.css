@@ -1769,7 +1769,21 @@ html,body{touch-action:pan-x pan-y}
 .calsug-sec-hd { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-soft, #5B6661); margin-bottom: 6px; }
 .calsug-link { background: none; border: none; padding: 0; font-size: 11px; color: var(--verde, #0E7A4F); cursor: pointer; text-transform: none; letter-spacing: 0; font-weight: 700; }
 .calsug-row { display: flex; align-items: center; gap: 9px; padding: 8px 9px; background: #FAFCFA; border: 1px solid var(--linha, #DDE3DD); border-radius: 10px; margin-bottom: 5px; cursor: pointer; }
-.calsug-row input { flex: 0 0 auto; width: 18px; height: 18px; accent-color: var(--verde, #0E7A4F); }
+/* A app tem um `input, select { appearance: none }` global (para os campos de
+   texto). Numa checkbox isso apaga o desenho nativo: ela mudava de estado mas
+   ficava visualmente IGUAL, ticada ou não — carregava-se e não "acontecia
+   nada". Aqui devolve-se-lhe o aspecto nativo e desfaz-se o resto do que a
+   regra global lhe punha (padding, borda, fundo, cantos). */
+.calsug-row input[type="checkbox"] {
+    -webkit-appearance: checkbox;
+    appearance: checkbox;
+    flex: 0 0 auto;
+    width: 20px; height: 20px;
+    padding: 0; margin: 0;
+    border: 0; background: none; border-radius: 0;
+    min-width: 0;
+    accent-color: var(--verde, #0E7A4F);
+}
 .calsug-dt { flex: 0 0 auto; min-width: 58px; font-family: var(--display, sans-serif); font-weight: 700; font-size: 14px; letter-spacing: .04em; color: var(--verde, #0E7A4F); line-height: 1.15; }
 .calsug-dt.trocada { display: flex; flex-direction: column; }
 .calsug-dt s { color: var(--ink-soft, #5B6661); opacity: .8; }
@@ -1799,3 +1813,23 @@ html,body{touch-action:pan-x pan-y}
 @keyframes calsug-desliza { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
 @media (prefers-reduced-motion: reduce) { .calsug-barra span { animation: none; width: 100%; opacity: .5; } }
 .calsug-nota code { font-family: var(--mono, monospace); font-size: 10.5px; background: #F0F2EF; padding: 1px 4px; border-radius: 4px; }
+
+/* ── Convocados por defeito (painel do admin) ─────────────────────── */
+.conv-row { display: flex; align-items: center; gap: 11px; background: #fff; border: 1px solid var(--linha, #DDE3DD); border-radius: 11px; padding: 11px 13px; margin-bottom: 7px; cursor: pointer; transition: border-color .15s, background .15s; }
+.conv-row.on { border-color: #9CCDB4; background: #F5FBF7; }
+.conv-row input[type="checkbox"] { -webkit-appearance: checkbox; appearance: checkbox; flex: 0 0 auto; width: 20px; height: 20px; padding: 0; margin: 0; border: 0; background: none; border-radius: 0; min-width: 0; accent-color: var(--verde, #0E7A4F); }
+.conv-nome { flex: 1 1 auto; min-width: 0; font-size: 14px; font-weight: 600; color: var(--ink, #1B231F); word-break: break-word; }
+.conv-conta { font-size: 11.5px; color: var(--ink-soft, #5B6661); text-align: center; margin: 10px 0 4px; }
+.sbi-vazio { font-size: 12.5px; color: var(--ink-soft, #5B6661); background: var(--card, #fff); border: 1px dashed var(--linha, #DDE3DD); border-radius: 12px; padding: 14px; line-height: 1.45; }
+
+/* A app tem um `button { background:#0E7A4F }` global e, pior, um
+   `button:hover { background:#0B6340 }` — que por ser :hover ganha em
+   especificidade a qualquer classe minha. No telemóvel o :hover fica colado
+   depois do toque, e o botão ficava verde escuro com o texto ilegível.
+   Aqui neutraliza-se o hover herdado nos botões destes painéis. */
+.sbi-mais, .sbi-mais:hover { background: transparent; color: var(--ink-soft, #5B6661); }
+.sbi-mais:active { background: rgba(11,59,43,.04); }
+.calsug-link, .calsug-link:hover { background: none; color: var(--verde, #0E7A4F); }
+.calsug-x, .calsug-x:hover { background: none; color: var(--ink-soft, #5B6661); }
+.calsug-btn, .calsug-btn:hover { background: #fff; color: var(--ink-soft, #5B6661); }
+.calsug-btn.ok, .calsug-btn.ok:hover { background: var(--verde, #0E7A4F); color: #fff; }

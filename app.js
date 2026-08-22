@@ -4795,6 +4795,52 @@ function presentesNoEvento(ev) {
     if (ev.pagador) s.add(ev.pagador);
     return s;
 }
+/* ── CONVOCADOS POR DEFEITO (splitbill.config) ───────────────────────────
+   Quem entra, por omissão, num evento novo. Antes era adivinhado a partir dos
+   últimos eventos (ver amigosPorDefeito) — funcionava, mas mudava sozinho
+   conforme quem faltasse e ninguém percebia porquê. Agora é uma lista fixa que
+   o admin define em Definições › Convocados por defeito.
+   `null` = a migração db/config-convocados.sql não correu; nesse caso a app
+   comporta-se exactamente como antes. */
+let CONVOCADOS_DEFAULT = null;
+
+async function carregarConvocadosDefault() {
+    try {
+        const r = await sbFetch(`${SB_URL}/rest/v1/config?chave=eq.convocados_default&select=valor`,
+            { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        if (!r.ok) { CONVOCADOS_DEFAULT = null; return; }
+        const rows = await r.json();
+        const lista = rows && rows[0] && rows[0].valor && rows[0].valor.amigos;
+        CONVOCADOS_DEFAULT = Array.isArray(lista) ? lista.filter(a => a && String(a).trim()) : null;
+    } catch(e) {
+        console.warn('[SplitBill] splitbill.config ausente — corre db/config-convocados.sql para fixar os convocados por defeito');
+        CONVOCADOS_DEFAULT = null;
+    }
+}
+
+async function guardarConvocadosDefault(lista) {
+    if (!isAdmin()) { mostrarMensagem('⚠️ Apenas o administrador pode alterar isto', false); return false; }
+    const limpa = (lista || []).map(a => String(a).trim()).filter(Boolean);
+    try {
+        // Upsert na chave: a linha pode ainda não existir neste projeto.
+        await sbOk(await sbFetch(`${SB_URL}/rest/v1/config`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+            body: JSON.stringify({
+                chave: 'convocados_default',
+                valor: { amigos: limpa },
+                atualizado_em: new Date().toISOString(),
+                atualizado_por: emailSessao()
+            })
+        }), 'guardar convocados por defeito');
+        CONVOCADOS_DEFAULT = limpa;
+        return true;
+    } catch(e) {
+        mostrarMensagem('⚠️ Não gravado: ' + sbErroLegivel(e), false);
+        return false;
+    }
+}
+
 /* Evento a abrir quando não há um escolhido (arranque, importação, o evento
    aberto foi apagado). Era "o último do histórico" — o último a ser CRIADO —
    e com o calendário da época criado de uma vez (calSincronizar) isso passou a
@@ -4819,6 +4865,10 @@ function eventoPorDefeito() {
 // Amigos sugeridos por defeito num novo evento:
 // só quem veio em >= 3 dos últimos 10 eventos, ordenados por quem mais veio.
 function amigosPorDefeito() {
+    // Lista fixa definida pelo admin, quando existe: é explícita e não muda
+    // sozinha. A heurística abaixo é só a rede de segurança para quem ainda não
+    // correu a migração db/config-convocados.sql.
+    if (CONVOCADOS_DEFAULT && CONVOCADOS_DEFAULT.length) return CONVOCADOS_DEFAULT.slice();
     // Últimos 10 eventos COM consumo, e não as últimas 10 linhas do histórico:
     // desde que o calendário da época pode ser criado de uma vez
     // (calSincronizar), as últimas linhas passaram a ser jogos futuros ainda sem
@@ -5033,6 +5083,10 @@ async function sbCarregarDados() {
         } catch(e) { PUSH_COL = false; }
         if (!PUSH_COL) console.warn('[SplitBill] tabela push_subscriptions ausente — corre db/push-subscriptions.sql para ativar notificações push');
         pushRenderStatus();
+
+        // Convocados por defeito (splitbill.config, db/config-convocados.sql).
+        // Sem a migração fica null e amigosPorDefeito() volta à heurística antiga.
+        await carregarConvocadosDefault();
 
         // Reconstruir historico no formato esperado pela app
         // Faturas já guardadas neste dispositivo: sem a migração o servidor não
@@ -5999,6 +6053,91 @@ function fecharDefinicoes() {
 }
 
 // ── Equivalências amigo ↔ conta (só admin) ──
+/* ── CONVOCADOS POR DEFEITO: painel do admin ─────────────────────────────
+   A lista em edição vive em `_convSel` até se carregar em Guardar: assim,
+   desmarcar meia dúzia de nomes e fechar sem gravar não mexe em nada. */
+let _convSel = [];
+
+async function abrirConvocados() {
+    if (!isAdmin()) { mostrarMensagem('⚠️ Apenas o administrador pode alterar isto', false); return; }
+    // Reler antes de desenhar: noutro dispositivo a lista pode ter mudado, e
+    // gravar por cima de memória velha apagaria essa alteração.
+    await carregarConvocadosDefault();
+    if (CONVOCADOS_DEFAULT === null) {
+        mostrarMensagem('⚠️ Falta correr db/config-convocados.sql no Supabase', false);
+        return;
+    }
+    _convSel = CONVOCADOS_DEFAULT.slice();
+    document.getElementById('page-convocados').style.display = 'flex';
+    renderConvocados();
+}
+function fecharConvocados() {
+    document.getElementById('page-convocados').style.display = 'none';
+}
+
+// Universo de nomes a mostrar: os que já apareceram em eventos + os que estão
+// na lista (podem ainda não ter aparecido em lado nenhum, como no arranque).
+function _convCandidatos() {
+    const vistos = new Set(); const lista = [];
+    const add = a => { const n = String(a || '').trim(); if (n && !vistos.has(n)) { vistos.add(n); lista.push(n); } };
+    _convSel.forEach(add);
+    (typeof amigosAgregadoGlobal === 'function' ? amigosAgregadoGlobal() : []).forEach(add);
+    // Escolhidos primeiro (pela ordem da lista), o resto por ordem alfabética.
+    const escolhidos = lista.filter(a => _convSel.includes(a));
+    const outros = lista.filter(a => !_convSel.includes(a)).sort((a, b) => a.localeCompare(b, 'pt'));
+    return escolhidos.concat(outros);
+}
+
+function renderConvocados() {
+    const el = document.getElementById('conv-lista');
+    if (!el) return;
+    const cands = _convCandidatos();
+    const linhas = cands.map(nome => {
+        const on = _convSel.includes(nome);
+        return '<label class="conv-row' + (on ? ' on' : '') + '">'
+            + '<input type="checkbox" ' + (on ? 'checked' : '') + ' onchange="convToggle(' + JSON.stringify(nome).replace(/"/g, '&quot;') + ',this)">'
+            + '<span class="conv-nome">' + _calEsc(nome) + '</span>'
+            + '</label>';
+    }).join('');
+    el.innerHTML = (linhas || '<p style="font-size:13px;color:#5B6661;">Ainda não há nomes. Acrescenta o primeiro em baixo.</p>')
+        + '<p class="conv-conta">' + _convSel.length + ' convocado' + (_convSel.length === 1 ? '' : 's') + ' por defeito</p>';
+}
+
+function convToggle(nome, el) {
+    if (el.checked) { if (!_convSel.includes(nome)) _convSel.push(nome); }
+    else { _convSel = _convSel.filter(a => a !== nome); }
+    // Sem re-render: reordenar a lista debaixo do dedo de quem está a tocar nas
+    // caixas faz perder o sítio. Só o contador acompanha.
+    const c = document.querySelector('#conv-lista .conv-conta');
+    if (c) c.textContent = _convSel.length + ' convocado' + (_convSel.length === 1 ? '' : 's') + ' por defeito';
+    const row = el.closest('.conv-row');
+    if (row) row.classList.toggle('on', el.checked);
+}
+
+function convAdicionar() {
+    const inp = document.getElementById('conv-novo');
+    const nome = (inp.value || '').trim();
+    if (!nome) return;
+    if (_convSel.some(a => a.toLowerCase() === nome.toLowerCase())) {
+        mostrarMensagem('⚠️ ' + nome + ' já está na lista', false);
+        inp.value = '';
+        return;
+    }
+    _convSel.push(nome);
+    inp.value = '';
+    renderConvocados();
+}
+
+async function convGuardar() {
+    const btn = document.getElementById('conv-guardar');
+    if (btn) { btn.disabled = true; btn.textContent = 'A guardar…'; }
+    const ok = await guardarConvocadosDefault(_convSel);
+    if (btn) { btn.disabled = false; btn.textContent = 'Guardar'; }
+    if (!ok) return;
+    fecharConvocados();
+    mostrarMensagem('✓ Convocados por defeito guardados (' + _convSel.length + ')', true);
+}
+
 async function abrirEquivalencias() {
     if (!isAdmin()) return;
     document.getElementById('page-equivalencias').style.display = 'flex';
