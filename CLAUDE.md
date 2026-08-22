@@ -20,6 +20,43 @@ App pessoal de divisão de contas ("dia de jogo").
 - Mudança **só visual** → `style.css`. Mudança de **lógica/dados** → `app.js`. Para localizar um botão/campo: procura o `id` no `index.html` e salta para o handler no `app.js`.
 - Faz **edições cirúrgicas** (diffs pequenos). **Nunca reescrevas o ficheiro inteiro.**
 
+## Calendário do Sporting (ecrã inicial › Calendário › "Jogos em Alvalade")
+Botão só do admin que vai buscar o calendário oficial da época e **sugere**
+(1) eventos a criar para os jogos em Alvalade que ainda não têm um e (2) datas
+que mudaram. **Nada é gravado sem confirmação linha a linha** — a leitura é por
+IA e um evento com a data errada estraga o dia de jogo todo.
+- Quem procura é a Edge Function **`calendario-sporting`**, **partilhada com a
+  app Goals**: o ficheiro vive no repo do Goals (`Goals/calendario-sporting.ts`,
+  deploy com `supabase functions deploy calendario-sporting`). Devolve SEMPRE a
+  época inteira (todas as competições, casa/fora/neutro) porque o Goals quer
+  tudo; aqui filtra-se com `_calEmAlvalade` (jogos de casa + campo neutro que
+  calhe ser em Alvalade). **Se mexeres no contrato, mexe nos dois lados.**
+- Usa grounding com pesquisa Google — sem isso o modelo inventava datas futuras
+  de memória. Só o admin pode chamar (verificação no servidor, não na UI).
+- Secção `CALENDÁRIO DO SPORTING` no `app.js`. O que interessa lá é
+  `_calPontuarEv`: mesmo dia decide sozinho (o evento do dia de jogo É o jogo,
+  chame-se ele o que se chamar); fora disso a descrição tem de nomear o
+  adversário (`_calSimDesc`, tolerante a "FC Porto"/"Porto") e a data tem de
+  andar a ≤21 dias. Eventos **já fechados** contam para não duplicar mas nunca
+  são tocados — a data deles é história.
+- Os eventos criados nascem sem tesoureiro; convocados e menu vêm dos de sempre,
+  calculados **uma vez** antes do ciclo (ver comentário em `calAplicar`).
+
+## Jogos futuros no ecrã: o calendário da época não pode encher a lista
+Com o calendário criado de uma vez, "eventos em aberto" passou a incluir meia
+época de jogos por acontecer. Por isso:
+- **Ecrã inicial** (`renderInicio`, no `index.html`): "Em aberto" só leva os de
+  hoje/passado (é onde há conta por fechar); os futuros vão para "Próximos
+  jogos", com `FUTUROS_A_MOSTRAR` (3) à vista e o resto atrás de "mais N jogos".
+- **Painel do histórico** (`renderHistoricoDropdown`): ordenado por **data** e já
+  não por ordem de criação, com os "Por jogar" num bloco à cabeça (2 à vista,
+  resto colapsado) e os "Já jogados" a seguir.
+- `eventoPorDefeito()` substituiu o "último do histórico" no arranque e nos
+  fallbacks: o último a ser CRIADO passou a ser o último jogo da época. Agora
+  abre-se o evento mais próximo de hoje, com preferência pelo passado.
+- `amigosPorDefeito()` olha para os últimos 10 eventos **com consumo**, não para
+  as últimas 10 linhas — senão os jogos futuros vazios zeravam a contagem.
+
 ## Regras técnicas (não partir a app)
 - `app.js` carrega como `<script src>` **normal, NÃO module** — há `onclick="…"` no HTML, logo as funções têm de ser **globais**. Não converter para módulo.
 - **PWA/cache:** se mexeres em `app.js`, `style.css` ou `index.html`, **sobe `CACHE_VERSION` no `sw.js`** (ex.: `v5` → `v6`). Estes três já são *network-first* (atualizam sozinhos), mas o bump garante que ninguém fica com versão velha.

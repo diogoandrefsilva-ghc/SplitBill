@@ -794,7 +794,8 @@ if ('serviceWorker' in navigator) {
     pag:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect fill="currentColor" stroke="none" opacity=".18" x="3" y="6.5" width="18" height="11" rx="2.4"/><rect x="3" y="6.5" width="18" height="11" rx="2.4"/><circle cx="12" cy="12" r="2.3"/><path d="M6.4 9.4v5.2M17.6 9.4v5.2"/></svg>',
     def:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="9" cy="8" r="2.6" fill="#fff"/><circle cx="15" cy="16" r="2.6" fill="#fff"/></svg>',
     up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 14 12 8 18 14"/></svg>',
-    down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 10 12 16 18 10"/></svg>'
+    down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 10 12 16 18 10"/></svg>',
+    bola:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m12 7.2 4.2 3.1-1.6 5h-5.2l-1.6-5z" fill="currentColor" stroke="none" opacity=".55"/><path d="m12 7.2 4.2 3.1-1.6 5h-5.2l-1.6-5z"/><path d="M12 3v4.2M4.1 10.3l3.7 0M19.9 10.3l-3.7 0M7.6 20.1l1.8-4.8M16.4 20.1l-1.8-4.8"/></svg>'
   };
   var CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>';
   var NAVL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>';
@@ -1136,6 +1137,28 @@ if ('serviceWorker' in navigator) {
       + '<div class="sbi-list">'+pend.map(cardPedidoPagamento).join('')+'</div>';
   }
 
+  // Quantos jogos futuros ficam à vista antes de colapsar o resto. Com o
+  // calendário da época inteira criado de uma vez, mostrar todos enchia o ecrã
+  // e escondia o que interessa mesmo — o evento por fechar.
+  var FUTUROS_A_MOSTRAR = 3;
+  var _futAberto = false;   // o "mais N jogos" está expandido? (só ecrã)
+
+  function tsEvento(ev){
+    try { return (typeof _parsePgtoData==='function') ? (_parsePgtoData(ev.data) || 0) : 0; } catch(e){ return 0; }
+  }
+  // Meia-noite de hoje: um evento é "futuro" a partir de amanhã. O jogo de hoje
+  // fica com os que estão por fechar — é o de que se precisa hoje.
+  function inicioDeHoje(){ var d = new Date(); d.setHours(0,0,0,0); return d.getTime(); }
+
+  window.sbiToggleFuturos = function(){
+    _futAberto = !_futAberto;
+    var lista = document.getElementById('sbi-futuros-mais');
+    var btn = document.getElementById('sbi-futuros-btn');
+    if (!lista || !btn) return;
+    lista.hidden = !_futAberto;
+    btn.textContent = (_futAberto ? '▴ mostrar menos' : '▾ mais ' + btn.getAttribute('data-n') + ' jogos');
+  };
+
   window.renderInicio = function(){
     var el = document.getElementById('page-inicio');
     if (!el) return;
@@ -1143,17 +1166,50 @@ if ('serviceWorker' in navigator) {
     var abertos = eventosAbertos();
     var h = '';
     if (abertos.length){
-      h += '<div class="sbi-eyebrow">Em aberto <span class="sbi-count">'+abertos.length+'</span></div>';
-      h += '<div class="sbi-list">'+abertos.map(cardAberto).join('')+'</div>';
+      var hoje = inicioDeHoje();
+      var futuros = [], porFechar = [];
+      abertos.forEach(function(ev){ (tsEvento(ev) > hoje ? futuros : porFechar).push(ev); });
+      // Por fechar: do mais recente para trás — é onde está o trabalho.
+      porFechar.sort(function(a,b){ return tsEvento(b) - tsEvento(a); });
+      // Próximos: o mais perto primeiro.
+      futuros.sort(function(a,b){ return tsEvento(a) - tsEvento(b); });
+      if (porFechar.length){
+        h += '<div class="sbi-eyebrow">Em aberto <span class="sbi-count">'+porFechar.length+'</span></div>';
+        h += '<div class="sbi-list">'+porFechar.map(cardAberto).join('')+'</div>';
+      }
+      if (futuros.length){
+        var visiveis = futuros.slice(0, FUTUROS_A_MOSTRAR);
+        var resto = futuros.slice(FUTUROS_A_MOSTRAR);
+        h += '<div class="sbi-eyebrow">Próximos jogos <span class="sbi-count">'+futuros.length+'</span></div>';
+        h += '<div class="sbi-list">'+visiveis.map(cardAberto).join('')+'</div>';
+        if (resto.length){
+          h += '<div class="sbi-list" id="sbi-futuros-mais" style="margin-top:9px;"'+(_futAberto?'':' hidden')+'>'
+             + resto.map(cardAberto).join('') + '</div>';
+          h += '<button class="sbi-mais" id="sbi-futuros-btn" data-n="'+resto.length+'" onclick="sbiToggleFuturos()">'
+             + (_futAberto ? '▴ mostrar menos' : '▾ mais '+resto.length+' jogos') + '</button>';
+        }
+      }
     }
     // pedidosPagamentoHtml() já filtra por quem pode agir (admin vê todos, o
     // pagador só os do(s) evento(s) que pagou) — chama-se sempre, devolve ''
     // sozinha se não houver nada para este utilizador.
     h += pedidosPagamentoHtml();
+    if (admin){
+      h += '<div class="sbi-eyebrow">Calendário</div>';
+      h += '<div class="sbi-list"><button class="sbi-tap sbi-row" id="cal-sync-btn" onclick="calSincronizar()">'
+         + '<span class="sbi-ico g">'+ICO.bola+'</span>'
+         + '<span class="sbi-rtext"><span class="sbi-rname">Jogos em Alvalade</span>'
+         + '<span class="sbi-rdesc">Procura o calendário do Sporting e sugere os eventos que faltam e as datas que mudaram</span></span>'
+         + '<span class="sbi-chev green">'+CHEV+'</span></button></div>';
+      h += '<div id="cal-sync-box" class="calsug" style="display:none;"></div>';
+    }
     h += '<div class="sbi-eyebrow">Atalhos</div>';
     h += '<div class="sbi-grid2">'+atalhos()+'</div>';
     h += statsConsumo();
     el.innerHTML = h;
+    // O painel de sugestões vive em estado (não no DOM) — repõe-se a seguir a
+    // cada render, senão desaparecia a meio da conferência.
+    try { if (admin && typeof calRender === 'function') calRender(); } catch(e) {}
     // Sincroniza o FAB de novo evento (só visível neste ecrã e para admin).
     var fn = document.getElementById('fab-novo');
     if (fn) fn.style.display = (admin && el.style.display !== 'none') ? 'inline-flex' : 'none';

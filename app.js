@@ -97,7 +97,7 @@ function init() {
             const savedEv = localStorage.getItem('sb_evento');
             if (savedEv != null) alvo = historico.find(e => String(e.id) === String(savedEv));
         } catch(e) {}
-        carregarEvento(alvo || historico[historico.length - 1]);
+        carregarEvento(alvo || eventoPorDefeito());
     } else {
         // No history at all — blank state, no event created yet
         amigos = [];
@@ -732,7 +732,18 @@ function renderHistoricoDropdown() {
     }
     ensureDividasExist();
     const saldosForCards = calcularSaldos();
-    panel.innerHTML = [...historico].reverse().map(ev => {
+    // Ordem por DATA e não por ordem de criação: desde que o calendário da época
+    // passou a poder ser criado de uma vez (calSincronizar), a ordem de criação
+    // deixou de dizer nada. Os jogos ainda por acontecer ficam num bloco à
+    // parte, colapsado ao fim dos primeiros — senão a lista abria com meia época
+    // pela frente e o histórico ficava fora de vista.
+    const _ts = ev => { try { return _parsePgtoData(ev.data) || 0; } catch(e) { return 0; } };
+    const _hoje0 = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); })();
+    const _futuros = [], _passados = [];
+    historico.forEach(ev => (_ts(ev) > _hoje0 ? _futuros : _passados).push(ev));
+    _futuros.sort((a, b) => _ts(a) - _ts(b));   // o mais perto primeiro
+    _passados.sort((a, b) => _ts(b) - _ts(a));  // o mais recente primeiro
+    const _card = ev => {
         const isAtual = ev.id === eventoAtualId;
         const _ep = (typeof _epocaLabel === 'function') ? _epocaLabel(ev.data) : '';
         const _dataEp = (ev.data || '—') + (_ep ? ' · ' + _ep : '');
@@ -742,7 +753,33 @@ function renderHistoricoDropdown() {
                 <span class="historico-card-data">${_dataEp}</span>
                 ${isAdmin() ? `<button class="historico-card-del" onclick="apagarEvento(${ev.id}, event)" title="Apagar evento">🗑️</button>` : ''}
             </div>`;
-    }).join('');
+    };
+    let _html = '';
+    if (_futuros.length) {
+        const _vis = _futuros.slice(0, HIST_FUTUROS_A_MOSTRAR);
+        const _resto = _futuros.slice(HIST_FUTUROS_A_MOSTRAR);
+        _html += '<div class="historico-grupo">Por jogar</div>' + _vis.map(_card).join('');
+        if (_resto.length) {
+            _html += `<div id="hist-futuros-mais"${_histFutAberto ? '' : ' hidden'}>${_resto.map(_card).join('')}</div>`
+                + `<button class="sbi-mais" id="hist-futuros-btn" data-n="${_resto.length}" onclick="histToggleFuturos()">`
+                + (_histFutAberto ? '▴ mostrar menos' : '▾ mais ' + _resto.length + ' jogos') + '</button>';
+        }
+        if (_passados.length) _html += '<div class="historico-grupo">Já jogados</div>';
+    }
+    _html += _passados.map(_card).join('');
+    panel.innerHTML = _html;
+}
+
+// Quantos jogos futuros ficam à vista no painel do histórico antes de colapsar.
+const HIST_FUTUROS_A_MOSTRAR = 2;
+let _histFutAberto = false;   // só ecrã, não se guarda
+function histToggleFuturos() {
+    _histFutAberto = !_histFutAberto;
+    const lista = document.getElementById('hist-futuros-mais');
+    const btn = document.getElementById('hist-futuros-btn');
+    if (!lista || !btn) return;
+    lista.hidden = !_histFutAberto;
+    btn.textContent = _histFutAberto ? '▴ mostrar menos' : '▾ mais ' + btn.getAttribute('data-n') + ' jogos';
 }
 
 function toggleHistoricoPanel() {
@@ -857,7 +894,7 @@ async function apagarEvento(id, ev_) {
 
     // Se apaguei o evento que estava aberto, carregar outro ou limpar o estado
     if (eventoAtualId == id) {
-        if (historico.length > 0) carregarEvento(historico[historico.length - 1]);
+        if (historico.length > 0) carregarEvento(eventoPorDefeito());
         else limparEstadoEvento();
         atualizarReadOnly();
     }
@@ -1061,10 +1098,7 @@ function importarJSON() {
                 mostrarMensagem('❌ Ficheiro inválido', false); return;
             }
             salvarHistoricoLocal();
-            if (historico.length > 0) {
-                const ultimo = historico[historico.length - 1];
-                carregarEvento(ultimo);
-            }
+            if (historico.length > 0) carregarEvento(eventoPorDefeito());
             atualizarReadOnly();
             renderHistoricoDropdown();
             renderConfigAmigos();
@@ -4040,6 +4074,360 @@ function toggleAjuda() {
     arrow.textContent = visible ? '▼' : '▲';
 }
 
+/* ── CALENDÁRIO DO SPORTING (Edge Function `calendario-sporting` + Gemini) ──
+   Botão só do admin, no ecrã inicial, que vai buscar o calendário oficial da
+   época e SUGERE (1) os jogos em Alvalade que ainda não têm evento criado e
+   (2) as datas que mudaram (adiamentos, remarcações da TV). Nada é gravado sem
+   o admin confirmar linha a linha — o calendário vem de uma leitura por IA, que
+   acerta na maioria mas não sempre, e um evento com a data errada estraga as
+   contas de um dia de jogo inteiro.
+
+   A Edge Function é PARTILHADA com a app Goals e o ficheiro dela vive nesse
+   repo (`Goals/calendario-sporting.ts`, deploy com
+   `supabase functions deploy calendario-sporting`). Devolve SEMPRE a época
+   inteira — todas as competições oficiais, casa/fora/campo neutro — porque o
+   Goals quer tudo; aqui filtra-se para os jogos em Alvalade (ver
+   `_calEmAlvalade`), que são os únicos que dão dia de jogo. Se mexeres no
+   contrato da função, mexe nos dois lados.
+
+   Eventos JÁ FECHADOS (com fatura) nunca são tocados: contam para não sugerir
+   um duplicado, mas a data deles é história e não se corrige. */
+
+var _calSug = null;      // resposta crua da última leitura
+var _calNovos = [];      // {sug, passado}      — jogos sem evento criado
+var _calDatas = [];      // {ev, sug}           — eventos com data diferente
+var _calSel = { novos: [], datas: [] };
+var _calALer = false;
+
+// Nome de clube reduzido ao essencial: sem acentos, sem pontuação e sem as
+// siglas/artigos que cada fonte escreve à sua maneira ("FC Porto"/"Porto").
+// "sporting" também cai, para a descrição "Sporting - Benfica" reduzir a
+// "benfica" e comparar-se com o adversário da sugestão.
+function _calNorm(s) {
+    return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\b(sporting|clube|club|de|do|da|dos|das|futebol|fc|sc|cf|sl|cd|ac|as|rc|ss|us|afc|cp|sad)\b/g, ' ')
+        .replace(/\s+/g, ' ').trim();
+}
+// Que fatia do nome do adversário aparece nesta descrição de evento? 0..1.
+// A descrição é livre ("Sporting–Benfica", "Jogo com o Benfica", "Almoço Sá"),
+// por isso a pergunta certa é de contenção e não de igualdade.
+function _calSimDesc(adv, desc) {
+    var A = _calNorm(adv), D = _calNorm(desc);
+    if (!A || !D) return 0;
+    var ta = A.split(' ').filter(Boolean), td = D.split(' ').filter(Boolean);
+    if (!ta.length || !td.length) return 0;
+    var igual = function (t, u) { return t === u || (t.length >= 4 && u.indexOf(t) === 0) || (u.length >= 4 && t.indexOf(u) === 0); };
+    var hit = ta.filter(function (t) { return td.some(function (u) { return igual(t, u); }); }).length;
+    return hit / ta.length;
+}
+function _calDias(isoA, isoB) {
+    return Math.abs((new Date(isoA + 'T12:00:00') - new Date(isoB + 'T12:00:00')) / 86400000);
+}
+// 'dd/mm/aaaa' (formato guardado nos eventos) → 'aaaa-mm-dd' (formato da função)
+function _calIso(dataPt) {
+    var m = /(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(String(dataPt || ''));
+    if (!m) return '';
+    return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+}
+function _calPt(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    return m ? (m[3] + '/' + m[2] + '/' + m[1]) : String(iso || '');
+}
+function _calHoje() {
+    var d = new Date(), p = function (n) { return ('0' + n).slice(-2); };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+// Época no formato que a função espera ("2025/26"), com o mesmo corte a 15/jul
+// que o _epocaLabel já usa no resto da app.
+function _calEpocaAtual() {
+    var hoje = new Date(), ano = hoje.getFullYear();
+    var a = (hoje.getTime() >= new Date(ano, 6, 15).getTime()) ? ano : ano - 1;
+    return a + '/' + ('0' + ((a + 1) % 100)).slice(-2);
+}
+// Só interessam os jogos que se jogam em Alvalade: os de casa e, raro mas
+// possível, um jogo em campo "neutro" que calhe ser aqui (uma final, por ex.).
+function _calEmAlvalade(s) {
+    return s && (s.local === 'Casa' || /alvalade/i.test(String(s.estadio || '')));
+}
+// Descrição do evento a criar. A competição só entra quando não é a Liga, para
+// distinguir o Sporting–Benfica da Taça do da Liga sem encher o nome.
+function _calDescricao(s) {
+    var base = 'Sporting - ' + s.adversario;
+    return (s.competicao && s.competicao !== 'Liga Portugal') ? base + ' (' + s.competicao + ')' : base;
+}
+function _calDataCurta(iso) {
+    var d = new Date(iso + 'T12:00:00');
+    if (isNaN(d)) return iso;
+    return ('0' + d.getDate()).slice(-2) + ' ' + d.toLocaleString('pt-PT', { month: 'short' }).replace('.', '').toUpperCase();
+}
+function _calEsc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+}
+
+/* Quão provável é esta sugestão ser ESTE evento já criado? 0 = não é.
+   Mesmo dia decide sozinho — dois eventos no mesmo dia não acontecem aqui, e o
+   evento do dia de jogo é o jogo. Fora disso é preciso que a descrição nomeie o
+   adversário e que a data ande perto (adiamentos são de dias/semanas). */
+function _calPontuarEv(sug, ev) {
+    var iso = _calIso(ev.data);
+    if (!iso) return 0;
+    var dias = _calDias(sug.data, iso);
+    var nome = _calSimDesc(sug.adversario, ev.descricao);
+    if (dias < 1) return 100 + nome;
+    if (nome >= 0.6 && dias <= 21) return 50 + nome * 10 - dias / 10;
+    return 0;
+}
+// Emparelhamento guloso: todos os pares plausíveis, ordenados pela pontuação;
+// cada sugestão e cada evento só entram num par.
+function _calEmparelhar(sugs, evs) {
+    var pares = [];
+    sugs.forEach(function (s, si) {
+        evs.forEach(function (e, ei) {
+            var p = _calPontuarEv(s, e);
+            if (p > 0) pares.push({ si: si, ei: ei, p: p });
+        });
+    });
+    pares.sort(function (a, b) { return b.p - a.p; });
+    var sUsada = {}, eUsado = {}, map = {};
+    pares.forEach(function (pr) {
+        if (sUsada[pr.si] || eUsado[pr.ei]) return;
+        sUsada[pr.si] = 1; eUsado[pr.ei] = 1; map[pr.si] = evs[pr.ei];
+    });
+    return map;
+}
+
+async function calSincronizar() {
+    if (!isAdmin()) { mostrarMensagem('⚠️ Apenas o administrador pode sincronizar o calendário', false); return; }
+    if (_calALer) return;
+    if (!_sbSession) { mostrarMensagem('⚠️ Inicia sessão primeiro', false); return; }
+    var btn = document.getElementById('cal-sync-btn');
+    _calALer = true;
+    if (btn) { btn.disabled = true; btn.classList.add('a-ler'); }
+    try {
+        // Rede de segurança própria: a função tem um limite interno de 55s, mas
+        // se o pedido nem lá chegar a responder o botão ficava a "pensar" para
+        // sempre. 70s dá margem ao limite interno mais o tempo de rede.
+        var ctrl = new AbortController();
+        var timer = setTimeout(function () { ctrl.abort(); }, 70000);
+        var r;
+        try {
+            r = await sbFetch(SB_URL + '/functions/v1/calendario-sporting', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY },
+                body: JSON.stringify({ epoca: _calEpocaAtual() }),
+                signal: ctrl.signal
+            });
+        } finally { clearTimeout(timer); }
+        if (!r.ok) {
+            var e = await r.json().catch(function () { return {}; });
+            if (r.status === 404 && !e.error) throw new Error('a função `calendario-sporting` ainda não está publicada no Supabase');
+            throw new Error(e.error || ('HTTP ' + r.status));
+        }
+        calPreparar(await r.json());
+    } catch (e) {
+        var m = String(e && e.message || e);
+        var rede = /load failed|failed to fetch|networkerror|timed? ?out/i.test(m) || (e && e.name === 'AbortError');
+        mostrarMensagem(rede
+            ? '❌ A procura demorou demasiado ou falhou a ligação. Tenta outra vez.'
+            : '❌ ' + m, false);
+    } finally {
+        _calALer = false;
+        if (btn) { btn.disabled = false; btn.classList.remove('a-ler'); }
+    }
+}
+
+// Resposta da função → duas listas de sugestões (jogos sem evento, datas mudadas)
+function calPreparar(d) {
+    _calSug = d || {};
+    var sugs = (Array.isArray(d && d.jogos) ? d.jogos : []).filter(_calEmAlvalade);
+    var hoje = _calHoje();
+    var map = _calEmparelhar(sugs, historico);
+    _calNovos = []; _calDatas = []; _calSel = { novos: [], datas: [] };
+    sugs.forEach(function (s, i) {
+        var ev = map[i];
+        if (!ev) {
+            // Jogo sem evento criado. Os que já passaram vêm desmarcados: criar
+            // hoje um evento de um jogo antigo é quase sempre engano.
+            var passado = s.data < hoje;
+            _calNovos.push({ sug: s, passado: passado });
+            _calSel.novos.push(!passado);
+            return;
+        }
+        var iso = _calIso(ev.data);
+        if (iso === s.data) return;                 // já está certo
+        if (ev.totalFatura) return;                 // conta fechada: não se mexe
+        _calDatas.push({ ev: ev, sug: s });
+        _calSel.datas.push(true);
+    });
+    calRender();
+    var box = document.getElementById('cal-sync-box');
+    if (box) box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function calToggle(tipo, i, el) { _calSel[tipo][i] = !!el.checked; calAtualizarBotao(); }
+function calTodos(tipo, ligar) {
+    _calSel[tipo] = _calSel[tipo].map(function () { return !!ligar; });
+    calRender();
+}
+function calFechar() {
+    _calSug = null; _calNovos = []; _calDatas = []; _calSel = { novos: [], datas: [] };
+    calRender();
+}
+function _calNSel() {
+    var n = 0;
+    _calSel.novos.forEach(function (v) { if (v) n++; });
+    _calSel.datas.forEach(function (v) { if (v) n++; });
+    return n;
+}
+function calAtualizarBotao() {
+    var b = document.getElementById('cal-aplicar-btn');
+    if (!b) return;
+    var n = _calNSel();
+    b.disabled = n === 0;
+    b.textContent = n ? ('Aplicar ' + n + ' alteraç' + (n === 1 ? 'ão' : 'ões')) : 'Nada selecionado';
+}
+
+function _calLinhaNova(o, i) {
+    var s = o.sug;
+    var meta = [s.competicao, s.jornada, s.hora].filter(Boolean).join(' · ');
+    return '<label class="calsug-row">'
+        + '<input type="checkbox" ' + (_calSel.novos[i] ? 'checked' : '') + ' onchange="calToggle(\'novos\',' + i + ',this)">'
+        + '<span class="calsug-dt">' + _calEsc(_calDataCurta(s.data)) + '</span>'
+        + '<span class="calsug-info"><span class="calsug-adv">' + _calEsc(_calDescricao(s)) + '</span>'
+        + '<span class="calsug-meta">' + _calEsc(meta) + '</span></span>'
+        + (o.passado ? '<span class="calsug-tag">já passou</span>' : '')
+        + (s.confirmado === false ? '<span class="calsug-tag">por confirmar</span>' : '')
+        + '</label>';
+}
+function _calLinhaData(o, i) {
+    var meta = [o.sug.competicao, o.sug.jornada, o.sug.hora].filter(Boolean).join(' · ');
+    return '<label class="calsug-row">'
+        + '<input type="checkbox" ' + (_calSel.datas[i] ? 'checked' : '') + ' onchange="calToggle(\'datas\',' + i + ',this)">'
+        + '<span class="calsug-dt trocada"><s>' + _calEsc(_calDataCurta(_calIso(o.ev.data))) + '</s>'
+        + '<b>' + _calEsc(_calDataCurta(o.sug.data)) + '</b></span>'
+        + '<span class="calsug-info"><span class="calsug-adv">' + _calEsc(o.ev.descricao || 'Sem nome') + '</span>'
+        + '<span class="calsug-meta">' + _calEsc(meta) + '</span></span>'
+        + (o.sug.confirmado === false ? '<span class="calsug-tag">por confirmar</span>' : '')
+        + '</label>';
+}
+function _calFontesHTML() {
+    var f = (_calSug && _calSug.fontes) || [];
+    var semPesquisa = (_calSug && _calSug.pesquisa === false)
+        ? '<p class="calsug-nota av">⚠️ Sem pesquisa web nesta leitura — as datas futuras podem estar desatualizadas.</p>' : '';
+    if (!f.length) return semPesquisa;
+    return semPesquisa + '<div class="calsug-fontes">Fontes: ' + f.map(function (x) {
+        return '<a href="' + _calEsc(x.url) + '" target="_blank" rel="noopener">' + _calEsc(x.titulo) + '</a>';
+    }).join(' · ') + '</div>';
+}
+
+function calRender() {
+    var box = document.getElementById('cal-sync-box');
+    if (!box) return;
+    if (!_calSug) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    box.style.display = 'block';
+    var emAlvalade = (Array.isArray(_calSug.jogos) ? _calSug.jogos : []).filter(_calEmAlvalade).length;
+    if (!_calNovos.length && !_calDatas.length) {
+        box.innerHTML = '<div class="calsug-head"><strong>Calendário conferido</strong>'
+            + '<button class="calsug-x" onclick="calFechar()" title="Fechar">✕</button></div>'
+            + '<p class="calsug-nota">Os ' + emAlvalade + ' jogos em Alvalade de ' + _calEsc(_calSug.epoca || '')
+            + ' já têm todos evento criado, com as datas certas.</p>' + _calFontesHTML();
+        return;
+    }
+    var partes = ['<div class="calsug-head"><strong>Sugestões do calendário</strong>'
+        + '<button class="calsug-x" onclick="calFechar()" title="Fechar">✕</button></div>'
+        + '<p class="calsug-nota">' + emAlvalade + ' jogos em Alvalade em ' + _calEsc(_calSug.epoca || '')
+        + '. Lido por IA a partir de fontes públicas — <strong>confere antes de aplicar</strong>. Nada é gravado até carregares em Aplicar.</p>'];
+    if (_calNovos.length) {
+        partes.push('<div class="calsug-sec"><div class="calsug-sec-hd"><span>Eventos a criar (' + _calNovos.length + ')</span>'
+            + '<span><button class="calsug-link" onclick="calTodos(\'novos\',true)">todos</button> · '
+            + '<button class="calsug-link" onclick="calTodos(\'novos\',false)">nenhum</button></span></div>'
+            + _calNovos.map(_calLinhaNova).join('') + '</div>');
+    }
+    if (_calDatas.length) {
+        partes.push('<div class="calsug-sec"><div class="calsug-sec-hd"><span>Datas diferentes (' + _calDatas.length + ')</span>'
+            + '<span><button class="calsug-link" onclick="calTodos(\'datas\',true)">todas</button> · '
+            + '<button class="calsug-link" onclick="calTodos(\'datas\',false)">nenhuma</button></span></div>'
+            + _calDatas.map(_calLinhaData).join('') + '</div>');
+    }
+    partes.push(_calFontesHTML());
+    partes.push('<div class="calsug-acoes"><button class="calsug-btn ok" id="cal-aplicar-btn" onclick="calAplicar()"></button>'
+        + '<button class="calsug-btn" onclick="calFechar()">Descartar</button></div>');
+    box.innerHTML = partes.join('');
+    calAtualizarBotao();
+}
+
+/* Cria o evento do jogo SEM o abrir: ao contrário de criarEvento(), que carrega
+   o evento novo no ecrã de trabalho, aqui podem nascer 20 de uma vez e o admin
+   continua onde estava. Convocados e menu partem do costume (os de sempre),
+   tesoureiro fica por escolher — é decidido no dia. */
+async function _calCriarEvento(sug, id, amigos, menu) {
+    var ev = {
+        id: id,
+        descricao: _calDescricao(sug),
+        data: _calPt(sug.data),
+        dataManual: true,          // data do calendário: não recalcular pelas ordens
+        ordens: [],
+        ofertas: [],
+        totalFatura: null,
+        fatura: null,
+        pagador: '',
+        dividas: {},
+        amigos: (amigos || []).slice(),
+        menu: Object.assign({}, menu || {})
+    };
+    historico.push(ev);
+    try {
+        await sbGuardarEvento(ev, { criar: true });
+    } catch (e) {
+        // Não gravou no servidor → também não fica em memória, senão voltava a
+        // aparecer como "por criar" na carga seguinte e duplicava-se.
+        historico = historico.filter(function (h) { return h !== ev; });
+        throw e;
+    }
+    return ev;
+}
+
+async function calAplicar() {
+    if (!isAdmin()) { mostrarMensagem('⚠️ Apenas o administrador pode sincronizar o calendário', false); return; }
+    var novos = _calNovos.filter(function (o, i) { return _calSel.novos[i]; });
+    var datas = _calDatas.filter(function (o, i) { return _calSel.datas[i]; });
+    if (!novos.length && !datas.length) return;
+    var btn = document.getElementById('cal-aplicar-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ A gravar…'; }
+    var criados = 0, corrigidos = 0, erros = 0;
+    // Ids por Date.now() como no resto da app, mas com um passo por evento —
+    // criados em série, dois seguidos apanhariam o mesmo milissegundo.
+    var base = Date.now();
+    // Convocados e menu calculados UMA vez, antes do ciclo: amigosPorDefeito()
+    // olha para os últimos 10 eventos do histórico e, a criar 20 jogos de
+    // seguida, a partir do 11.º só via os que estas linhas acabaram de criar
+    // (vazios) — todos os eventos seguintes nasciam sem ninguém convocado.
+    var amigosBase = amigosPorDefeito();
+    var menuBase = menuAgregadoGlobal();
+    for (var i = 0; i < novos.length; i++) {
+        try { await _calCriarEvento(novos[i].sug, base + i, amigosBase, menuBase); criados++; }
+        catch (e) { erros++; }
+    }
+    for (var k = 0; k < datas.length; k++) {
+        var o = datas[k], antes = o.ev.data;
+        o.ev.data = _calPt(o.sug.data);
+        try { await sbGuardarEvento(o.ev); corrigidos++; }
+        catch (e) { o.ev.data = antes; erros++; }
+    }
+    salvarHistoricoLocal();
+    calFechar();
+    renderHistoricoDropdown();
+    try { if (typeof renderInicio === 'function') renderInicio(); } catch (e) {}
+    try { renderContas(); } catch (e) {}
+    var p = [];
+    if (criados) p.push(criados + ' evento' + (criados === 1 ? '' : 's') + ' criado' + (criados === 1 ? '' : 's'));
+    if (corrigidos) p.push(corrigidos + ' data' + (corrigidos === 1 ? '' : 's') + ' corrigida' + (corrigidos === 1 ? '' : 's'));
+    mostrarMensagem(p.length ? ('✓ ' + p.join(' · ') + (erros ? ' (' + erros + ' com erro)' : '')) : '❌ Nada gravado', p.length > 0);
+}
+
 /* ── SUPABASE ───────────────────────────────── */
 const SB_URL = 'https://gjweqwfbnkgnibhajldc.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdqd2Vxd2ZibmtnbmliaGFqbGRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDk4NzUsImV4cCI6MjA5NjY4NTg3NX0.h6st-RayGhQdsqH7E2Ko-rPWk2QZUpTevO6cbjvlSnk';
@@ -4368,10 +4756,36 @@ function presentesNoEvento(ev) {
     if (ev.pagador) s.add(ev.pagador);
     return s;
 }
+/* Evento a abrir quando não há um escolhido (arranque, importação, o evento
+   aberto foi apagado). Era "o último do histórico" — o último a ser CRIADO —
+   e com o calendário da época criado de uma vez (calSincronizar) isso passou a
+   ser o último jogo da época, daqui a meses. Agora é o mais próximo de hoje,
+   com preferência pelo passado/hoje: é aí que há conta por fechar. */
+function eventoPorDefeito() {
+    if (!historico.length) return null;
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const t0 = hoje.getTime();
+    let melhor = null, melhorFuturo = 2, melhorDist = Infinity;
+    historico.forEach(ev => {
+        const t = _parsePgtoData(ev.data) || 0;
+        const futuro = t > t0 ? 1 : 0;
+        const dist = Math.abs(t - t0);
+        if (futuro < melhorFuturo || (futuro === melhorFuturo && dist < melhorDist)) {
+            melhor = ev; melhorFuturo = futuro; melhorDist = dist;
+        }
+    });
+    return melhor || historico[historico.length - 1];
+}
+
 // Amigos sugeridos por defeito num novo evento:
 // só quem veio em >= 3 dos últimos 10 eventos, ordenados por quem mais veio.
 function amigosPorDefeito() {
-    const ultimos = historico.slice(-10);
+    // Últimos 10 eventos COM consumo, e não as últimas 10 linhas do histórico:
+    // desde que o calendário da época pode ser criado de uma vez
+    // (calSincronizar), as últimas linhas passaram a ser jogos futuros ainda sem
+    // uma única ordem — a contagem dava zero e os eventos novos nasciam sem
+    // ninguém convocado.
+    const ultimos = historico.filter(ev => (ev.ordens || []).length || (ev.ofertas || []).length).slice(-10);
     const contagem = {};
     ultimos.forEach(ev => {
         presentesNoEvento(ev).forEach(a => { contagem[a] = (contagem[a] || 0) + 1; });
@@ -4681,7 +5095,7 @@ async function sbCarregarDados() {
         if (eventoAtualId != null) {
             const atual = historico.find(e => e.id == eventoAtualId);
             if (atual) carregarEvento(atual);
-            else if (historico.length > 0) carregarEvento(historico[historico.length - 1]);
+            else if (historico.length > 0) carregarEvento(eventoPorDefeito());
             else limparEstadoEvento();
             atualizarReadOnly();
         }
