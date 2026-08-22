@@ -641,6 +641,10 @@ if ('serviceWorker' in navigator) {
 /* ===== Ecrã inicial (hub) ===== */
 #page-inicio{padding:14px 0 92px;}
 .sbi-list{display:flex;flex-direction:column;gap:9px;}
+/* Sem isto o `hidden` do bloco colapsado (os jogos para lá dos 2 primeiros) não
+   fazia nada: a regra de autor acima ganha ao [hidden] do browser e a lista
+   aparecia toda na mesma, por muito que o botão dissesse "mais N jogos". */
+.sbi-list[hidden]{display:none;}
 .sbi-eyebrow{font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:var(--ink-soft,#5B6661);font-size:11px;margin:22px 4px 10px;display:flex;align-items:center;gap:8px;}
 .sbi-eyebrow::before{content:"";flex:0 0 auto;width:15px;height:3px;border-radius:2px;background:linear-gradient(90deg,var(--verde,#0E7A4F),var(--dourado,#B8911F));}
 .sbi-eyebrow:first-child{margin-top:2px;}
@@ -678,6 +682,20 @@ if ('serviceWorker' in navigator) {
 .sbi-octext{flex:1 1 auto;min-width:0;}
 .sbi-ocname{font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:20px;line-height:1.22;color:#fff;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;padding-bottom:1px;letter-spacing:normal;text-transform:none;overflow-wrap:anywhere;}
 .sbi-ocsub{font-family:var(--mono,monospace);font-size:11px;color:rgba(255,255,255,.85);margin-top:4px;display:block;letter-spacing:normal;text-transform:none;}
+
+/* Jogo por abrir (cartão de AGENDA). Cor de propósito diferente do verde do
+   jogo em aberto: aquele é trabalho por fazer hoje, este é só uma marcação —
+   ver os dois iguais era a confusão que isto vem resolver. */
+.sbi-fut{position:relative;overflow:hidden;background:linear-gradient(135deg,#FFFCF2 0%,#F6F0DD 100%);border:1px solid #E8DCB8;border-radius:16px;padding:12px 14px 12px 16px;gap:12px;box-shadow:0 6px 18px -14px rgba(11,59,43,.55);}
+.sbi-fut::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(180deg,var(--dourado,#B8911F),#D8B23C);}
+.sbi-fut > *{position:relative;z-index:1;}
+.sbi-fut .sbi-ico{background:rgba(184,145,31,.16);color:#8A6D14;border-radius:50%;width:42px;height:42px;box-shadow:inset 0 0 0 1px rgba(184,145,31,.22);}
+.sbi-fut .sbi-ico svg{width:24px;height:24px;}
+.sbi-fut .sbi-ocname{color:var(--ink,#1B231F);font-size:18px;}
+.sbi-fut .sbi-ocsub{color:#8A6D14;}
+/* O próximo é o único que se pode abrir: destaca-se, sem passar a verde. */
+.sbi-fut.proximo{border-color:#D9C480;box-shadow:0 9px 22px -14px rgba(138,109,20,.8),inset 0 1px 0 rgba(255,255,255,.65);}
+.sbi-chev.gold{color:var(--dourado,#B8911F);opacity:.6;}
 
 /* Atalho (cartão branco) */
 .sbi-row{background:var(--card,#fff);border:1px solid var(--linha,#DDE3DD);border-radius:13px;padding:12px 14px;gap:13px;box-shadow:0 3px 12px -10px rgba(11,59,43,.4);}
@@ -1120,6 +1138,26 @@ if ('serviceWorker' in navigator) {
       + '</span><span class="sbi-chev light">'+CHEV+'</span></button>';
   }
 
+  /* Jogo ainda por abrir: cartão de AGENDA, deliberadamente noutra cor — o
+     verde é do jogo em aberto (há conta por fechar) e confundir os dois é
+     confundir "hoje há trabalho" com "está marcado". Tocar abre a folha do
+     jogo (vou/não vou, e abrir o jogo se for o próximo). */
+  function cardFuturo(ev, primeiro){
+    var nome = esc(ev.descricao || 'Sem nome');
+    var data = esc(ev.data || '');
+    var vou = null, abre = false;
+    try { if (typeof vouAoJogo==='function') vou = vouAoJogo(ev); } catch(e){}
+    try { abre = (typeof podeAbrirJogo==='function') && podeAbrirJogo(ev); } catch(e){}
+    var pill = '';
+    if (vou === true) pill = '<span class="sbi-pill sbi-pos">'+CHK+' vou</span>';
+    else if (vou === false) pill = '<span class="sbi-pill sbi-calm">não vou</span>';
+    return '<button class="sbi-tap sbi-fut'+(primeiro?' proximo':'')+'" onclick="abrirFolhaJogo(\''+esc(ev.id)+'\')" aria-label="'+nome+'">'
+      + '<span class="sbi-ico">'+ICO.bola+'</span>'
+      + '<span class="sbi-octext"><span class="sbi-ocname">'+nome+'</span>'
+      + '<span class="sbi-ocsub">'+data+(abre ? ' · toca para abrir' : '')+'</span>'
+      + '</span>'+pill+'<span class="sbi-chev gold">'+CHEV+'</span></button>';
+  }
+
   function atalhos(){
     var s = '';
     s += '<button class="sbi-tap sbi-sq" onclick="sbiHistorico()" aria-label="Histórico">'
@@ -1171,9 +1209,14 @@ if ('serviceWorker' in navigator) {
   function tsEvento(ev){
     try { return (typeof _parsePgtoData==='function') ? (_parsePgtoData(ev.data) || 0) : 0; } catch(e){ return 0; }
   }
-  // Meia-noite de hoje: um evento é "futuro" a partir de amanhã. O jogo de hoje
-  // fica com os que estão por fechar — é o de que se precisa hoje.
-  function inicioDeHoje(){ var d = new Date(); d.setHours(0,0,0,0); return d.getTime(); }
+  // "Em aberto" deixou de ser uma questão de data: o jogo só abre quando o
+  // admin (ou o substituto) o abre — ver jogoAberto()/abrirJogo() no app.js.
+  // O fallback pela data é para o caso de o app.js em cache ainda não a ter.
+  function ehJogoAberto(ev){
+    try { if (typeof jogoAberto==='function') return jogoAberto(ev); } catch(e){}
+    var d = new Date(); d.setHours(0,0,0,0);
+    return tsEvento(ev) <= d.getTime();
+  }
 
   window.sbiToggleFuturos = function(){
     _futAberto = !_futAberto;
@@ -1195,10 +1238,11 @@ if ('serviceWorker' in navigator) {
     if (futuros.length){
       var visiveis = futuros.slice(0, FUTUROS_A_MOSTRAR);
       var resto = futuros.slice(FUTUROS_A_MOSTRAR);
-      h += '<div class="sbi-list">'+visiveis.map(cardAberto).join('')+'</div>';
+      // `primeiro` só no primeiro de todos: é o único que se pode abrir.
+      h += '<div class="sbi-list">'+visiveis.map(function(ev,i){ return cardFuturo(ev, i===0); }).join('')+'</div>';
       if (resto.length){
         h += '<div class="sbi-list" id="sbi-futuros-mais" style="margin-top:9px;"'+(_futAberto?'':' hidden')+'>'
-           + resto.map(cardAberto).join('') + '</div>';
+           + resto.map(function(ev){ return cardFuturo(ev, false); }).join('') + '</div>';
         h += '<button class="sbi-mais" id="sbi-futuros-btn" data-n="'+resto.length+'" onclick="sbiToggleFuturos()">'
            + (_futAberto ? '▴ mostrar menos' : '▾ mais '+resto.length+' jogos') + '</button>';
       }
@@ -1222,9 +1266,8 @@ if ('serviceWorker' in navigator) {
     if (!el) return;
     var admin = ehAdmin();
     var abertos = eventosAbertos();
-    var hoje = inicioDeHoje();
     var futuros = [], porFechar = [];
-    abertos.forEach(function(ev){ (tsEvento(ev) > hoje ? futuros : porFechar).push(ev); });
+    abertos.forEach(function(ev){ (ehJogoAberto(ev) ? porFechar : futuros).push(ev); });
     porFechar.sort(function(a,b){ return tsEvento(b) - tsEvento(a); });  // mais recente primeiro
     futuros.sort(function(a,b){ return tsEvento(a) - tsEvento(b); });    // mais perto primeiro
     var h = '';

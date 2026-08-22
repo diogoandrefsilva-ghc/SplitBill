@@ -622,6 +622,26 @@ html,body{touch-action:pan-x pan-y}
         .modal-actions button.modal-confirm { color: #0E7A4F; }
         .modal-actions button.modal-danger { color: #B3402F; }
         .modal-actions button + button { border-left: 1px solid #E6EAE4; }
+
+        /* Folha de um jogo por abrir (ecrã inicial › Próximos Jogos em Alvalade):
+           data, vou/não vou, convocados e — só para quem o pode abrir — a nota
+           do que abrir o jogo faz. Os botões neutralizam a regra global
+           button:hover (verde escuro), que de outra forma ganhava sempre e no
+           telemóvel ficava colada depois do toque. */
+        .jf-data { font-family: var(--mono, monospace); font-size: 12px; letter-spacing: .04em; color: #5B6661; }
+        .jf-lbl { margin-top: 14px; font-size: 12.5px; font-weight: 700; color: #0B3B2B; }
+        .jf-btns { display: flex; gap: 8px; margin-top: 8px; }
+        .jf-btn, .jf-btn:hover {
+            flex: 1; padding: 11px 8px; border-radius: 10px; border: 1.5px solid #DDE3DD;
+            background: #fff; color: #5B6661; font-size: 13.5px; font-weight: 700; cursor: pointer;
+        }
+        .jf-btn.vou.on, .jf-btn.vou.on:hover { background: #E2EFE8; color: #0E5C3F; border-color: #0E7A4F; }
+        .jf-btn.nao.on, .jf-btn.nao.on:hover { background: rgba(179,64,47,.10); color: #B3402F; border-color: #B3402F; }
+        .jf-btn:active { transform: scale(.98); }
+        .jf-conv { margin-top: 12px; font-size: 12px; color: #5B6661; line-height: 1.45; }
+        .jf-conv strong { color: #0B3B2B; }
+        .jf-nota { margin-top: 12px; padding: 9px 11px; border-radius: 10px; background: #FBF4DC; color: #8A6D14; font-size: 12px; line-height: 1.45; text-align: left; }
+        .jf-aviso { margin-top: 12px; font-size: 12px; color: #B3402F; line-height: 1.45; }
         @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes modalSlideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 

@@ -738,9 +738,11 @@ function renderHistoricoDropdown() {
     // parte, colapsado ao fim dos primeiros — senão a lista abria com meia época
     // pela frente e o histórico ficava fora de vista.
     const _ts = ev => { try { return _parsePgtoData(ev.data) || 0; } catch(e) { return 0; } };
-    const _hoje0 = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); })();
+    // "Por jogar" = jogo ainda por ABRIR (ver jogoAberto). Desde que o jogo se
+    // abre à mão, a data deixou de chegar para decidir de que lado fica: um jogo
+    // cuja data já passou mas que ninguém abriu continua por jogar.
     const _futuros = [], _passados = [];
-    historico.forEach(ev => (_ts(ev) > _hoje0 ? _futuros : _passados).push(ev));
+    historico.forEach(ev => ((ev.totalFatura || jogoAberto(ev)) ? _passados : _futuros).push(ev));
     _futuros.sort((a, b) => _ts(a) - _ts(b));   // o mais perto primeiro
     _passados.sort((a, b) => _ts(b) - _ts(a));  // o mais recente primeiro
     const _card = ev => {
@@ -800,11 +802,16 @@ function mostrarModal(opts) {
         document.getElementById('modal-msg').innerHTML = opts.msg || '';
         const actions = document.getElementById('modal-actions');
         actions.innerHTML = '';
-        const cancelBtn = document.createElement('button');
-        cancelBtn.className = 'modal-cancel';
-        cancelBtn.textContent = opts.cancelText || 'Cancelar';
-        cancelBtn.onclick = () => { fecharModalComResultado(false); };
-        actions.appendChild(cancelBtn);
+        // `semCancelar`: modais que não são uma pergunta (a folha de um jogo por
+        // abrir para quem não o pode abrir) ficavam com dois botões a fazer o
+        // mesmo — fechar. Aí sobra só o de confirmar, com o texto que lhe derem.
+        if (!opts.semCancelar) {
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'modal-cancel';
+            cancelBtn.textContent = opts.cancelText || 'Cancelar';
+            cancelBtn.onclick = () => { fecharModalComResultado(false); };
+            actions.appendChild(cancelBtn);
+        }
         // Terceira escolha opcional (ex.: "Corrigir só no menu"), a par de
         // Cancelar/Confirmar — resolve com a string 'extra', sem mexer no
         // contrato true/false que os outros chamadores já usam.
@@ -983,7 +990,11 @@ function criarEvento(opts) {
         pagador: tesoureiro,
         dividas: {},
         amigos: novosAmigos,
-        menu: novoMenu
+        menu: novoMenu,
+        // Criado à mão para hoje (ou para uma data passada) = está a começar
+        // agora: nasce aberto. Marcado para a frente, nasce em agenda, como os
+        // que vêm do calendário (ver _calCriarEvento) — só abre no dia.
+        aberto: (_parsePgtoData(opts.data || '') || _hojeInicio()) <= _hojeInicio()
     };
     historico.push(novoEvt);
     salvarHistoricoLocal();
@@ -4415,7 +4426,9 @@ async function _calCriarEvento(sug, id, amigos, menu) {
         pagador: '',
         dividas: {},
         amigos: (amigos || []).slice(),
-        menu: Object.assign({}, menu || {})
+        menu: Object.assign({}, menu || {}),
+        // Agenda: só passa a "em aberto" quando alguém abrir o jogo (abrirJogo).
+        aberto: false
     };
     historico.push(ev);
     try {
@@ -4465,6 +4478,170 @@ async function calAplicar() {
     if (criados) p.push(criados + ' evento' + (criados === 1 ? '' : 's') + ' criado' + (criados === 1 ? '' : 's'));
     if (corrigidos) p.push(corrigidos + ' data' + (corrigidos === 1 ? '' : 's') + ' corrigida' + (corrigidos === 1 ? '' : 's'));
     mostrarMensagem(p.length ? ('✓ ' + p.join(' · ') + (erros ? ' (' + erros + ' com erro)' : '')) : '❌ Nada gravado', p.length > 0);
+}
+
+/* ── JOGO ABERTO & PRESENÇAS (Próximos Jogos em Alvalade) ────────────────
+   Com a época inteira criada de uma vez (calSincronizar), "evento por fechar"
+   deixou de querer dizer "dia de jogo": bastava a data chegar para o jogo
+   aparecer no ecrã inicial como conta por fechar, tivesse lá ido alguém ou não.
+   Agora o jogo nasce em AGENDA e só passa a "em aberto" quando o admin — ou o
+   substituto do evento — o ABRE, no cartão dos Próximos Jogos. Vive na coluna
+   `eventos.aberto` (migração db/jogo-aberto.sql).
+
+   Sem a migração, ABERTO_COL fica false, o botão de abrir esconde-se e tudo se
+   comporta como antes: manda a data (jogoAberto cai no ramo do legado).
+
+   No mesmo cartão, qualquer convocado marca se VAI ou NÃO VAI — e é isso que
+   mexe na lista de convocados do evento (`ev.amigos`). Quem pode editar o
+   evento grava pelo caminho normal; os outros vão pela função do servidor
+   `marcar_presenca` (ver sbMarcarPresenca). */
+
+function _hojeInicio() { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); }
+
+// O jogo está mesmo aberto (dia de jogo, conta por fechar)?
+function jogoAberto(ev) {
+    if (!ev || ev.totalFatura) return false;
+    if (ev.aberto === true) return true;
+    if (ev.aberto === false) return false;
+    // null/undefined = evento anterior à migração (ou migração por correr):
+    // volta ao critério antigo, a data.
+    return (_parsePgtoData(ev.data) || 0) <= _hojeInicio();
+}
+
+// Jogos por abrir, do mais próximo para o mais longe.
+function jogosPorAbrir() {
+    return historico
+        .filter(ev => !ev.totalFatura && !jogoAberto(ev))
+        .sort((a, b) => (_parsePgtoData(a.data) || 0) - (_parsePgtoData(b.data) || 0));
+}
+// Só o PRIMEIRO da lista se pode abrir: abrir o jogo de daqui a dois meses é
+// sempre engano, e dois jogos abertos ao mesmo tempo baralhavam o ecrã inicial.
+function ehProximoPorAbrir(ev) {
+    const l = jogosPorAbrir();
+    return !!(ev && l.length && String(l[0].id) === String(ev.id));
+}
+// Quem pode abrir o jogo: admin ou o substituto nomeado para ESTE evento.
+function podeAbrirJogo(ev) {
+    return !!(ev && ABERTO_COL && !ev.totalFatura && !jogoAberto(ev)
+              && ehProximoPorAbrir(ev) && podeEditarEvento(ev));
+}
+
+// Vou a este jogo? true/false, ou null se a conta não tem nome associado.
+function vouAoJogo(ev) {
+    const meus = meusAmigos();
+    if (!meus.length) return null;
+    return (ev.amigos || []).some(a => meus.includes(a));
+}
+
+// Abre o jogo: passa a ser o evento em aberto do ecrã inicial e vai-se logo
+// para lá — quem abre é porque está a chegar à mesa.
+async function abrirJogo(id) {
+    const ev = historico.find(e => String(e.id) === String(id));
+    if (!ev) return false;
+    if (!podeEditarEvento(ev)) { mostrarMensagem('⚠️ Só o administrador (ou o substituto do evento) pode abrir o jogo', false); return false; }
+    if (!ABERTO_COL) { mostrarMensagem('⚠️ Falta a coluna eventos.aberto — corre db/jogo-aberto.sql no Supabase', false); return false; }
+    ev.aberto = true;
+    salvarHistoricoLocal();
+    try {
+        await sbGuardarEvento(ev);
+    } catch (e) {
+        // Não gravou no servidor → também não fica aberto aqui, senão este
+        // telemóvel via o jogo em aberto e mais nenhum.
+        ev.aberto = false;
+        salvarHistoricoLocal();
+        return false;
+    }
+    await navegarHistorico(ev.id);
+    try { if (typeof renderInicio === 'function') renderInicio(); } catch (e) {}
+    return true;
+}
+
+// Marca (ou desmarca) a minha presença num jogo. Mexe nos convocados do evento:
+// é a mesma lista que depois aparece na grelha de amigos no dia do jogo.
+async function marcarPresenca(id, vai) {
+    const ev = historico.find(e => String(e.id) === String(id));
+    if (!ev || ev.totalFatura) return false;
+    const meus = meusAmigos();
+    if (!meus.length) { mostrarMensagem('⚠️ A tua conta ainda não está associada a nenhum nome — pede ao administrador', false); return false; }
+
+    const antes = (ev.amigos || []).slice();
+    let lista;
+    if (vai) { lista = antes.slice(); meus.forEach(m => { if (!lista.includes(m)) lista.push(m); }); }
+    else     { lista = antes.filter(a => !meus.includes(a)); }
+    if (lista.length === antes.length) return true;   // já estava assim: nada a gravar
+
+    ev.amigos = lista;
+    // O evento pode ser o que está carregado no ecrã de trabalho: sem isto o
+    // auto-save de 2s carimbava por cima a lista antiga (vem da global `amigos`).
+    if (String(eventoAtualId) === String(ev.id)) amigos = lista.slice();
+    salvarHistoricoLocal();
+
+    let ok;
+    if (podeEditarEvento(ev)) {
+        try { await sbGuardarEvento(ev); ok = true; } catch (e) { ok = false; }
+    } else {
+        ok = await sbMarcarPresenca(ev.id, vai);
+    }
+    if (!ok) {
+        ev.amigos = antes;
+        if (String(eventoAtualId) === String(ev.id)) amigos = antes.slice();
+        salvarHistoricoLocal();
+        return false;
+    }
+    if (String(eventoAtualId) === String(ev.id)) {
+        try { renderConfigAmigos(); renderAmigosBotoes(); renderOfertaAmigos(); renderPagadorSelect(); } catch (e) {}
+    }
+    return true;
+}
+
+/* Folha de um jogo por abrir (tocar no cartão dos Próximos Jogos): a data, o
+   vou/não vou, quem já está convocado e — só para quem o pode abrir, e só no
+   próximo — o botão de abrir o jogo. */
+function _jogoSheetHTML(ev) {
+    const vou = vouAoJogo(ev);
+    const convocados = (ev.amigos || []);
+    let h = '<div class="jf-data">' + _calEsc(ev.data || '—') + '</div>';
+    if (vou === null) {
+        h += '<div class="jf-aviso">A tua conta ainda não está associada a nenhum nome — pede ao administrador para te associar nas Definições.</div>';
+    } else {
+        h += '<div class="jf-lbl">Vais a este jogo?</div>'
+           + '<div class="jf-btns">'
+           + '<button type="button" class="jf-btn vou' + (vou ? ' on' : '') + '" onclick="jogoSheetPresenca(' + ev.id + ',true)">✓ Vou</button>'
+           + '<button type="button" class="jf-btn nao' + (vou === false ? ' on' : '') + '" onclick="jogoSheetPresenca(' + ev.id + ',false)">✕ Não vou</button>'
+           + '</div>';
+    }
+    h += '<div class="jf-conv"><strong>' + convocados.length + '</strong> convocado' + (convocados.length === 1 ? '' : 's')
+       + (convocados.length ? ': ' + _calEsc(convocados.join(', ')) : '') + '</div>';
+    if (podeAbrirJogo(ev)) {
+        h += '<div class="jf-nota">Abrir o jogo passa-o para <strong>Em aberto</strong> no ecrã inicial: é aí que se lançam as ordens e se fecha a conta.</div>';
+    }
+    return h;
+}
+
+// Chamada pelos botões dentro da folha — redesenha a folha e o ecrã inicial.
+async function jogoSheetPresenca(id, vai) {
+    const ok = await marcarPresenca(id, vai);
+    if (!ok) return;
+    const ev = historico.find(e => String(e.id) === String(id));
+    const box = document.getElementById('modal-msg');
+    if (ev && box) box.innerHTML = _jogoSheetHTML(ev);
+    try { if (typeof renderInicio === 'function') renderInicio(); } catch (e) {}
+    try { renderHistoricoDropdown(); } catch (e) {}
+}
+
+async function abrirFolhaJogo(id) {
+    const ev = historico.find(e => String(e.id) === String(id));
+    if (!ev) return;
+    const podeAbrir = podeAbrirJogo(ev);
+    const r = await mostrarModal({
+        icon: '⚽',
+        title: ev.descricao || 'Jogo',
+        msg: _jogoSheetHTML(ev),
+        confirmText: podeAbrir ? 'Abrir jogo' : 'Fechar',
+        cancelText: 'Fechar',
+        semCancelar: !podeAbrir
+    });
+    if (r === true && podeAbrir) await abrirJogo(ev.id);
 }
 
 /* ── SUPABASE ───────────────────────────────── */
@@ -5015,6 +5192,15 @@ let MENU_COL = true;
    para não prometer uma ação que ia falhar. */
 let ORDENS_CRIADO_POR_COL = true;
 
+/* Jogo aberto à mão (`eventos.aberto`, migração db/jogo-aberto.sql) — sem a
+   coluna, o jogo volta a abrir-se sozinho quando a data chega (ver jogoAberto)
+   e o botão "Abrir jogo" esconde-se, para não prometer o que não grava.
+   `PRESENCA_RPC` é a irmã para a função `marcar_presenca` do mesmo ficheiro:
+   passa a false ao primeiro 404, e aí o vou/não vou some-se para quem não pode
+   editar o evento (o admin e o substituto gravam pelo caminho normal). */
+let ABERTO_COL = true;
+let PRESENCA_RPC = true;
+
 /* Pedidos de pagamento por confirmar (`pagamentos.declarado_por`, migração
    db/pagamentos-pendentes.sql) — permite a um utilizador declarar que já pagou
    uma dívida (pendente ou prescrita); fica tipo='pendente' até o admin
@@ -5052,7 +5238,9 @@ async function sbCarregarDados() {
             FATURA_COL = tem('fatura');
             AMIGOS_COL = tem('amigos');
             MENU_COL = tem('menu');
+            ABERTO_COL = tem('aberto');
         }
+        if (!ABERTO_COL) console.warn('[SplitBill] coluna eventos.aberto ausente — corre db/jogo-aberto.sql para o jogo só abrir quando alguém o abrir');
         if (!FATURA_COL) console.warn('[SplitBill] coluna eventos.fatura ausente — corre db/fatura-detalhe.sql para guardar o detalhe da fatura no servidor');
         if (!AMIGOS_COL || !MENU_COL) console.warn('[SplitBill] colunas eventos.amigos/menu ausentes — corre db/convocados-menu.sql para os convocados e o menu do evento viajarem entre dispositivos');
 
@@ -5140,7 +5328,10 @@ async function sbCarregarDados() {
                 menu: (MENU_COL && ev.menu && typeof ev.menu === 'object') ? ev.menu : (menusLocais[ev.id] || {}),
                 dividas: evDividas,
                 fatura: (FATURA_COL && ev.fatura) ? ev.fatura : (faturasLocais[ev.id] || null),
-                substituto: ev.substituto_email || null
+                substituto: ev.substituto_email || null,
+                // undefined (coluna ausente) ≠ false: é o que faz jogoAberto()
+                // cair no critério antigo, a data.
+                aberto: ABERTO_COL ? (ev.aberto === null ? undefined : !!ev.aberto) : undefined
             };
         });
 
@@ -5257,6 +5448,36 @@ function sbErroLegivel(e) {
     }
 }
 
+/* "Vou"/"Não vou" de quem NÃO pode editar o evento (convocado sem ser admin
+   nem substituto). Passa pela função `marcar_presenca` do servidor
+   (db/jogo-aberto.sql), que só acrescenta ou tira desta lista os nomes de
+   amigo desta conta: dar-lhe UPDATE em `eventos` deixava-o mexer no resto da
+   linha — fatura, pagador, substituto. Devolve true se gravou. */
+async function sbMarcarPresenca(eventoId, vai) {
+    if (!_sbSession) return false;
+    if (!PRESENCA_RPC) { mostrarMensagem('⚠️ Falta a função marcar_presenca — corre db/jogo-aberto.sql no Supabase', false); return false; }
+    try {
+        const r = await sbFetch(`${SB_URL}/rest/v1/rpc/marcar_presenca`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Accept': 'application/json' }),
+            body: JSON.stringify({ p_evento_id: eventoId, p_vai: !!vai })
+        });
+        if (r.status === 404) {
+            // Migração por correr: esconde-se o botão daqui para a frente em vez
+            // de deixar toda a gente a carregar numa coisa que nunca grava.
+            PRESENCA_RPC = false;
+            mostrarMensagem('⚠️ Falta a função marcar_presenca — corre db/jogo-aberto.sql no Supabase', false);
+            return false;
+        }
+        await sbOk(r, 'marcar presença');
+        return true;
+    } catch (e) {
+        console.error('Erro ao marcar presença:', e);
+        mostrarMensagem('⚠️ Não gravado [' + (e.ctx || 'rede') + ']: ' + sbErroLegivel(e), false);
+        return false;
+    }
+}
+
 // Sincroniza uma tabela-pai (ordens/ofertas) + a tabela-filho respetiva
 // (ordem_amigos/oferta_para) com o padrão UPSERT + PRUNE: insere/atualiza tudo
 // PRIMEIRO e só DEPOIS remove o que sobra. Nunca apaga linhas-pai antes de a
@@ -5313,6 +5534,9 @@ async function sbGuardarEvento(ev, opts) {
         // PostgREST rejeitava o pedido inteiro (PGRST204) e o evento não gravava.
         if (AMIGOS_COL) campos.amigos = ev.amigos || [];
         if (MENU_COL) campos.menu = ev.menu || {};
+        // `aberto` só vai se souber o valor: um evento anterior à migração tem
+        // isto a undefined e escrever false punha-o de volta em agenda.
+        if (ABERTO_COL && ev.aberto != null) campos.aberto = !!ev.aberto;
         // sbOk: se a linha-pai não gravar, as ordens seguintes rebentam na chave
         // estrangeira. Sem esta verificação a causa real ficava escondida e só
         // se via o erro derivado (ou nada).

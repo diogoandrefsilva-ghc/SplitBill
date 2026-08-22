@@ -13,7 +13,7 @@ App pessoal de divisão de contas ("dia de jogo").
 
 ## Como NÃO gastar tokens à toa (importante)
 - **Não leias o `app.js` inteiro.** Está dividido em secções com comentários `/* ── título ── */`. Para achar algo, faz `grep` pelo título e lê só esse troço. Secções:
-  Custom confirm modal · **Pagador & Contas (dívidas)** · Page switching · FAB · **Core: cálculo de saldos** (dívidas + pagamentos) · Render · Payment form · Edit Ordem inline · **Importar Fatura** (foto/PDF → Gemini → conferência artigo a artigo) · Configs · **Supabase** (+ Sessão/refresh do token, Permissões, Agregação global, IDs únicos, Equivalências amigo↔conta)
+  Custom confirm modal · **Pagador & Contas (dívidas)** · Page switching · FAB · **Core: cálculo de saldos** (dívidas + pagamentos) · Render · Payment form · Edit Ordem inline · **Importar Fatura** (foto/PDF → Gemini → conferência artigo a artigo) · **Jogo aberto & presenças** (abrir o jogo, vou/não vou) · Configs · **Supabase** (+ Sessão/refresh do token, Permissões, Agregação global, IDs únicos, Equivalências amigo↔conta)
 - `fatura-restaurante.ts` — Edge Function (Deno) que lê a fatura com o Gemini. **Não corre no site**: vive no Supabase, faz-se deploy à parte (`supabase functions deploy fatura-restaurante`). É irmã da `fatura-ocr` da FestasBV — mesmo projeto Supabase, schema e prompt diferentes.
 - **Fatura guardada:** o detalhe lido fica em `estado.fatura` e persiste na coluna `eventos.fatura` (jsonb, `db/fatura-detalhe.sql`). A correspondência linha-da-fatura ↔ artigo do menu **não** se guarda — é recalculada a cada render (`faturaConferir()`), de propósito: se o menu do evento mudar, a conferência acompanha. Sem a migração, `FATURA_COL=false` e a fatura fica só no localStorage.
 - **Convocados e menu do evento:** persistem nas colunas `eventos.amigos` / `eventos.menu` (jsonb, `db/convocados-menu.sql`). `ev.amigos` é a lista de **candidatos** (quem foi convocado); quem **consumiu** está em `ordem_amigos`/`oferta_para` — não confundir (`presentesNoEvento()` usa o segundo). Ao carregar da BD faz-se a união das duas (`convocadosDoEvento()`), para os eventos anteriores à migração não ficarem vazios. Sem a migração, `AMIGOS_COL`/`MENU_COL=false` e ficam só no localStorage.
@@ -51,16 +51,16 @@ IA e um evento com a data errada estraga o dia de jogo todo.
 ## Jogos futuros no ecrã: o calendário da época não pode encher a lista
 Com o calendário criado de uma vez, "eventos em aberto" passou a incluir meia
 época de jogos por acontecer. Por isso:
-- **Ecrã inicial** (`renderInicio`, no `index.html`): "Em aberto" só leva os de
-  hoje/passado (é onde há conta por fechar). Os futuros vivem em **"Próximos
-  Jogos em Alvalade"** (`proximosAlvalade()`), no **fim do ecrã, a seguir ao
-  Consumo** — é agenda, não é trabalho por fazer, e não deve empurrar para baixo
-  o que precisa de atenção hoje. `FUTUROS_A_MOSTRAR` (2) à vista, o resto atrás
-  de "mais N jogos". A secção aparece **sempre**, mesmo sem jogos: é lá que o
-  admin tem o botão de sincronizar (e só o admin o vê).
+- **Ecrã inicial** (`renderInicio`, no `index.html`): "Em aberto" só leva os
+  jogos **abertos** (ver secção seguinte). Os que estão por abrir vivem em
+  **"Próximos Jogos em Alvalade"** (`proximosAlvalade()`), no **fim do ecrã, a
+  seguir ao Consumo** — é agenda, não é trabalho por fazer, e não deve empurrar
+  para baixo o que precisa de atenção hoje. `FUTUROS_A_MOSTRAR` (2) à vista, o
+  resto atrás de "mais N jogos". A secção aparece **sempre**, mesmo sem jogos: é
+  lá que o admin tem o botão de sincronizar (e só o admin o vê).
 - **Painel do histórico** (`renderHistoricoDropdown`): ordenado por **data** e já
-  não por ordem de criação, com os "Por jogar" num bloco à cabeça (2 à vista,
-  resto colapsado) e os "Já jogados" a seguir.
+  não por ordem de criação, com os "Por jogar" (= por abrir) num bloco à cabeça
+  (2 à vista, resto colapsado) e os "Já jogados" a seguir.
 - `eventoPorDefeito()` substituiu o "último do histórico" no arranque e nos
   fallbacks: o último a ser CRIADO passou a ser o último jogo da época. Agora
   abre-se o evento mais próximo de hoje, com preferência pelo passado.
@@ -68,6 +68,33 @@ Com o calendário criado de uma vez, "eventos em aberto" passou a incluir meia
   (ver abaixo); sem ela cai na heurística antiga, que olha para os últimos 10
   eventos **com consumo** e não para as últimas 10 linhas — senão os jogos
   futuros vazios zeravam a contagem.
+
+## O jogo abre-se à mão + vou/não vou (`db/jogo-aberto.sql`)
+A data deixou de ser o que decide se um jogo está "em aberto": com a época
+inteira criada de uma vez, bastava a data chegar para o jogo aparecer como conta
+por fechar, tivesse lá ido alguém ou não. Agora o jogo nasce em **agenda** e só
+passa a aberto quando **o admin (ou o substituto do evento)** o abre.
+- Vive na coluna `eventos.aberto`. `NULL` = evento anterior à migração, e aí
+  `jogoAberto()` cai no critério antigo (a data). Sem a migração, `ABERTO_COL`
+  fica false, o botão "Abrir jogo" esconde-se e tudo se comporta como antes.
+  O retroactivo da migração abre tudo o que já foi jogado ou é de hoje/passado —
+  é o que mantém o jogo a decorrer em "Em aberto".
+- Secção **`JOGO ABERTO & PRESENÇAS`** no `app.js`: `jogoAberto()`,
+  `jogosPorAbrir()` (ordenados por data), `podeAbrirJogo()` — **só o primeiro**
+  da lista se pode abrir, abrir o de daqui a dois meses seria sempre engano —,
+  `abrirJogo()` e a folha que se abre ao tocar no cartão (`abrirFolhaJogo`).
+- Um evento criado à mão nasce aberto se a data for de hoje/passado; marcado para
+  a frente nasce em agenda. Os do calendário nascem sempre em agenda.
+- **Vou / Não vou:** na mesma folha, qualquer convocado marca se vai — e isso
+  mexe na lista de convocados do evento (`ev.amigos`), que é a mesma que depois
+  aparece na grelha de amigos. Quem pode editar o evento grava pelo caminho
+  normal (PATCH); os outros vão pela função `marcar_presenca` do servidor
+  (`sbMarcarPresenca`), SECURITY DEFINER, que **só** acrescenta ou tira dessa
+  lista os nomes da conta autenticada — dar UPDATE em `eventos` a um convocado
+  deixava-o mexer na fatura, no pagador e no substituto.
+- O cartão do jogo por abrir tem cor própria (`.sbi-fut`, dourado/creme). O verde
+  (`.sbi-open`) é do jogo em aberto: são coisas diferentes e não se podem
+  confundir.
 
 ## Convocados por defeito (Definições › Convocados por defeito, só admin)
 Quem entra por omissão num evento novo. Antes era **adivinhado** (quem tivesse
@@ -88,6 +115,10 @@ sozinho conforme quem faltasse e ninguém percebia porquê.
   iguais — carrega-se e "não acontece nada". Qualquer checkbox nova precisa de
   `appearance: checkbox` e de desfazer padding/borda/fundo/cantos herdados (ver
   `.calsug-row input`, `.conv-row input`).
+- **`hidden` não colapsa nada** dentro do ecrã inicial: `.sbi-list{display:flex}`
+  é regra de autor e ganha ao `[hidden]` do browser — o bloco "mais N jogos"
+  aparecia todo na mesma. Resolve-se com `.sbi-list[hidden]{display:none}` (já lá
+  está); qualquer lista nova com `display` próprio precisa do mesmo par.
 - **`button:hover { background:#0B6340 }`** ganha em especificidade a qualquer
   classe de botão que definas, e no telemóvel o `:hover` fica colado depois do
   toque — o botão fica verde escuro com o texto ilegível. Neutraliza sempre com
