@@ -4098,6 +4098,7 @@ var _calNovos = [];      // {sug, passado}      — jogos sem evento criado
 var _calDatas = [];      // {ev, sug}           — eventos com data diferente
 var _calSel = { novos: [], datas: [] };
 var _calALer = false;
+var _calErro = null;     // {msg, passo, quando} — fica no ecrã até se fechar
 
 // Nome de clube reduzido ao essencial: sem acentos, sem pontuação e sem as
 // siglas/artigos que cada fonte escreve à sua maneira ("FC Porto"/"Porto").
@@ -4205,7 +4206,11 @@ async function calSincronizar() {
     if (!_sbSession) { mostrarMensagem('⚠️ Inicia sessão primeiro', false); return; }
     var btn = document.getElementById('cal-sync-btn');
     _calALer = true;
+    _calErro = null;
+    _calSug = null;
     if (btn) { btn.disabled = true; btn.classList.add('a-ler'); }
+    calRender();                     // mostra já "A procurar" no corpo da página
+    var passo = 'chamada';
     try {
         // Rede de segurança própria: a função tem um limite interno de 55s, mas
         // se o pedido nem lá chegar a responder o botão ficava a "pensar" para
@@ -4217,25 +4222,36 @@ async function calSincronizar() {
             r = await sbFetch(SB_URL + '/functions/v1/calendario-sporting', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY },
-                body: JSON.stringify({ epoca: _calEpocaAtual() }),
+                // `app` identifica a origem no registo que a função deixa em
+                // goals.sync_log — é o que distingue as chamadas das duas apps.
+                body: JSON.stringify({ epoca: _calEpocaAtual(), app: 'splitbill' }),
                 signal: ctrl.signal
             });
         } finally { clearTimeout(timer); }
+        passo = 'resposta (HTTP ' + r.status + ')';
         if (!r.ok) {
             var e = await r.json().catch(function () { return {}; });
             if (r.status === 404 && !e.error) throw new Error('a função `calendario-sporting` ainda não está publicada no Supabase');
             throw new Error(e.error || ('HTTP ' + r.status));
         }
+        passo = 'leitura';
         calPreparar(await r.json());
     } catch (e) {
         var m = String(e && e.message || e);
         var rede = /load failed|failed to fetch|networkerror|timed? ?out/i.test(m) || (e && e.name === 'AbortError');
-        mostrarMensagem(rede
-            ? '❌ A procura demorou demasiado ou falhou a ligação. Tenta outra vez.'
-            : '❌ ' + m, false);
+        // O erro FICA no ecrã (ao contrário da mensagem, que se some sozinha) —
+        // é o que permite lê-lo com calma ou tirar-lhe uma fotografia. O registo
+        // do lado do servidor vive em goals.sync_log, escrito pela função.
+        _calErro = {
+            msg: rede ? 'A procura demorou demasiado ou falhou a ligação ao servidor. Volta a tentar daqui a pouco.' : m,
+            passo: passo,
+            quando: new Date().toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        };
+        mostrarMensagem('❌ ' + _calErro.msg.slice(0, 60), false);
     } finally {
         _calALer = false;
         if (btn) { btn.disabled = false; btn.classList.remove('a-ler'); }
+        calRender();
     }
 }
 
@@ -4273,7 +4289,7 @@ function calTodos(tipo, ligar) {
     calRender();
 }
 function calFechar() {
-    _calSug = null; _calNovos = []; _calDatas = []; _calSel = { novos: [], datas: [] };
+    _calSug = null; _calNovos = []; _calDatas = []; _calErro = null; _calSel = { novos: [], datas: [] };
     calRender();
 }
 function _calNSel() {
@@ -4326,6 +4342,25 @@ function _calFontesHTML() {
 function calRender() {
     var box = document.getElementById('cal-sync-box');
     if (!box) return;
+    // "A procurar" vai para o CORPO da página e não só para o botão: no
+    // telemóvel o botão fica muitas vezes fora da vista logo a seguir ao toque,
+    // e sem isto parecia que carregar não fazia nada.
+    if (_calALer) {
+        box.style.display = 'block';
+        box.innerHTML = '<div class="calsug-head"><strong>A procurar o calendário…</strong></div>'
+            + '<p class="calsug-nota">A confirmar as datas oficiais do Sporting para ' + _calEsc(_calEpocaAtual())
+            + '. Pode demorar até um minuto.</p><div class="calsug-barra"><span></span></div>';
+        return;
+    }
+    if (_calErro) {
+        box.style.display = 'block';
+        box.innerHTML = '<div class="calsug-head"><strong>Não consegui procurar</strong>'
+            + '<button class="calsug-x" onclick="calFechar()" title="Fechar">✕</button></div>'
+            + '<p class="calsug-nota av">' + _calEsc(_calErro.msg) + '</p>'
+            + '<p class="calsug-nota" style="margin-bottom:0">' + _calEsc(_calErro.quando)
+            + ' · falhou em: ' + _calEsc(_calErro.passo) + ' · o detalhe do servidor fica em <code>goals.sync_log</code></p>';
+        return;
+    }
     if (!_calSug) { box.style.display = 'none'; box.innerHTML = ''; return; }
     box.style.display = 'block';
     var emAlvalade = (Array.isArray(_calSug.jogos) ? _calSug.jogos : []).filter(_calEmAlvalade).length;

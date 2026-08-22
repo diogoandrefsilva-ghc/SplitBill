@@ -1785,3 +1785,9 @@ html,body{touch-action:pan-x pan-y}
 .calsug-btn.ok { background: var(--verde, #0E7A4F); border-color: var(--verde, #0E7A4F); color: #fff; }
 .calsug-btn:disabled { opacity: .5; cursor: default; }
 #cal-sync-btn.a-ler { opacity: .6; }
+/* Barra indeterminada do "A procurar o calendário…" (calRender) */
+.calsug-barra { height: 4px; border-radius: 3px; background: var(--linha, #DDE3DD); overflow: hidden; margin-top: 4px; }
+.calsug-barra span { display: block; height: 100%; width: 38%; border-radius: 3px; background: var(--verde, #0E7A4F); animation: calsug-desliza 1.1s ease-in-out infinite; }
+@keyframes calsug-desliza { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
+@media (prefers-reduced-motion: reduce) { .calsug-barra span { animation: none; width: 100%; opacity: .5; } }
+.calsug-nota code { font-family: var(--mono, monospace); font-size: 10.5px; background: #F0F2EF; padding: 1px 4px; border-radius: 4px; }

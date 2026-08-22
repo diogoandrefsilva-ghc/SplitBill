@@ -41,6 +41,12 @@ IA e um evento com a data errada estraga o dia de jogo todo.
   são tocados — a data deles é história.
 - Os eventos criados nascem sem tesoureiro; convocados e menu vêm dos de sempre,
   calculados **uma vez** antes do ciclo (ver comentário em `calAplicar`).
+- **Quando falha:** o erro fica no ecrã (`_calErro`), com o passo e a hora, em
+  vez de uma mensagem que se some. O detalhe do lado do servidor (modelo, se
+  houve pesquisa Google, erro do Gemini) vai para `goals.sync_log` — a Edge
+  Function é que o escreve, com a service role, e o campo `app` diz que veio
+  daqui. Esta app não escreve lá directamente (não tem acesso ao schema
+  `goals`); só manda `app:'splitbill'` no pedido.
 
 ## Jogos futuros no ecrã: o calendário da época não pode encher a lista
 Com o calendário criado de uma vez, "eventos em aberto" passou a incluir meia
