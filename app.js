@@ -1490,9 +1490,29 @@ async function fecharComFatura() {
     salvarNoLocalStorage();
     atualizarReadOnly();
     renderContas();
-    sbGuardarDivisao(eventoAtualId, divisaoHamilton);  // fire-and-forget, não bloqueia UI
-    sbNotificarDividas(divisaoHamilton, estado.descricaoEvento);  // idem — notificação é um extra
-    mostrarMensagem('✓ Conta fechada — €' + fatura.toFixed(2) + ' (paga por ' + pagador + ')', true);
+
+    // O fecho é a operação mais crítica do evento — não pode ficar à mercê do
+    // auto-save adiado (2s, ver sbScheduleAutoSave): se a app fechar ou o
+    // telemóvel bloquear logo a seguir a ver "fechado", o total da fatura
+    // fica por gravar no servidor e ninguém dá por isso (já aconteceu — o
+    // evento reabre sozinho ao recarregar, porque o `total_fatura` nunca lá
+    // chegou). Por isso grava-se aqui já, de imediato, e espera-se pela
+    // confirmação antes de dar o fecho como concluído.
+    const evAtual = historico.find(e => e.id === eventoAtualId);
+    let eventoGravado = true;
+    if (evAtual) {
+        try { await sbGuardarEvento(evAtual); } catch (e) { eventoGravado = false; }
+    }
+    // sbGuardarEvento já mostra a sua própria mensagem de erro (com o
+    // "Definições → Diagnóstico da BD") quando falha — não duplicar aqui.
+    const divisaoGravada = await sbGuardarDivisao(eventoAtualId, divisaoHamilton);
+    sbNotificarDividas(divisaoHamilton, estado.descricaoEvento);  // fire-and-forget — notificação é um extra
+
+    if (eventoGravado && divisaoGravada) {
+        mostrarMensagem('✓ Conta fechada — €' + fatura.toFixed(2) + ' (paga por ' + pagador + ')', true);
+    } else if (eventoGravado && !divisaoGravada) {
+        mostrarMensagem('⚠️ Conta fechada, mas a divisão por pessoa não gravou no servidor — tenta "Fechar" outra vez ou usa Definições → Diagnóstico da BD', false);
+    }
 }
 
 // Calculate final amount per person considering ordens, ofertas, and fatura ratio
