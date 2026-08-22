@@ -4597,8 +4597,16 @@ function _jogoSheetHTML(ev) {
     if (podeAbrirJogo(ev)) {
         h += '<div class="jf-nota">Abrir o jogo passa-o para <strong>Em aberto</strong> no ecrã inicial: é aí que se lançam as ordens e se fecha a conta.</div>';
     }
+    if (_podeGerirJogo(ev)) {
+        h += '<div class="jf-hint"><strong>Preparar</strong> abre a página do evento sem abrir o jogo — para acertar o menu, os convocados ou o tesoureiro antes do dia.</div>';
+    }
     return h;
 }
+
+/* Desde que o histórico só mostra o que já aconteceu, esta folha é a única porta
+   para a página de um jogo por abrir — e é lá que se acerta o menu, os
+   convocados e o tesoureiro antes do dia. Só para quem pode editar o evento. */
+function _podeGerirJogo(ev) { return !!(ev && !ev.totalFatura && podeEditarEvento(ev)); }
 
 // Chamada pelos botões dentro da folha — redesenha a folha e o ecrã inicial.
 async function jogoSheetPresenca(id, vai) {
@@ -4621,8 +4629,11 @@ async function abrirFolhaJogo(id) {
         msg: _jogoSheetHTML(ev),
         confirmText: podeAbrir ? 'Abrir jogo' : 'Fechar',
         cancelText: 'Fechar',
-        semCancelar: !podeAbrir
+        semCancelar: !podeAbrir,
+        extraText: _podeGerirJogo(ev) ? 'Preparar' : ''
     });
+    // "Preparar" leva à página do evento SEM o abrir: o jogo continua em agenda.
+    if (r === 'extra') { await navegarHistorico(ev.id); return; }
     if (r === true && podeAbrir) await abrirJogo(ev.id);
 }
 

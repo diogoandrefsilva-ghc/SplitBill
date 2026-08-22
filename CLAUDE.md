@@ -66,8 +66,10 @@ Com o calendário criado de uma vez, "eventos em aberto" passou a incluir meia
   ordenado por **data** e já não por ordem de criação, e **só leva o que já
   aconteceu** — jogos abertos ou fechados. Os que estão por abrir não entram:
   "histórico" com jogos futuros não quer dizer nada, e vivem no ecrã inicial.
-  Consequência a ter em conta: a página de um jogo por abrir só se alcança
-  **abrindo o jogo** (as Definições dele não têm outra porta).
+  Como esta era a única porta para a página de um jogo por abrir, a folha do
+  jogo tem o botão **Preparar** (`_podeGerirJogo`, só admin/substituto): leva à
+  página do evento **sem o abrir**, para acertar menu, convocados e tesoureiro
+  antes do dia.
 - `eventoPorDefeito()` substituiu o "último do histórico" no arranque e nos
   fallbacks: o último a ser CRIADO passou a ser o último jogo da época. Agora
   abre-se o evento mais próximo de hoje, com preferência pelo passado.
@@ -90,6 +92,9 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   `jogosPorAbrir()` (ordenados por data), `podeAbrirJogo()` — **só o primeiro**
   da lista se pode abrir, abrir o de daqui a dois meses seria sempre engano —,
   `abrirJogo()` e a folha que se abre ao tocar no cartão (`abrirFolhaJogo`).
+  A folha tem até três botões: Fechar · **Preparar** (admin/substituto, abre a
+  página do evento sem abrir o jogo) · **Abrir jogo** (só no primeiro). O
+  "Preparar" usa o `extraText` do `mostrarModal`.
 - Um evento criado à mão nasce aberto se a data for de hoje/passado; marcado para
   a frente nasce em agenda. Os do calendário nascem sempre em agenda.
 - **Vou / Não vou:** na mesma folha, qualquer convocado marca se vai — e isso
