@@ -1764,7 +1764,7 @@ html,body{touch-action:pan-x pan-y}
 .calsug-head strong { font-family: var(--display, sans-serif); font-size: 18px; color: var(--ink, #1B231F); }
 .calsug-x { background: none; border: none; color: var(--ink-soft, #5B6661); font-size: 16px; line-height: 1; cursor: pointer; padding: 2px 4px; }
 .calsug-nota { font-size: 11.5px; color: var(--ink-soft, #5B6661); line-height: 1.45; margin: 0 0 11px; }
-.calsug-nota.av { color: #8A6D12; background: var(--dourado-claro, #FBF4DC); border: 1px solid #E7D9A8; border-radius: 8px; padding: 7px 9px; }
+.calsug-nota.aviso { color: #8A6D12; background: var(--dourado-claro, #FBF4DC); border: 1px solid #E7D9A8; border-radius: 8px; padding: 7px 9px; }
 .calsug-sec { margin-bottom: 12px; }
 .calsug-sec-hd { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-soft, #5B6661); margin-bottom: 6px; }
 .calsug-link { background: none; border: none; padding: 0; font-size: 11px; color: var(--verde, #0E7A4F); cursor: pointer; text-transform: none; letter-spacing: 0; font-weight: 700; }
@@ -1776,8 +1776,16 @@ html,body{touch-action:pan-x pan-y}
 .calsug-dt b { color: var(--verde, #0E7A4F); font-weight: 700; }
 .calsug-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .calsug-adv { font-size: 13px; font-weight: 600; color: var(--ink, #1B231F); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.calsug-meta { font-size: 11px; color: var(--ink-soft, #5B6661); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.calsug-tag { flex: 0 0 auto; font-family: var(--mono, monospace); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 3px 6px; border-radius: 6px; background: var(--dourado-claro, #FBF4DC); color: #8A6D12; }
+/* A etiqueta partilha a linha da competição. Fora do bloco de informação
+   disputava largura com o nome do jogo e partia-se a meio, com o texto a sair
+   da própria caixa. Aqui, quando não cabe ao lado, desce uma linha em vez de
+   comer o texto da competição. */
+.calsug-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; min-width: 0; }
+.calsug-meta { flex: 0 1 auto; min-width: 0; font-size: 11px; color: var(--ink-soft, #5B6661); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Cinzento = contexto ("isto já aconteceu"), não aviso. Só a data por marcar
+   leva o âmbar — é a única que pede desconfiança. */
+.calsug-tag { flex: 0 0 auto; white-space: nowrap; font-size: 10px; font-weight: 700; line-height: 1.5; padding: 1px 8px; border-radius: 999px; background: #EEF1ED; color: #6B7671; border: 1px solid #E1E6E1; }
+.calsug-tag.aviso { background: var(--dourado-claro, #FBF4DC); color: #8A6D12; border-color: #E7D9A8; }
 .calsug-fontes { font-size: 10.5px; color: var(--ink-soft, #5B6661); line-height: 1.5; margin: 2px 0 11px; word-break: break-word; }
 .calsug-fontes a { color: var(--verde, #0E7A4F); text-decoration: none; }
 .calsug-acoes { display: flex; gap: 8px; flex-wrap: wrap; }

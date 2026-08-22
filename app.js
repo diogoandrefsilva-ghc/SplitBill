@@ -4306,6 +4306,8 @@ function calAtualizarBotao() {
     b.textContent = n ? ('Aplicar ' + n + ' alteraç' + (n === 1 ? 'ão' : 'ões')) : 'Nada selecionado';
 }
 
+// As etiquetas vivem DENTRO do bloco de informação, na linha da competição:
+// fora dele disputavam largura com o nome do jogo e partiam-se a meio.
 function _calLinhaNova(o, i) {
     var s = o.sug;
     var meta = [s.competicao, s.jornada, s.hora].filter(Boolean).join(' · ');
@@ -4313,9 +4315,10 @@ function _calLinhaNova(o, i) {
         + '<input type="checkbox" ' + (_calSel.novos[i] ? 'checked' : '') + ' onchange="calToggle(\'novos\',' + i + ',this)">'
         + '<span class="calsug-dt">' + _calEsc(_calDataCurta(s.data)) + '</span>'
         + '<span class="calsug-info"><span class="calsug-adv">' + _calEsc(_calDescricao(s)) + '</span>'
-        + '<span class="calsug-meta">' + _calEsc(meta) + '</span></span>'
+        + '<span class="calsug-sub"><span class="calsug-meta">' + _calEsc(meta) + '</span>'
         + (o.passado ? '<span class="calsug-tag">já passou</span>' : '')
-        + (s.confirmado === false ? '<span class="calsug-tag">por confirmar</span>' : '')
+        + (s.confirmado === false ? '<span class="calsug-tag aviso">provisória</span>' : '')
+        + '</span></span>'
         + '</label>';
 }
 function _calLinhaData(o, i) {
@@ -4325,14 +4328,15 @@ function _calLinhaData(o, i) {
         + '<span class="calsug-dt trocada"><s>' + _calEsc(_calDataCurta(_calIso(o.ev.data))) + '</s>'
         + '<b>' + _calEsc(_calDataCurta(o.sug.data)) + '</b></span>'
         + '<span class="calsug-info"><span class="calsug-adv">' + _calEsc(o.ev.descricao || 'Sem nome') + '</span>'
-        + '<span class="calsug-meta">' + _calEsc(meta) + '</span></span>'
-        + (o.sug.confirmado === false ? '<span class="calsug-tag">por confirmar</span>' : '')
+        + '<span class="calsug-sub"><span class="calsug-meta">' + _calEsc(meta) + '</span>'
+        + (o.sug.confirmado === false ? '<span class="calsug-tag aviso">provisória</span>' : '')
+        + '</span></span>'
         + '</label>';
 }
 function _calFontesHTML() {
     var f = (_calSug && _calSug.fontes) || [];
     var semPesquisa = (_calSug && _calSug.pesquisa === false)
-        ? '<p class="calsug-nota av">⚠️ Sem pesquisa web nesta leitura — as datas futuras podem estar desatualizadas.</p>' : '';
+        ? '<p class="calsug-nota aviso">⚠️ Sem pesquisa web nesta leitura — as datas futuras podem estar desatualizadas.</p>' : '';
     if (!f.length) return semPesquisa;
     return semPesquisa + '<div class="calsug-fontes">Fontes: ' + f.map(function (x) {
         return '<a href="' + _calEsc(x.url) + '" target="_blank" rel="noopener">' + _calEsc(x.titulo) + '</a>';
@@ -4356,7 +4360,7 @@ function calRender() {
         box.style.display = 'block';
         box.innerHTML = '<div class="calsug-head"><strong>Não consegui procurar</strong>'
             + '<button class="calsug-x" onclick="calFechar()" title="Fechar">✕</button></div>'
-            + '<p class="calsug-nota av">' + _calEsc(_calErro.msg) + '</p>'
+            + '<p class="calsug-nota aviso">' + _calEsc(_calErro.msg) + '</p>'
             + '<p class="calsug-nota" style="margin-bottom:0">' + _calEsc(_calErro.quando)
             + ' · falhou em: ' + _calEsc(_calErro.passo) + ' · o detalhe do servidor fica em <code>goals.sync_log</code></p>';
         return;
