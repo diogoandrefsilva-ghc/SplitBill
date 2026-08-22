@@ -655,6 +655,20 @@ if ('serviceWorker' in navigator) {
   text-transform:none;letter-spacing:normal;background:transparent;transition:transform .12s;-webkit-tap-highlight-color:transparent;}
 .sbi-tap:active{transform:scale(.985);}
 @media (prefers-reduced-motion:reduce){.sbi-tap:active{transform:none;}}
+/* A regra global `button:hover{background:#0B6340}` ganha em especificidade a
+   qualquer classe de cartão daqui, e no telemóvel o :hover fica COLADO depois do
+   toque — o cartão ficava verde-escuro (e o texto ilegível) até se tocar noutro
+   sítio. Cada cartão tem de repetir o seu fundo em :hover; a ordem interessa,
+   porque `.sbi-tap:hover` e `.sbi-xxx:hover` têm a mesma especificidade e ganha
+   a última. Cartão novo aqui = linha nova aqui. */
+.sbi-tap:hover{background:transparent;}
+.sbi-hero:hover{background:var(--verde,#0E7A4F);}
+.sbi-open:hover{background:linear-gradient(135deg,#13A56E 0%,#0E7A4F 55%,#0B5238 100%);}
+.sbi-fut:hover{background:linear-gradient(135deg,#FFFCF2 0%,#F6F0DD 100%);}
+.sbi-row:hover{background:var(--card,#fff);}
+.sbi-sq:hover{background:linear-gradient(180deg,#fff 0%,#F6FAF7 100%);}
+.sbi-newquiet:hover{background:transparent;}
+.sbi-voltar:hover{background:#fff;}
 .sbi-ico{flex:0 0 auto;display:grid;place-items:center;}
 .sbi-ico svg{width:22px;height:22px;}
 .sbi-chev{flex:0 0 auto;display:grid;place-items:center;}

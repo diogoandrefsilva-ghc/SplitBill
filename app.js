@@ -708,11 +708,25 @@ function salvarHistoricoLocal() {
     localStorage.setItem('historico_eventos', JSON.stringify(historico));
 }
 
+/* O histórico é o que JÁ ACONTECEU: os jogos por abrir não entram aqui. Depois
+   de o calendário passar a criar a época inteira de uma vez, metade da lista
+   eram jogos por jogar — e "histórico" com jogos futuros não quer dizer nada.
+   Quem os quer ver (e abrir, e marcar presença) tem-nos no ecrã inicial, em
+   "Próximos Jogos em Alvalade". */
+function eventosDoHistorico() {
+    const ts = ev => { try { return _parsePgtoData(ev.data) || 0; } catch(e) { return 0; } };
+    return historico
+        .filter(ev => ev.totalFatura || jogoAberto(ev))
+        .sort((a, b) => ts(b) - ts(a));   // o mais recente primeiro
+}
+
 function renderHistoricoDropdown() {
+    const lista = eventosDoHistorico();
+
     // Update the hidden select (keep for compatibility)
     const sel = document.getElementById('historico-select');
-    sel.innerHTML = '<option value="">📚 Histórico (' + historico.length + ' eventos)</option>';
-    [...historico].reverse().forEach(ev => {
+    sel.innerHTML = '<option value="">📚 Histórico (' + lista.length + ' eventos)</option>';
+    lista.forEach(ev => {
         const opt = document.createElement('option');
         opt.value = ev.id;
         opt.textContent = (ev.descricao || 'Sem nome') + ' — ' + ev.data;
@@ -721,30 +735,20 @@ function renderHistoricoDropdown() {
 
     // Update toggle button label
     const label = document.getElementById('historico-toggle-label');
-    if (label) label.textContent = '📚 Histórico (' + historico.length + ' evento' + (historico.length !== 1 ? 's' : '') + ')';
+    if (label) label.textContent = '📚 Histórico (' + lista.length + ' evento' + (lista.length !== 1 ? 's' : '') + ')';
 
     // Update card panel
     const panel = document.getElementById('historico-panel');
     if (!panel) return;
-    if (historico.length === 0) {
-        panel.innerHTML = '<div class="historico-empty">Nenhum evento guardado</div>';
+    if (lista.length === 0) {
+        panel.innerHTML = '<div class="historico-empty">Nenhum jogo jogado ainda</div>';
         return;
     }
     ensureDividasExist();
     const saldosForCards = calcularSaldos();
     // Ordem por DATA e não por ordem de criação: desde que o calendário da época
     // passou a poder ser criado de uma vez (calSincronizar), a ordem de criação
-    // deixou de dizer nada. Os jogos ainda por acontecer ficam num bloco à
-    // parte, colapsado ao fim dos primeiros — senão a lista abria com meia época
-    // pela frente e o histórico ficava fora de vista.
-    const _ts = ev => { try { return _parsePgtoData(ev.data) || 0; } catch(e) { return 0; } };
-    // "Por jogar" = jogo ainda por ABRIR (ver jogoAberto). Desde que o jogo se
-    // abre à mão, a data deixou de chegar para decidir de que lado fica: um jogo
-    // cuja data já passou mas que ninguém abriu continua por jogar.
-    const _futuros = [], _passados = [];
-    historico.forEach(ev => ((ev.totalFatura || jogoAberto(ev)) ? _passados : _futuros).push(ev));
-    _futuros.sort((a, b) => _ts(a) - _ts(b));   // o mais perto primeiro
-    _passados.sort((a, b) => _ts(b) - _ts(a));  // o mais recente primeiro
+    // deixou de dizer nada.
     const _card = ev => {
         const isAtual = ev.id === eventoAtualId;
         const _ep = (typeof _epocaLabel === 'function') ? _epocaLabel(ev.data) : '';
@@ -756,32 +760,7 @@ function renderHistoricoDropdown() {
                 ${isAdmin() ? `<button class="historico-card-del" onclick="apagarEvento(${ev.id}, event)" title="Apagar evento">🗑️</button>` : ''}
             </div>`;
     };
-    let _html = '';
-    if (_futuros.length) {
-        const _vis = _futuros.slice(0, HIST_FUTUROS_A_MOSTRAR);
-        const _resto = _futuros.slice(HIST_FUTUROS_A_MOSTRAR);
-        _html += '<div class="historico-grupo">Por jogar</div>' + _vis.map(_card).join('');
-        if (_resto.length) {
-            _html += `<div id="hist-futuros-mais"${_histFutAberto ? '' : ' hidden'}>${_resto.map(_card).join('')}</div>`
-                + `<button class="sbi-mais" id="hist-futuros-btn" data-n="${_resto.length}" onclick="histToggleFuturos()">`
-                + (_histFutAberto ? '▴ mostrar menos' : '▾ mais ' + _resto.length + ' jogos') + '</button>';
-        }
-        if (_passados.length) _html += '<div class="historico-grupo">Já jogados</div>';
-    }
-    _html += _passados.map(_card).join('');
-    panel.innerHTML = _html;
-}
-
-// Quantos jogos futuros ficam à vista no painel do histórico antes de colapsar.
-const HIST_FUTUROS_A_MOSTRAR = 2;
-let _histFutAberto = false;   // só ecrã, não se guarda
-function histToggleFuturos() {
-    _histFutAberto = !_histFutAberto;
-    const lista = document.getElementById('hist-futuros-mais');
-    const btn = document.getElementById('hist-futuros-btn');
-    if (!lista || !btn) return;
-    lista.hidden = !_histFutAberto;
-    btn.textContent = _histFutAberto ? '▴ mostrar menos' : '▾ mais ' + btn.getAttribute('data-n') + ' jogos';
+    panel.innerHTML = lista.map(_card).join('');
 }
 
 function toggleHistoricoPanel() {
@@ -4164,8 +4143,11 @@ function _calEmAlvalade(s) {
 }
 // Descrição do evento a criar. A competição só entra quando não é a Liga, para
 // distinguir o Sporting–Benfica da Taça do da Liga sem encher o nome.
+/* "Sporting vs Adversário" — o mesmo formato dos eventos criados à mão desde
+   sempre. Se mudares o separador aqui, os jogos passam a ficar com dois nomes
+   diferentes na mesma lista (é o que aconteceu com o traço). */
 function _calDescricao(s) {
-    var base = 'Sporting - ' + s.adversario;
+    var base = 'Sporting vs ' + s.adversario;
     return (s.competicao && s.competicao !== 'Liga Portugal') ? base + ' (' + s.competicao + ')' : base;
 }
 function _calDataCurta(iso) {

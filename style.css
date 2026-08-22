@@ -1753,23 +1753,9 @@ html,body{touch-action:pan-x pan-y}
     cursor: pointer;
 }
 .sbi-mais:active { background: rgba(11,59,43,.04); }
-.historico-grupo {
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .1em;
-    color: rgba(255,255,255,.6);
-    padding: 4px 4px 5px;
-}
-.historico-grupo:not(:first-child) { margin-top: 8px; }
-.historico-panel .sbi-mais {
-    margin-top: 6px;
-    font-size: 12px;
-    padding: 7px 10px;
-    color: rgba(255,255,255,.85);
-    border-color: rgba(255,255,255,.3);
-}
-.historico-panel .sbi-mais:active { background: rgba(255,255,255,.12); }
+/* (Os grupos "Por jogar"/"Já jogados" e o "mais N jogos" dentro do painel do
+   histórico saíram com os jogos futuros — o histórico só tem o que já
+   aconteceu. Ver eventosDoHistorico() no app.js.) */
 
 /* ── SUGESTÕES DO CALENDÁRIO (calSincronizar) ──────────────────────── */
 .calsug {

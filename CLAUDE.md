@@ -41,6 +41,10 @@ IA e um evento com a data errada estraga o dia de jogo todo.
   são tocados — a data deles é história.
 - Os eventos criados nascem sem tesoureiro; convocados e menu vêm dos de sempre,
   calculados **uma vez** antes do ciclo (ver comentário em `calAplicar`).
+- **Nome do evento: `Sporting vs Adversário`** (`_calDescricao`), o mesmo formato
+  dos criados à mão desde sempre. Já esteve com traço e o resultado foi a lista
+  com dois formatos ao mesmo tempo — se mexeres no separador, mexe nos eventos
+  que já lá estão.
 - **Quando falha:** o erro fica no ecrã (`_calErro`), com o passo e a hora, em
   vez de uma mensagem que se some. O detalhe do lado do servidor (modelo, se
   houve pesquisa Google, erro do Gemini) vai para `goals.sync_log` — a Edge
@@ -58,9 +62,12 @@ Com o calendário criado de uma vez, "eventos em aberto" passou a incluir meia
   para baixo o que precisa de atenção hoje. `FUTUROS_A_MOSTRAR` (2) à vista, o
   resto atrás de "mais N jogos". A secção aparece **sempre**, mesmo sem jogos: é
   lá que o admin tem o botão de sincronizar (e só o admin o vê).
-- **Painel do histórico** (`renderHistoricoDropdown`): ordenado por **data** e já
-  não por ordem de criação, com os "Por jogar" (= por abrir) num bloco à cabeça
-  (2 à vista, resto colapsado) e os "Já jogados" a seguir.
+- **Painel do histórico** (`renderHistoricoDropdown` + `eventosDoHistorico()`):
+  ordenado por **data** e já não por ordem de criação, e **só leva o que já
+  aconteceu** — jogos abertos ou fechados. Os que estão por abrir não entram:
+  "histórico" com jogos futuros não quer dizer nada, e vivem no ecrã inicial.
+  Consequência a ter em conta: a página de um jogo por abrir só se alcança
+  **abrindo o jogo** (as Definições dele não têm outra porta).
 - `eventoPorDefeito()` substituiu o "último do histórico" no arranque e nos
   fallbacks: o último a ser CRIADO passou a ser o último jogo da época. Agora
   abre-se o evento mais próximo de hoje, com preferência pelo passado.
@@ -122,7 +129,10 @@ sozinho conforme quem faltasse e ninguém percebia porquê.
 - **`button:hover { background:#0B6340 }`** ganha em especificidade a qualquer
   classe de botão que definas, e no telemóvel o `:hover` fica colado depois do
   toque — o botão fica verde escuro com o texto ilegível. Neutraliza sempre com
-  uma regra `.a-tua-classe, .a-tua-classe:hover { … }`.
+  uma regra `.a-tua-classe, .a-tua-classe:hover { … }`. No ecrã inicial há um
+  bloco só para isto (`.sbi-tap:hover` e uma linha por cartão, logo a seguir):
+  **cartão novo = linha nova lá**, e a ordem conta — `.sbi-tap:hover` e
+  `.sbi-open:hover` têm a mesma especificidade e ganha a última.
 
 ## Regras técnicas (não partir a app)
 - `app.js` carrega como `<script src>` **normal, NÃO module** — há `onclick="…"` no HTML, logo as funções têm de ser **globais**. Não converter para módulo.
