@@ -1155,16 +1155,24 @@ if ('serviceWorker' in navigator) {
   /* Jogo ainda por abrir: cartão de AGENDA, deliberadamente noutra cor — o
      verde é do jogo em aberto (há conta por fechar) e confundir os dois é
      confundir "hoje há trabalho" com "está marcado". Tocar abre a folha do
-     jogo (vou/não vou, e abrir o jogo se for o próximo). */
+     jogo (Sá/jogo, e abrir o jogo se for o próximo).
+     No canto direito, duas contagens empilhadas — quantos vão ao jogo e
+     quantos vão ao Sá — em vez de um "vou"/"não vou" pessoal: agora há duas
+     perguntas, e o que interessa de relance é o total, não só a minha
+     resposta (ver contagemPresencas() no app.js). */
   function cardFuturo(ev, primeiro){
     var nome = esc(ev.descricao || 'Sem nome');
     var data = esc(ev.data || '');
-    var vou = null, abre = false;
-    try { if (typeof vouAoJogo==='function') vou = vouAoJogo(ev); } catch(e){}
+    var abre = false, cont = null;
     try { abre = (typeof podeAbrirJogo==='function') && podeAbrirJogo(ev); } catch(e){}
+    try { if (typeof contagemPresencas==='function') cont = contagemPresencas(ev); } catch(e){}
     var pill = '';
-    if (vou === true) pill = '<span class="sbi-pill sbi-pos">'+CHK+' vou</span>';
-    else if (vou === false) pill = '<span class="sbi-pill sbi-calm">não vou</span>';
+    if (cont) {
+      pill = '<span class="sbi-pill-stack">'
+        + '<span class="sbi-pill sbi-calm">⚽ '+cont.jogo.length+'</span>'
+        + '<span class="sbi-pill sbi-calm">🍽 '+cont.sa.length+'</span>'
+        + '</span>';
+    }
     return '<button class="sbi-tap sbi-fut'+(primeiro?' proximo':'')+'" onclick="abrirFolhaJogo(\''+esc(ev.id)+'\')" aria-label="'+nome+'">'
       + '<span class="sbi-ico">'+ICO.bola+'</span>'
       + '<span class="sbi-octext"><span class="sbi-ocname">'+nome+'</span>'

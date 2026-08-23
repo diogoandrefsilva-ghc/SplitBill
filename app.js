@@ -4568,6 +4568,19 @@ function _jogoTemOverride(ev) {
     return meus.some(m => Object.prototype.hasOwnProperty.call(ov, m));
 }
 
+// Quem vai ao Sá e quem vai ao jogo neste evento — contagens agregadas (não a
+// resposta desta conta), usadas na folha e no cartão dos Próximos Jogos.
+function contagemPresencas(ev) {
+    const sa = (ev.amigos || []).slice();
+    const nomes = new Set(sa);
+    Object.keys(ev.jogo || {}).forEach(n => nomes.add(n));
+    const jogo = Array.from(nomes).filter(n => vaiAoJogoPessoa(ev, n));
+    return { sa, jogo };
+}
+
+// "1 vai" / "3 vão" — concordância do verbo com a contagem.
+function _pluralVai(n) { return n === 1 ? 'vai' : 'vão'; }
+
 // Abre o jogo: passa a ser o evento em aberto do ecrã inicial e vai-se logo
 // para lá — quem abre é porque está a chegar à mesa.
 async function abrirJogo(id) {
@@ -4663,7 +4676,6 @@ async function marcarPresencaJogo(id, vai) {
    abrir, e só no próximo — o botão de abrir o jogo. */
 function _jogoSheetHTML(ev) {
     const vouSa = vouAoSa(ev);
-    const convocados = (ev.amigos || []);
     let h = '<div class="jf-data">' + _calEsc(ev.data || '—') + '</div>';
     if (vouSa === null) {
         h += '<div class="jf-aviso">A tua conta ainda não está associada a nenhum nome — pede ao administrador para te associar nas Definições.</div>';
@@ -4683,13 +4695,11 @@ function _jogoSheetHTML(ev) {
             h += '<div class="jf-hint">Por defeito, segue a resposta ao Sá — muda só se fores a um e não ao outro.</div>';
         }
     }
-    h += '<div class="jf-conv"><strong>' + convocados.length + '</strong> convocado' + (convocados.length === 1 ? '' : 's')
-       + (convocados.length ? ': ' + _calEsc(convocados.join(', ')) : '') + '</div>';
-    const nomesJogo = new Set(convocados);
-    Object.keys(ev.jogo || {}).forEach(n => nomesJogo.add(n));
-    const vaoAoJogoLista = Array.from(nomesJogo).filter(n => vaiAoJogoPessoa(ev, n));
-    h += '<div class="jf-conv"><strong>' + vaoAoJogoLista.length + '</strong> vai' + (vaoAoJogoLista.length === 1 ? '' : 'ão') + ' ao jogo'
-       + (vaoAoJogoLista.length ? ': ' + _calEsc(vaoAoJogoLista.join(', ')) : '') + '</div>';
+    const contagem = contagemPresencas(ev);
+    h += '<div class="jf-conv"><strong>' + contagem.sa.length + '</strong> ' + _pluralVai(contagem.sa.length) + ' ao Sá'
+       + (contagem.sa.length ? ': ' + _calEsc(contagem.sa.join(', ')) : '') + '</div>';
+    h += '<div class="jf-conv"><strong>' + contagem.jogo.length + '</strong> ' + _pluralVai(contagem.jogo.length) + ' ao jogo'
+       + (contagem.jogo.length ? ': ' + _calEsc(contagem.jogo.join(', ')) : '') + '</div>';
     if (podeAbrirJogo(ev)) {
         h += '<div class="jf-nota">Abrir o jogo passa-o para <strong>Em aberto</strong> no ecrã inicial: é aí que se lançam as ordens e se fecha a conta.</div>';
     }
