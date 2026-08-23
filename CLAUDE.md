@@ -97,13 +97,26 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   "Preparar" usa o `extraText` do `mostrarModal`.
 - Um evento criado à mão nasce aberto se a data for de hoje/passado; marcado para
   a frente nasce em agenda. Os do calendário nascem sempre em agenda.
-- **Vou / Não vou:** na mesma folha, qualquer convocado marca se vai — e isso
-  mexe na lista de convocados do evento (`ev.amigos`), que é a mesma que depois
-  aparece na grelha de amigos. Quem pode editar o evento grava pelo caminho
-  normal (PATCH); os outros vão pela função `marcar_presenca` do servidor
-  (`sbMarcarPresenca`), SECURITY DEFINER, que **só** acrescenta ou tira dessa
-  lista os nomes da conta autenticada — dar UPDATE em `eventos` a um convocado
-  deixava-o mexer na fatura, no pagador e no substituto.
+- **Vou / Não vou ao Sá:** na mesma folha, qualquer convocado marca se vai à
+  refeição a seguir ao jogo ("Vais ao Sá?") — e isso mexe na lista de
+  convocados do evento (`ev.amigos`), que é a mesma que depois aparece na
+  grelha de amigos e conta para o consumo. Quem pode editar o evento grava
+  pelo caminho normal (PATCH); os outros vão pela função `marcar_presenca` do
+  servidor (`sbMarcarPresenca`), SECURITY DEFINER, que **só** acrescenta ou
+  tira dessa lista os nomes da conta autenticada — dar UPDATE em `eventos` a
+  um convocado deixava-o mexer na fatura, no pagador e no substituto.
+- **Vou / Não vou ao jogo** (`db/vai-jogo.sql`, coluna `eventos.vai_jogo`,
+  jsonb `{"Nome": true|false}`): pergunta **separada** da anterior — ir ao
+  jogo sem ir ao Sá acontece com frequência, e o que interessa aqui é gerir
+  lugares, não o consumo. Por **defeito** segue a resposta ao Sá
+  (`vaiAoJogoPessoa()`: só olha para `ev.jogo` se houver entrada explícita
+  para o nome, senão cai em `ev.amigos`) — por isso só se grava o que é
+  **explícito**, nunca o defeito calculado, senão o defeito parava de seguir o
+  Sá para quem nunca tocou nesta pergunta. Mesmo padrão de permissões que o
+  Sá: PATCH normal para quem edita o evento, `marcar_presenca_jogo`
+  (`sbMarcarPresencaJogo`) SECURITY DEFINER para os outros. `VAI_JOGO_COL`
+  degrada como as outras colunas opcionais — sem a migração, some-se a
+  segunda pergunta e fica só a de sempre.
 - O cartão do jogo por abrir tem cor própria (`.sbi-fut`, dourado/creme). O verde
   (`.sbi-open`) é do jogo em aberto: são coisas diferentes e não se podem
   confundir.
