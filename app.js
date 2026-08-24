@@ -4765,6 +4765,7 @@ const VAPID_PUBLIC_KEY = 'BFiwf_z5NJzkXFP6gzxS_naH9cNC2MfCEmejJf32MID8Y_1i49cb8s
 let _sbSession = null;
 let amigoUsers = {};          // equivalência { nomeAmigo: email }  (gerida só pelo admin)
 let _allowedUsersCache = [];  // emails com acesso (para dropdowns do admin)
+let _pushAtivosCache = new Set(); // emails (lowercase) com pelo menos 1 subscription ativa (só admin)
 
 /* ── SESSÃO: refresh automático do token (o access_token expira em ~1h) ──
    Sem isto a app voltava a pedir login a cada hora. Padrão portado da FestasBV. */
@@ -6515,11 +6516,28 @@ async function abrirEquivalencias() {
     // Mesma razão que em abrirAdmin(): refrescar antes de desenhar, senão contas
     // aprovadas entretanto só apareciam no combobox depois de fechar/reabrir a app.
     await sbCarregarConfigAcesso();
+    await _carregarPushAtivos();
     renderEquivalencias();
 }
 function fecharEquivalencias() {
     document.getElementById('page-equivalencias').style.display = 'none';
 }
+
+// Emails com notificações push ativas em ≥1 dispositivo — só para mostrar o
+// sininho neste painel. O RLS de push_subscriptions só deixa cada conta ver
+// as próprias linhas; a policy extra (splitbill.push-subscriptions.sql) abre
+// SELECT também a quem passa is_admin(). Sem essa policy corrida, isto só
+// devolve a linha do próprio admin — degrada sem rebentar.
+async function _carregarPushAtivos() {
+    if (!PUSH_COL) { _pushAtivosCache = new Set(); return; }
+    try {
+        const r = await sbFetch(`${SB_URL}/rest/v1/push_subscriptions?select=email`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        if (!r.ok) return;
+        const data = await r.json();
+        _pushAtivosCache = new Set((Array.isArray(data) ? data : []).map(u => (u.email || '').toLowerCase()).filter(Boolean));
+    } catch(e) { console.error('Erro ao carregar notificações ativas:', e); }
+}
+
 function renderEquivalencias() {
     const lista = document.getElementById('equiv-lista');
     if (!lista) return;
@@ -6538,8 +6556,9 @@ function renderEquivalencias() {
             .concat(todosEmails.filter(e => !emailsJaMapeados.has(e) || e === sel).map(e => `<option value="${e}" ${sel === e ? 'selected' : ''}>${e}</option>`))
             .join('');
         const aEsc = a.replace(/'/g, "\\'");
+        const pushAtivo = sel && _pushAtivosCache.has(sel.toLowerCase());
         return `<div class="equiv-item">
-            <span class="equiv-nome">${a}</span>
+            <span class="equiv-nome">${pushAtivo ? '🔔 ' : ''}${a}</span>
             <select id="equiv-sel-${i}" onchange="guardarEquivalencia('${aEsc}', this.value)">${opts}</select>
         </div>`;
     }).join('');

@@ -58,4 +58,13 @@ DROP POLICY IF EXISTS push_subscriptions_delete_propria ON splitbill.push_subscr
 CREATE POLICY push_subscriptions_delete_propria ON splitbill.push_subscriptions
   FOR DELETE TO authenticated
   USING (lower(email) = lower(coalesce(auth.jwt() ->> 'email', '')));
+
+-- Policy extra (permissiva, soma-se à de cima com OR): o admin também vê todas
+-- as linhas, para o painel "Equivalências amigo ↔ conta" mostrar o sininho de
+-- quem tem notificações ativas. Sem correr isto, esse painel só "vê" a
+-- subscription do próprio admin — degrada, não rebenta.
+DROP POLICY IF EXISTS push_subscriptions_select_admin ON splitbill.push_subscriptions;
+CREATE POLICY push_subscriptions_select_admin ON splitbill.push_subscriptions
+  FOR SELECT TO authenticated
+  USING (splitbill.is_admin());
 -- =====================================================================
