@@ -711,11 +711,11 @@ if ('serviceWorker' in navigator) {
    é o mesmo cartão, não um cartão novo) e só troca o que está por dentro.
    As caixas de largura fixa são o que mantém todas as linhas alinhadas na
    mesma coluna, mesmo quando falta a hora ou o símbolo da competição. */
-.sbj{padding:9px 12px 9px 13px;gap:8px;}
+.sbj{padding:9px 12px 9px 13px;gap:7px;}
 .sbj-dt{flex:0 0 auto;width:34px;text-align:center;}
 .sbj-dt strong{display:block;font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:23px;line-height:1;color:var(--ink,#1B231F);letter-spacing:normal;}
 .sbj-dt span{display:block;font-family:var(--mono,monospace);font-size:9.5px;line-height:1.35;letter-spacing:.06em;color:#8A6D14;text-transform:uppercase;}
-.sbj-sep{flex:0 0 auto;width:1px;height:30px;background:#E2D5AC;}
+.sbj-sep{flex:0 0 auto;width:1px;height:32px;background:#E2D5AC;}
 /* Hora e dia da semana. A hora só existe quando já está confirmada no
    calendário; o dia da semana vem sempre da data, por isso serve de legenda
    em qualquer jogo. */
@@ -723,28 +723,33 @@ if ('serviceWorker' in navigator) {
 .sbj-hr strong{display:block;font-family:var(--mono,monospace);font-weight:600;font-size:13px;line-height:1.2;color:var(--ink,#1B231F);letter-spacing:normal;}
 .sbj-hr strong.vazia{color:#C9B77E;}
 .sbj-hr span{display:block;font-family:var(--mono,monospace);font-size:9.5px;line-height:1.35;letter-spacing:.06em;color:var(--ink-soft,#5B6661);text-transform:uppercase;}
-.sbj-logo{flex:0 0 auto;width:26px;height:26px;display:grid;place-items:center;}
+.sbj-logo{flex:0 0 auto;width:30px;height:30px;display:grid;place-items:center;}
 .sbj-logo img{max-width:100%;max-height:100%;object-fit:contain;}
 .sbj-info{flex:1 1 auto;min-width:0;}
 .sbj-adv{display:block;font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:19px;line-height:1.12;color:var(--ink,#1B231F);letter-spacing:normal;text-transform:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sbj-comp{display:block;font-size:11px;line-height:1.35;color:var(--ink-soft,#5B6661);margin-top:1px;letter-spacing:normal;text-transform:none;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sbj-pres{flex:0 0 auto;display:flex;flex-direction:column;gap:3px;align-items:flex-end;}
 .sbj-pres .sbi-pill{font-size:10px;padding:3px 7px;letter-spacing:0;}
-.sbj-cico{flex:0 0 auto;width:28px;height:28px;display:grid;place-items:center;}
+/* Escudo e símbolo à altura do bloco de texto (~31px de tinta). Estavam a
+   26/28px, herdados da lista do Goals — mas lá o nome do adversário é 14px e
+   aqui é 19px, e um símbolo mais baixo do que o texto ao lado parece solto no
+   meio da linha em vez de alinhado com ela. O que conta é a proporção
+   símbolo/texto, não o número. */
+.sbj-cico{flex:0 0 auto;width:36px;height:36px;display:grid;place-items:center;}
 .sbj-cico img{max-width:100%;max-height:100%;object-fit:contain;}
 /* Ecrã estreito (360px ainda é o chão real): o nome do adversário é o que
    interessa, por isso é o último a encolher — aperta-se antes tudo o que tem
    largura fixa. */
 @media (max-width:380px){
-  .sbj{gap:6px;padding-left:11px;padding-right:9px;}
+  .sbj{gap:5px;padding-left:11px;padding-right:9px;}
   .sbj-dt{width:30px;}
   .sbj-dt strong{font-size:21px;}
   .sbj-hr{width:34px;}
   .sbj-hr strong{font-size:12px;}
-  .sbj-logo{width:22px;height:22px;}
+  .sbj-logo{width:26px;height:26px;}
   .sbj-adv{font-size:17px;}
   .sbj-pres .sbi-pill{font-size:9.5px;padding:2.5px 5px;gap:3px;}
-  .sbj-cico{width:24px;height:24px;}
+  .sbj-cico{width:30px;height:30px;}
 }
 
 
