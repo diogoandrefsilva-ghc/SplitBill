@@ -180,7 +180,7 @@ sozinho conforme quem faltasse e ninguém percebia porquê.
   por cima de memória velha apagaria o que tivesse sido mudado noutro
   dispositivo. A edição vive em `_convSel` até se carregar em Guardar.
 
-## Duas armadilhas do CSS global (já mordidas)
+## Armadilhas do CSS (já mordidas)
 - **`input, select { appearance: none }`** (para os campos de texto) apaga o
   desenho nativo das **checkboxes**: elas mudam de estado mas ficam visualmente
   iguais — carrega-se e "não acontece nada". Qualquer checkbox nova precisa de
@@ -190,6 +190,15 @@ sozinho conforme quem faltasse e ninguém percebia porquê.
   é regra de autor e ganha ao `[hidden]` do browser — o bloco "mais N jogos"
   aparecia todo na mesma. Resolve-se com `.sbi-list[hidden]{display:none}` (já lá
   está); qualquer lista nova com `display` próprio precisa do mesmo par.
+- **`display:grid` + `place-items:center` numa caixa de imagem parte o
+  `max-height:100%`.** A linha do grid é dimensionada PELO item, por isso a
+  percentagem fica cíclica e o browser ignora-a — o `object-fit` nunca chega a
+  entrar. Um escudo alto (o Marítimo, com a faixa "Madeira") desenhava-se a
+  30x75 numa caixa de 30x30, a transbordar e a parecer 22px descaído; um SVG
+  com tamanho intrínseco pequeno ficava pequeno em vez de encher a caixa. Numa
+  caixa de imagem usa **`display:flex`** e dá à `img` **`width:100%;
+  height:100%;object-fit:contain`** — assim a caixa manda sempre, seja qual for
+  o ficheiro (ver `.sbj-logo`/`.sbj-cico`, que recebem SVG de terceiros).
 - **`button:hover { background:#0B6340 }`** ganha em especificidade a qualquer
   classe de botão que definas, e no telemóvel o `:hover` fica colado depois do
   toque — o botão fica verde escuro com o texto ilegível. Neutraliza sempre com
