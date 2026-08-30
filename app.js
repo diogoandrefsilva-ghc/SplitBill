@@ -4489,6 +4489,134 @@ async function calAplicar() {
     mostrarMensagem(p.length ? ('✓ ' + p.join(' · ') + (erros ? ' (' + erros + ' com erro)' : '')) : '❌ Nada gravado', p.length > 0);
 }
 
+/* ── CALENDÁRIO PARTILHADO (lê `goals.jogos`, a lista do Goals) ──────────
+   A ficha de um jogo — hora, competição, jornada, adversário, estádio — já
+   existe do outro lado: a app Goals guarda a época inteira em `goals.jogos`,
+   no MESMO projeto Supabase que esta, noutro schema. Aqui NÃO se copia nada
+   disso: os "Próximos Jogos em Alvalade" continuam a ser eventos do SplitBill
+   (é o evento que leva convocados, menu, tesoureiro e as presenças, e nada
+   disso tem lugar no Goals), mas o que é ficha do jogo lê-se de lá em tempo
+   de render. Assim o calendário tem UM dono: sincroniza-se num sítio e as
+   duas apps mudam juntas.
+
+   Emparelhamento evento ↔ jogo: `_calPontuarEv`, o mesmo que já decide se uma
+   sugestão do calendário é um evento que já existe (mesmo dia decide sozinho;
+   fora disso o nome do adversário tem de aparecer na descrição e a data andar
+   perto). Não se guarda o par: o evento pode mudar de data à mão e o jogo
+   pode ser remarcado no Goals — recalcular a cada carga é o que mantém os
+   dois em dia sem uma terceira lista para sincronizar.
+
+   TOLERANTE, como as colunas opcionais: se a migração
+   `Goals/db/jogos-leitura-partilhada.sql` não estiver corrida (ou a rede
+   falhar), `GOALS_JOGOS` fica vazio e os cartões mostram o que sempre
+   mostraram — nome do evento e data. Nada rebenta, só fica com menos. */
+
+var GOALS_JOGOS = [];        // linhas de goals.jogos a partir de ~hoje
+var GOALS_JOGOS_OK = null;   // null = ainda não lido · false = indisponível
+var _gjCache = {};           // 'idEvento|data' → jogo | null (limpa a cada carga)
+
+// Jogos a partir de hoje-45d: a janela cobre um evento que tenha ficado por
+// abrir e evita filtrar por época (o corte da época é diferente de app para
+// app e uma lista de ~60 linhas não justifica a complicação).
+function _gjDesde() {
+    var d = new Date(); d.setDate(d.getDate() - 45);
+    var p = function (n) { return ('0' + n).slice(-2); };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+
+async function carregarCalendarioGoals() {
+    try {
+        // `Accept-Profile: goals` é o que aponta para o outro schema — nunca vai
+        // no URL. Só SELECT: escrever em goals.jogos é do admin do Goals.
+        // `por_definir` fora: são os jogos certos mas ainda por sortear (fase de
+        // liga da Champions antes do sorteio) — sem adversário e com a data a
+        // marcar só o início de uma janela. Um deles calhar no mesmo dia de um
+        // jogo em Alvalade daria um par com 100 pontos e nome vazio.
+        var url = SB_URL + '/rest/v1/jogos?select=id,data,adversario,competicao,jornada,local,hora,estadio'
+                + '&por_definir=is.false&data=gte.' + _gjDesde() + '&order=data.asc';
+        var r = await sbFetch(url, { headers: sbHeaders({ 'Accept': 'application/json', 'Accept-Profile': 'goals', 'Content-Profile': 'goals' }) });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        var d = await r.json();
+        GOALS_JOGOS = Array.isArray(d) ? d : [];
+        GOALS_JOGOS_OK = true;
+        if (!GOALS_JOGOS.length) console.warn('[SplitBill] goals.jogos veio vazio — o calendário do Goals está por sincronizar?');
+    } catch (e) {
+        GOALS_JOGOS = [];
+        GOALS_JOGOS_OK = false;
+        console.warn('[SplitBill] sem acesso a goals.jogos — corre Goals/db/jogos-leitura-partilhada.sql para os Próximos Jogos trazerem hora e competição', e);
+    }
+    _gjCache = {};
+    try { if (typeof renderInicio === 'function') renderInicio(); } catch (e) {}
+}
+
+// O jogo do Goals que corresponde a este evento (ou null). Memoizado por
+// evento+data para não voltar a pontuar a lista inteira a cada render.
+function jogoGoalsDoEvento(ev) {
+    if (!ev || !GOALS_JOGOS.length) return null;
+    var k = String(ev.id) + '|' + String(ev.data || '');
+    if (Object.prototype.hasOwnProperty.call(_gjCache, k)) return _gjCache[k];
+    var melhor = null, pontos = 0;
+    for (var i = 0; i < GOALS_JOGOS.length; i++) {
+        var p = _calPontuarEv(GOALS_JOGOS[i], ev);
+        // Desempate a favor de Alvalade: os eventos daqui são sempre de casa,
+        // e a lista do Goals traz a época inteira (casa, fora e neutro).
+        if (p > 0 && !_calEmAlvalade(GOALS_JOGOS[i])) p -= 0.5;
+        if (p > pontos) { pontos = p; melhor = GOALS_JOGOS[i]; }
+    }
+    _gjCache[k] = melhor;
+    return melhor;
+}
+
+/* Escudos dos adversários: o mesmo `logos.json` que o Goals já lê (repo
+   público AppDataJSON). Não é dado de utilizador e não passa pelo Supabase —
+   logo em falta ou offline: o cartão fica sem escudo e mais nada. */
+var LOGOS_ADV = {};
+function _gjNormNome(s) {
+    return String(s == null ? '' : s).toLowerCase().normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+}
+function logoAdversario(nome) { return LOGOS_ADV[_gjNormNome(nome)] || ''; }
+async function carregarLogosAdversarios() {
+    try {
+        var r = await fetch('https://raw.githubusercontent.com/diogoandrefsilva-ghc/AppDataJSON/main/logos.json?t=' + Date.now());
+        if (!r.ok) return;
+        var d = await r.json(), m = {};
+        for (var k in d) m[_gjNormNome(k)] = d[k];
+        LOGOS_ADV = m;
+        try { if (typeof renderInicio === 'function') renderInicio(); } catch (e) {}
+    } catch (e) { /* offline ou ficheiro em falta: segue sem escudos */ }
+}
+
+// Símbolos das competições (mesmos PNG do Goals, copiados para cá para o
+// cartão não depender da rede nem do outro site).
+var COMP_LOGOS = {
+    'Liga Portugal': 'logos-competicoes/liga-portugal.png',
+    'Liga dos Campeões': 'logos-competicoes/liga-dos-campeoes.png',
+    'Taça de Portugal': 'logos-competicoes/taca-de-portugal.png',
+    'Taça da Liga': 'logos-competicoes/taca-da-liga.png',
+    'Supertaça': 'logos-competicoes/supertaca.png'
+};
+
+
+/* Ficha do jogo para o cartão dos Próximos Jogos: o que vier do Goals manda;
+   o que faltar tira-se da descrição do evento, que desde sempre é
+   "Sporting vs Adversário [(Competição)]" (ver _calDescricao). É esse
+   fallback que mantém o cartão inteiro quando o Goals não está acessível ou
+   quando o evento foi criado à mão e não casa com jogo nenhum. */
+function fichaJogoEvento(ev) {
+    var j = jogoGoalsDoEvento(ev);
+    var desc = String((ev && ev.descricao) || '');
+    var mComp = /\(([^)]+)\)\s*$/.exec(desc);
+    var advDesc = desc.replace(/\s*\([^)]*\)\s*$/, '').replace(/^\s*sporting\s*(vs|v\.?|-|–|—|x)\s*/i, '').trim();
+    return {
+        adversario: (j && j.adversario) || advDesc || desc || 'Sem nome',
+        competicao: (j && j.competicao) || (mComp ? mComp[1] : ''),
+        jornada: (j && j.jornada) || '',
+        hora: (j && j.hora) || '',
+        jogo: j
+    };
+}
+
 /* ── JOGO ABERTO & PRESENÇAS (Próximos Jogos em Alvalade) ────────────────
    Com a época inteira criada de uma vez (calSincronizar), "evento por fechar"
    deixou de querer dizer "dia de jogo": bastava a data chegar para o jogo
@@ -5363,6 +5491,12 @@ async function sbAposLogin() {
 
     await sbCarregarConfigAcesso();
     await sbCarregarDados();
+    // Ficha dos jogos (hora/competição/escudos) para os Próximos Jogos em
+    // Alvalade — vem do calendário do Goals e do logos.json. Sem `await`: é
+    // enfeite do cartão, não pode atrasar o arranque, e cada uma re-renderiza
+    // o ecrã inicial quando chega (ver CALENDÁRIO PARTILHADO).
+    carregarCalendarioGoals();
+    carregarLogosAdversarios();
     init();
     verComoRestaurar();
     pushSugerirAtivacao();
@@ -6874,7 +7008,7 @@ function ghLoadCfg() {}
 function ghSaveCfg() {}
 function ghPromptSync() {}
 function ghPush() { mostrarMensagem('Dados guardados automaticamente no Supabase ✓', true); }
-function ghReset() { sbCarregarDados().then(() => { renderHistoricoDropdown(); renderContas(); mostrarMensagem('✓ Dados sincronizados do Supabase', true); }); }
+function ghReset() { sbCarregarDados().then(() => { carregarCalendarioGoals(); renderHistoricoDropdown(); renderContas(); mostrarMensagem('✓ Dados sincronizados do Supabase', true); }); }
 
 /* ── Swipe-back (PWA: deslizar da margem esquerda → direita p/ voltar) ── */
 // Só em modo standalone (app instalada): no browser já existe o gesto/botão nativo.

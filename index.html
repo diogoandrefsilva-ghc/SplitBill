@@ -704,13 +704,51 @@ if ('serviceWorker' in navigator) {
 .sbi-fut{position:relative;overflow:hidden;background:linear-gradient(135deg,#FFFCF2 0%,#F6F0DD 100%);border:1px solid #E8DCB8;border-radius:16px;padding:12px 14px 12px 16px;gap:12px;box-shadow:0 6px 18px -14px rgba(11,59,43,.55);}
 .sbi-fut::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(180deg,var(--dourado,#B8911F),#D8B23C);}
 .sbi-fut > *{position:relative;z-index:1;}
-.sbi-fut .sbi-ico{background:rgba(184,145,31,.16);color:#8A6D14;border-radius:50%;width:42px;height:42px;box-shadow:inset 0 0 0 1px rgba(184,145,31,.22);}
-.sbi-fut .sbi-ico svg{width:24px;height:24px;}
-.sbi-fut .sbi-ocname{color:var(--ink,#1B231F);font-size:18px;}
-.sbi-fut .sbi-ocsub{color:#8A6D14;}
 /* O próximo é o único que se pode abrir: destaca-se, sem passar a verde. */
 .sbi-fut.proximo{border-color:#D9C480;box-shadow:0 9px 22px -14px rgba(138,109,20,.8),inset 0 1px 0 rgba(255,255,255,.65);}
-.sbi-chev.gold{color:var(--dourado,#B8911F);opacity:.6;}
+
+/* Interior do cartão no desenho da lista de jogos do Goals: data · hora/dia ·
+   escudo · adversário/competição · presenças · símbolo da competição. Assenta
+   no .sbi-fut (fundo creme, barra dourada, hover já neutralizado lá em cima —
+   é o mesmo cartão, não um cartão novo) e só troca o que está por dentro.
+   As caixas de largura fixa são o que mantém todas as linhas alinhadas na
+   mesma coluna, mesmo quando falta a hora ou o símbolo da competição. */
+.sbj{padding:9px 12px 9px 13px;gap:8px;}
+.sbj-dt{flex:0 0 auto;width:34px;text-align:center;}
+.sbj-dt strong{display:block;font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:23px;line-height:1;color:var(--ink,#1B231F);letter-spacing:normal;}
+.sbj-dt span{display:block;font-family:var(--mono,monospace);font-size:9.5px;line-height:1.35;letter-spacing:.06em;color:#8A6D14;text-transform:uppercase;}
+.sbj-sep{flex:0 0 auto;width:1px;height:30px;background:#E2D5AC;}
+/* Hora e dia da semana. A hora só existe quando já está confirmada no
+   calendário; o dia da semana vem sempre da data, por isso serve de legenda
+   em qualquer jogo. */
+.sbj-hr{flex:0 0 auto;width:40px;text-align:center;}
+.sbj-hr strong{display:block;font-family:var(--mono,monospace);font-weight:600;font-size:13px;line-height:1.2;color:var(--ink,#1B231F);letter-spacing:normal;}
+.sbj-hr strong.vazia{color:#C9B77E;}
+.sbj-hr span{display:block;font-family:var(--mono,monospace);font-size:9.5px;line-height:1.35;letter-spacing:.06em;color:var(--ink-soft,#5B6661);text-transform:uppercase;}
+.sbj-logo{flex:0 0 auto;width:26px;height:26px;display:grid;place-items:center;}
+.sbj-logo img{max-width:100%;max-height:100%;object-fit:contain;}
+.sbj-info{flex:1 1 auto;min-width:0;}
+.sbj-adv{display:block;font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:19px;line-height:1.12;color:var(--ink,#1B231F);letter-spacing:normal;text-transform:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sbj-comp{display:block;font-size:11px;line-height:1.35;color:var(--ink-soft,#5B6661);margin-top:1px;letter-spacing:normal;text-transform:none;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sbj-abrir{display:block;margin-top:2px;font-size:10px;line-height:1.2;color:#8A6D14;font-weight:600;letter-spacing:.04em;text-transform:uppercase;font-family:var(--mono,monospace);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sbj-pres{flex:0 0 auto;display:flex;flex-direction:column;gap:3px;align-items:flex-end;}
+.sbj-pres .sbi-pill{font-size:10px;padding:3px 7px;letter-spacing:0;}
+.sbj-cico{flex:0 0 auto;width:28px;height:28px;display:grid;place-items:center;}
+.sbj-cico img{max-width:100%;max-height:100%;object-fit:contain;}
+/* Ecrã estreito (360px ainda é o chão real): o nome do adversário é o que
+   interessa, por isso é o último a encolher — aperta-se antes tudo o que tem
+   largura fixa. */
+@media (max-width:380px){
+  .sbj{gap:6px;padding-left:11px;padding-right:9px;}
+  .sbj-dt{width:30px;}
+  .sbj-dt strong{font-size:21px;}
+  .sbj-hr{width:34px;}
+  .sbj-hr strong{font-size:12px;}
+  .sbj-logo{width:22px;height:22px;}
+  .sbj-adv{font-size:17px;}
+  .sbj-pres .sbi-pill{font-size:9.5px;padding:2.5px 5px;gap:3px;}
+  .sbj-cico{width:24px;height:24px;}
+}
 
 /* Atalho (cartão branco) */
 .sbi-row{background:var(--card,#fff);border:1px solid var(--linha,#DDE3DD);border-radius:13px;padding:12px 14px;gap:13px;box-shadow:0 3px 12px -10px rgba(11,59,43,.4);}
@@ -1160,28 +1198,69 @@ if ('serviceWorker' in navigator) {
      verde é do jogo em aberto (há conta por fechar) e confundir os dois é
      confundir "hoje há trabalho" com "está marcado". Tocar abre a folha do
      jogo (Sá/jogo, e abrir o jogo se for o próximo).
-     No canto direito, duas contagens empilhadas — quantos vão ao jogo e
-     quantos vão ao Sá — em vez de um "vou"/"não vou" pessoal: agora há duas
-     perguntas, e o que interessa de relance é o total, não só a minha
-     resposta (ver contagemPresencas() no app.js). */
+
+     O DESENHO é o da lista de jogos do Goals (linha corrida: data · hora/dia da
+     semana · escudo · adversário/competição · símbolo da competição) — é o
+     mesmo calendário nas duas apps e não fazia sentido lê-lo de duas maneiras.
+     Três diferenças de propósito: não há ícone casa/fora (aqui é sempre
+     Alvalade), não há resultado (é sempre jogo por acontecer) e as contagens de
+     presenças — quantos vão ao jogo, quantos vão ao Sá — ficam antes do símbolo
+     da competição, que é matéria só desta app (ver contagemPresencas()).
+     Hora, competição, jornada e escudo vêm de `goals.jogos` (secção CALENDÁRIO
+     PARTILHADO no app.js); o que faltar sai da descrição do evento e o cartão
+     fica inteiro na mesma. */
+  var MESES_CURTOS = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+  var DIAS_CURTOS  = ['DOM','SEG','TER','QUA','QUI','SEX','SÁB'];
+
   function cardFuturo(ev, primeiro){
     var nome = esc(ev.descricao || 'Sem nome');
-    var data = esc(ev.data || '');
-    var abre = false, cont = null;
+    var abre = false, cont = null, f = null;
     try { abre = (typeof podeAbrirJogo==='function') && podeAbrirJogo(ev); } catch(e){}
     try { if (typeof contagemPresencas==='function') cont = contagemPresencas(ev); } catch(e){}
-    var pill = '';
+    try { if (typeof fichaJogoEvento==='function') f = fichaJogoEvento(ev); } catch(e){}
+    if (!f) f = { adversario: ev.descricao || 'Sem nome', competicao:'', jornada:'', hora:'' };
+
+    // A data do evento é 'dd/mm/aaaa'; o dia da semana tira-se sempre dela (ao
+    // contrário da hora, que só vem quando já está confirmada no calendário).
+    var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(ev.data || ''));
+    var dia = m ? ('0'+m[1]).slice(-2) : '--';
+    var mes = m ? (MESES_CURTOS[(+m[2])-1] || '') : '';
+    var ds  = '';
+    if (m){
+      var d = new Date(+m[3], (+m[2])-1, +m[1], 12);
+      if (!isNaN(d)) ds = DIAS_CURTOS[d.getDay()];
+    }
+
+    var logo = '';
+    try { logo = (typeof logoAdversario==='function') ? logoAdversario(f.adversario) : ''; } catch(e){}
+    var compSrc = '';
+    try { compSrc = (typeof COMP_LOGOS!=='undefined' && COMP_LOGOS) ? (COMP_LOGOS[f.competicao] || '') : ''; } catch(e){}
+
+    // A dica de abrir vai em linha própria, e não colada à competição: é o
+    // único jogo do ecrã que se pode abrir e o texto não pode ser o primeiro a
+    // ser cortado num telemóvel estreito.
+    var sub = [f.competicao, f.jornada].filter(Boolean).map(esc).join(' · ');
+
+    var pres = '';
     if (cont) {
-      pill = '<span class="sbi-pill-stack">'
+      pres = '<span class="sbj-pres">'
         + '<span class="sbi-pill sbi-calm">⚽ '+cont.jogo.length+'</span>'
         + '<span class="sbi-pill sbi-calm">🍽 '+cont.sa.length+'</span>'
         + '</span>';
     }
-    return '<button class="sbi-tap sbi-fut'+(primeiro?' proximo':'')+'" onclick="abrirFolhaJogo(\''+esc(ev.id)+'\')" aria-label="'+nome+'">'
-      + '<span class="sbi-ico">'+ICO.bola+'</span>'
-      + '<span class="sbi-octext"><span class="sbi-ocname">'+nome+'</span>'
-      + '<span class="sbi-ocsub">'+data+(abre ? ' · toca para abrir' : '')+'</span>'
-      + '</span>'+pill+'<span class="sbi-chev gold">'+CHEV+'</span></button>';
+
+    return '<button class="sbi-tap sbi-fut sbj'+(primeiro?' proximo':'')+'" onclick="abrirFolhaJogo(\''+esc(ev.id)+'\')" aria-label="'+nome+'">'
+      + '<span class="sbj-dt"><strong>'+dia+'</strong><span>'+mes+'</span></span>'
+      + '<span class="sbj-sep"></span>'
+      + '<span class="sbj-hr"><strong'+(f.hora?'':' class="vazia"')+'>'+(f.hora?esc(f.hora):'—')+'</strong><span>'+ds+'</span></span>'
+      + '<span class="sbj-logo">'+(logo?'<img src="'+esc(logo)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':'')+'</span>'
+      + '<span class="sbj-info"><span class="sbj-adv">'+esc(f.adversario)+'</span>'
+      + (sub ? '<span class="sbj-comp">'+sub+'</span>' : '')
+      + (abre ? '<span class="sbj-abrir">toca para abrir</span>' : '')
+      + '</span>'
+      + pres
+      + '<span class="sbj-cico">'+(compSrc?'<img src="'+esc(compSrc)+'" alt="'+esc(f.competicao)+'" loading="lazy" onerror="this.style.display=\'none\'">':'')+'</span>'
+      + '</button>';
   }
 
   function atalhos(){

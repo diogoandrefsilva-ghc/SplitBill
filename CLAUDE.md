@@ -9,6 +9,9 @@ App pessoal de divisão de contas ("dia de jogo").
 - `style.css` — **todo o CSS** (~1400 linhas). Cores, tamanhos, espaçamento, layout.
 - `sw.js` — service worker (cache offline).
 - `db/` — migrações SQL para correr à mão no SQL Editor do Supabase. São idempotentes e a app é tolerante à falta delas (degrada, não rebenta).
+- `logos-competicoes/` — os 5 PNG dos símbolos das competições, cópia dos do
+  Goals. Estão cá (e não a apontar para o outro site) para o cartão dos
+  Próximos Jogos funcionar offline, como o resto da PWA.
 - Não mexer: `manifest.json`.
 
 ## Como NÃO gastar tokens à toa (importante)
@@ -17,6 +20,9 @@ App pessoal de divisão de contas ("dia de jogo").
 - `fatura-restaurante.ts` — Edge Function (Deno) que lê a fatura com o Gemini. **Não corre no site**: vive no Supabase, faz-se deploy à parte (`supabase functions deploy fatura-restaurante`). É irmã da `fatura-ocr` da FestasBV — mesmo projeto Supabase, schema e prompt diferentes.
 - **Fatura guardada:** o detalhe lido fica em `estado.fatura` e persiste na coluna `eventos.fatura` (jsonb, `db/fatura-detalhe.sql`). A correspondência linha-da-fatura ↔ artigo do menu **não** se guarda — é recalculada a cada render (`faturaConferir()`), de propósito: se o menu do evento mudar, a conferência acompanha. Sem a migração, `FATURA_COL=false` e a fatura fica só no localStorage.
 - **Convocados e menu do evento:** persistem nas colunas `eventos.amigos` / `eventos.menu` (jsonb, `db/convocados-menu.sql`). `ev.amigos` é a lista de **candidatos** (quem foi convocado); quem **consumiu** está em `ordem_amigos`/`oferta_para` — não confundir (`presentesNoEvento()` usa o segundo). Ao carregar da BD faz-se a união das duas (`convocadosDoEvento()`), para os eventos anteriores à migração não ficarem vazios. Sem a migração, `AMIGOS_COL`/`MENU_COL=false` e ficam só no localStorage.
+- Excepção conhecida: o **ecrã inicial** (hub) tem o CSS todo num
+  `<style id="sbi-css">` dentro do `index.html`, junto do `renderInicio` que o
+  desenha — é o único bloco que não vive no `style.css`.
 - Mudança **só visual** → `style.css`. Mudança de **lógica/dados** → `app.js`. Para localizar um botão/campo: procura o `id` no `index.html` e salta para o handler no `app.js`.
 - Faz **edições cirúrgicas** (diffs pequenos). **Nunca reescrevas o ficheiro inteiro.**
 
@@ -52,6 +58,47 @@ IA e um evento com a data errada estraga o dia de jogo todo.
   daqui. Esta app não escreve lá directamente (não tem acesso ao schema
   `goals`); só manda `app:'splitbill'` no pedido.
 
+## O calendário tem um dono só: `goals.jogos` (secção `CALENDÁRIO PARTILHADO`)
+A ficha de um jogo — hora, competição, jornada, adversário, estádio — já existe
+do outro lado: o Goals guarda a época inteira em **`goals.jogos`**, no MESMO
+projeto Supabase que esta app, noutro schema. Os "Próximos Jogos em Alvalade"
+**leem** de lá em tempo de render, em vez de a app guardar uma segunda cópia
+do calendário que diverge no dia em que só uma das duas é sincronizada.
+- O que NÃO mudou: os jogos futuros continuam a ser **eventos do SplitBill**.
+  É o evento que leva convocados, menu, tesoureiro, `aberto` e as presenças, e
+  nada disso tem lugar no Goals. De `goals.jogos` só vem a ficha do jogo, e só
+  para desenhar o cartão — não se grava cá nem se escreve lá (é SELECT e mais
+  nada; escrever em `goals.jogos` é do admin do Goals).
+- **Emparelhamento evento ↔ jogo:** `jogoGoalsDoEvento()`, que reaproveita o
+  `_calPontuarEv` do calendário (mesmo dia decide sozinho; fora disso o nome do
+  adversário tem de aparecer na descrição e a data andar a ≤21 dias), com um
+  desempate a favor de Alvalade — a lista do Goals traz a época inteira,
+  casa/fora/neutro, e os eventos daqui são sempre de casa. **O par não se
+  guarda**: o evento pode mudar de data à mão e o jogo pode ser remarcado no
+  Goals; recalcular a cada carga é o que mantém os dois em dia sem uma terceira
+  lista para sincronizar. Memoizado por `id|data` do evento (`_gjCache`).
+- Os jogos **`por_definir`** ficam de fora do pedido: sem adversário e com a
+  data a marcar só o início de uma janela, um deles a calhar no mesmo dia de um
+  jogo em Alvalade dava um par com 100 pontos e nome vazio.
+- **Migração:** `Goals/db/jogos-leitura-partilhada.sql` (vive no repo do Goals,
+  que é a fonte de verdade do schema `goals`) — uma policy de SELECT a deixar
+  qualquer conta autenticada ler `goals.jogos`. Sem ela só os utilizadores que
+  estão em `goals.allowed_users` é que veriam a ficha. `goals.jogos` não tem
+  colunas de dinheiro e já era legível pelo role `anon` (acesso de convidado do
+  Goals), por isso a policy não abre nada de novo.
+- **TOLERANTE como as colunas opcionais:** sem a migração, sem rede ou com o
+  calendário do Goals por sincronizar, `GOALS_JOGOS` fica vazio (`GOALS_JOGOS_OK
+  = false`) e o cartão desenha-se na mesma — `fichaJogoEvento()` tira o
+  adversário e a competição da **descrição do evento**, que desde sempre é
+  "Sporting vs Adversário [(Competição)]" (`_calDescricao`). Perde-se a hora e o
+  escudo, mais nada.
+- **Escudos dos adversários:** o mesmo `logos.json` do repo público AppDataJSON
+  que o Goals já lê, indexado pelo nome normalizado. Não passa pelo Supabase e
+  não é dado de utilizador. Logo em falta ou offline: o cartão fica sem escudo.
+- As duas leituras (`carregarCalendarioGoals`, `carregarLogosAdversarios`) são
+  disparadas **sem `await`** no arranque: são enfeite do cartão e não podem
+  atrasar a app; cada uma re-renderiza o ecrã inicial quando chega.
+
 ## Jogos futuros no ecrã: o calendário da época não pode encher a lista
 Com o calendário criado de uma vez, "eventos em aberto" passou a incluir meia
 época de jogos por acontecer. Por isso:
@@ -62,6 +109,14 @@ Com o calendário criado de uma vez, "eventos em aberto" passou a incluir meia
   para baixo o que precisa de atenção hoje. `FUTUROS_A_MOSTRAR` (2) à vista, o
   resto atrás de "mais N jogos". A secção aparece **sempre**, mesmo sem jogos: é
   lá que o admin tem o botão de sincronizar (e só o admin o vê).
+  O **desenho do cartão** (`cardFuturo`, classe `.sbj` por cima do `.sbi-fut`) é
+  o da lista de jogos do Goals — data · hora/dia da semana · escudo ·
+  adversário/competição · presenças · símbolo da competição —, porque é o mesmo
+  calendário nas duas apps. Três diferenças de propósito: **sem** ícone
+  casa/fora (aqui é sempre Alvalade), **sem** resultado (é sempre jogo por
+  acontecer) e as contagens de presenças ficam **antes** do símbolo da
+  competição, por serem matéria só desta app. As caixas de largura fixa são o
+  que mantém as linhas todas alinhadas quando falta a hora ou o símbolo.
 - **Painel do histórico** (`renderHistoricoDropdown` + `eventosDoHistorico()`):
   ordenado por **data** e já não por ordem de criação, e **só leva o que já
   aconteceu** — jogos abertos ou fechados. Os que estão por abrir não entram:
