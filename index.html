@@ -446,6 +446,7 @@ window.sbEsconderSplash = function(){
 </div>
 
 
+<button id="btn-reverter-abertura" onclick="reverterAberturaJogo(eventoAtualId)" style="display:none;">↩️ Reverter Abertura</button>
 <button id="btn-eliminar-evento" onclick="apagarEventoAtual()" style="display:none;">🗑️ Apagar Evento</button>
 
 </div> <!-- end page-eventos -->
@@ -824,6 +825,9 @@ if ('serviceWorker' in navigator) {
 /* Apagar evento — no fim do ecrã do evento */
 #btn-eliminar-evento{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:6px 0 10px;background:#fff;border:1.5px solid var(--rubro,#B3402F);color:var(--rubro,#B3402F);border-radius:12px;padding:13px;font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:15px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;}
 #btn-eliminar-evento:active{transform:scale(.99);background:#FDF2F0;}
+/* Reverter abertura do jogo — mesmo sítio, tema dourado (agenda) em vez de vermelho (destrutivo) */
+#btn-reverter-abertura{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:6px 0 10px;background:#fff;border:1.5px solid var(--dourado,#B8911F);color:#8A6D14;border-radius:12px;padding:13px;font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:15px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;}
+#btn-reverter-abertura:active{transform:scale(.99);background:#FBF4DC;}
 
 /* FAB Novo Evento — extendido, flutuante (só no ecrã inicial + admin) */
 .fab-novo{position:fixed;right:18px;bottom:22px;z-index:100;display:none;align-items:center;gap:9px;

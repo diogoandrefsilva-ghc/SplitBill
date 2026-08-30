@@ -629,6 +629,13 @@ html,body{touch-action:pan-x pan-y}
            button:hover (verde escuro), que de outra forma ganhava sempre e no
            telemóvel ficava colada depois do toque. */
         .jf-data { font-family: var(--mono, monospace); font-size: 12px; letter-spacing: .04em; color: #5B6661; }
+        .jf-data-edit { display: flex; gap: 8px; align-items: center; }
+        .jf-data-edit input[type="date"] { flex: 1; font-family: var(--mono, monospace); font-size: 12.5px; }
+        .jf-data-btn, .jf-data-btn:hover {
+            padding: 10px 14px; border-radius: 9px; border: 1.5px solid #0E7A4F;
+            background: #fff; color: #0E7A4F; font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap;
+        }
+        .jf-data-btn:active { transform: scale(.98); background: #E2EFE8; }
         .jf-lbl { margin-top: 14px; font-size: 12.5px; font-weight: 700; color: #0B3B2B; }
         .jf-btns { display: flex; gap: 8px; margin-top: 8px; }
         .jf-btn, .jf-btn:hover {

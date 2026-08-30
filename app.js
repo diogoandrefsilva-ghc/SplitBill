@@ -2372,6 +2372,11 @@ function aplicarPermissoesEdicao() {
     // Eliminar evento — só admin e com o jogo ainda aberto (não fechado)
     const btnEliminar = document.getElementById('btn-eliminar-evento');
     if (btnEliminar) btnEliminar.style.display = (admin && ev && !ev.totalFatura) ? '' : 'none';
+    // Reverter abertura — só quando o jogo foi mesmo aberto à mão (ev.aberto)
+    // e a conta ainda não fechou; depois de fechada, jogoAberto() já é false
+    // por causa do totalFatura e não há nada para reverter.
+    const btnReverter = document.getElementById('btn-reverter-abertura');
+    if (btnReverter) btnReverter.style.display = (editavel && ev && ABERTO_COL && ev.aberto === true && !ev.totalFatura) ? '' : 'none';
     // Dropdown personalizada do histórico — visível quando o jogo está fechado
     const _toggle = document.getElementById('historico-toggle-btn');
     const _panel = document.getElementById('historico-panel');
@@ -4604,6 +4609,46 @@ async function abrirJogo(id) {
     return true;
 }
 
+// Desfaz abrirJogo(): o jogo volta para a agenda (Próximos Jogos) e sai de
+// "Em aberto". Não apaga nada — ordens e ofertas já lançadas ficam como
+// estavam, só deixam de contar como conta por fechar até se voltar a abrir.
+// Mesma permissão de quem pode abrir: admin ou o substituto do evento.
+async function reverterAberturaJogo(id) {
+    const ev = historico.find(e => String(e.id) === String(id));
+    if (!ev) return false;
+    if (!podeEditarEvento(ev)) { mostrarMensagem('⚠️ Só o administrador (ou o substituto do evento) pode reverter a abertura', false); return false; }
+    if (!ABERTO_COL) { mostrarMensagem('⚠️ Falta a coluna eventos.aberto — corre db/jogo-aberto.sql no Supabase', false); return false; }
+    if (!jogoAberto(ev)) return false;
+
+    const ok = await mostrarModal({
+        icon: '↩️',
+        title: 'Reverter abertura?',
+        msg: '<strong>' + (ev.descricao || 'O jogo') + '</strong> volta para os Próximos Jogos, em agenda — sai de "Em aberto" no ecrã inicial.'
+            + ((ev.ordens && ev.ordens.length) ? '<br><br>Já há consumo lançado neste evento — fica tudo guardado, só deixa de contar como conta por fechar até se voltar a abrir.' : ''),
+        confirmText: 'Reverter',
+        cancelText: 'Cancelar'
+    });
+    if (!ok) return false;
+
+    ev.aberto = false;
+    salvarHistoricoLocal();
+    try {
+        await sbGuardarEvento(ev);
+    } catch (e) {
+        // Não gravou no servidor → mantém-se aberto aqui, senão este
+        // telemóvel deixava de ver o jogo em "Em aberto" e mais nenhum.
+        ev.aberto = true;
+        salvarHistoricoLocal();
+        mostrarMensagem('⚠️ Não foi possível reverter a abertura — tenta outra vez', false);
+        return false;
+    }
+    try { if (typeof renderInicio === 'function') renderInicio(); } catch (e) {}
+    try { aplicarPermissoesEdicao(); } catch (e) {}
+    try { renderHistoricoDropdown(); } catch (e) {}
+    mostrarMensagem('↩️ Abertura revertida — o jogo volta à agenda', true);
+    return true;
+}
+
 // Marca (ou desmarca) a minha presença no SÁ. Mexe nos convocados do evento:
 // é a mesma lista que depois aparece na grelha de amigos no dia do jogo.
 async function marcarPresenca(id, vai) {
@@ -4674,9 +4719,22 @@ async function marcarPresencaJogo(id, vai) {
 /* Folha de um jogo por abrir (tocar no cartão dos Próximos Jogos): a data, as
    duas perguntas (Sá / jogo), quem já está convocado e — só para quem o pode
    abrir, e só no próximo — o botão de abrir o jogo. */
+// "dd/mm/aaaa" → "aaaa-mm-dd" (formato do <input type="date">). Inverso de
+// _isoParaDataPt(), já usado na criação de eventos.
+function _dataPtParaIso(dataPt) {
+    const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(dataPt || '');
+    return m ? (m[3] + '-' + m[2] + '-' + m[1]) : _hojeIso();
+}
+
 function _jogoSheetHTML(ev) {
     const vouSa = vouAoSa(ev);
-    let h = '<div class="jf-data">' + _calEsc(ev.data || '—') + '</div>';
+    // Data editável só para quem pode gerir o jogo (admin/substituto) — os
+    // outros só a veem. Fica sempre dataManual=true depois de editada, para
+    // não ser recalculada a partir das ordens (ver salvarNoLocalStorage()).
+    let h = _podeGerirJogo(ev)
+        ? '<div class="jf-data-edit"><input type="date" id="jf-data-input" value="' + _dataPtParaIso(ev.data) + '">'
+          + '<button type="button" class="jf-data-btn" onclick="jogoSheetEditarData(' + ev.id + ')">Guardar</button></div>'
+        : '<div class="jf-data">' + _calEsc(ev.data || '—') + '</div>';
     if (vouSa === null) {
         h += '<div class="jf-aviso">A tua conta ainda não está associada a nenhum nome — pede ao administrador para te associar nas Definições.</div>';
     } else {
@@ -4734,6 +4792,39 @@ async function jogoSheetPresencaJogo(id, vai) {
     const box = document.getElementById('modal-msg');
     if (ev && box) box.innerHTML = _jogoSheetHTML(ev);
     try { if (typeof renderInicio === 'function') renderInicio(); } catch (e) {}
+}
+
+// Muda a data de um jogo por abrir, direto na folha (input#jf-data-input).
+// Fica dataManual=true — como a data de um evento criado à mão — para não
+// ser recalculada a partir das ordens.
+async function jogoSheetEditarData(id) {
+    const ev = historico.find(e => String(e.id) === String(id));
+    if (!ev) return false;
+    if (!podeEditarEvento(ev)) { mostrarMensagem('⚠️ Só o administrador (ou o substituto do evento) pode mudar a data', false); return false; }
+    const input = document.getElementById('jf-data-input');
+    if (!input || !input.value) return false;
+
+    const antes = ev.data;
+    const antesManual = ev.dataManual;
+    ev.data = _isoParaDataPt(input.value);
+    ev.dataManual = true;
+    salvarHistoricoLocal();
+
+    let ok;
+    try { await sbGuardarEvento(ev); ok = true; } catch (e) { ok = false; }
+    if (!ok) {
+        ev.data = antes;
+        ev.dataManual = antesManual;
+        salvarHistoricoLocal();
+        mostrarMensagem('⚠️ Não foi possível gravar a data — tenta outra vez', false);
+        return false;
+    }
+    const box = document.getElementById('modal-msg');
+    if (box) box.innerHTML = _jogoSheetHTML(ev);
+    try { if (typeof renderInicio === 'function') renderInicio(); } catch (e) {}
+    try { renderHistoricoDropdown(); } catch (e) {}
+    mostrarMensagem('✓ Data atualizada', true);
+    return true;
 }
 
 async function abrirFolhaJogo(id) {
