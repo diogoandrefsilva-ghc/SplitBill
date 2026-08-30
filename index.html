@@ -723,6 +723,13 @@ if ('serviceWorker' in navigator) {
 .sbj-hr strong{display:block;font-family:var(--mono,monospace);font-weight:600;font-size:13px;line-height:1.2;color:var(--ink,#1B231F);letter-spacing:normal;}
 .sbj-hr strong.vazia{color:#C9B77E;}
 .sbj-hr span{display:block;font-family:var(--mono,monospace);font-size:9.5px;line-height:1.35;letter-spacing:.06em;color:var(--ink-soft,#5B6661);text-transform:uppercase;}
+/* O -1px é ÓPTICO, não é margem. O bloco de texto ao lado tem duas linhas com
+   entrelinhas diferentes (1.12 no nome, 1.35 na competição) e a segunda ainda
+   leva 1px de margem: o desenho das letras acaba a ficar ~1px acima do centro
+   da caixa que o contém. Um símbolo centrado na caixa fica, por isso, um pouco
+   abaixo do texto — que é exactamente o que se via. Medido contra a lista do
+   Goals, que não tem este desencontro (lá o nome usa a entrelinha natural). */
+.sbj-logo,.sbj-cico{position:relative;top:-1px;}
 .sbj-logo{flex:0 0 auto;width:30px;height:30px;display:grid;place-items:center;}
 .sbj-logo img{max-width:100%;max-height:100%;object-fit:contain;}
 .sbj-info{flex:1 1 auto;min-width:0;}
