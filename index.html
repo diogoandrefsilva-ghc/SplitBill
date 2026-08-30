@@ -728,7 +728,6 @@ if ('serviceWorker' in navigator) {
 .sbj-info{flex:1 1 auto;min-width:0;}
 .sbj-adv{display:block;font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:19px;line-height:1.12;color:var(--ink,#1B231F);letter-spacing:normal;text-transform:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sbj-comp{display:block;font-size:11px;line-height:1.35;color:var(--ink-soft,#5B6661);margin-top:1px;letter-spacing:normal;text-transform:none;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.sbj-abrir{display:block;margin-top:2px;font-size:10px;line-height:1.2;color:#8A6D14;font-weight:600;letter-spacing:.04em;text-transform:uppercase;font-family:var(--mono,monospace);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sbj-pres{flex:0 0 auto;display:flex;flex-direction:column;gap:3px;align-items:flex-end;}
 .sbj-pres .sbi-pill{font-size:10px;padding:3px 7px;letter-spacing:0;}
 .sbj-cico{flex:0 0 auto;width:28px;height:28px;display:grid;place-items:center;}
@@ -1205,8 +1204,7 @@ if ('serviceWorker' in navigator) {
 
   function cardFuturo(ev, primeiro){
     var nome = esc(ev.descricao || 'Sem nome');
-    var abre = false, cont = null, f = null;
-    try { abre = (typeof podeAbrirJogo==='function') && podeAbrirJogo(ev); } catch(e){}
+    var cont = null, f = null;
     try { if (typeof contagemPresencas==='function') cont = contagemPresencas(ev); } catch(e){}
     try { if (typeof fichaJogoEvento==='function') f = fichaJogoEvento(ev); } catch(e){}
     if (!f) f = { adversario: ev.descricao || 'Sem nome', competicao:'', jornada:'', hora:'' };
@@ -1227,9 +1225,6 @@ if ('serviceWorker' in navigator) {
     var compSrc = '';
     try { compSrc = (typeof COMP_LOGOS!=='undefined' && COMP_LOGOS) ? (COMP_LOGOS[f.competicao] || '') : ''; } catch(e){}
 
-    // A dica de abrir vai em linha própria, e não colada à competição: é o
-    // único jogo do ecrã que se pode abrir e o texto não pode ser o primeiro a
-    // ser cortado num telemóvel estreito.
     var sub = [f.competicao, f.jornada].filter(Boolean).map(esc).join(' · ');
 
     var pres = '';
@@ -1247,7 +1242,6 @@ if ('serviceWorker' in navigator) {
       + '<span class="sbj-logo">'+(logo?'<img src="'+esc(logo)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':'')+'</span>'
       + '<span class="sbj-info"><span class="sbj-adv">'+esc(f.adversario)+'</span>'
       + (sub ? '<span class="sbj-comp">'+sub+'</span>' : '')
-      + (abre ? '<span class="sbj-abrir">toca para abrir</span>' : '')
       + '</span>'
       + pres
       + '<span class="sbj-cico">'+(compSrc?'<img src="'+esc(compSrc)+'" alt="'+esc(f.competicao)+'" loading="lazy" onerror="this.style.display=\'none\'">':'')+'</span>'
