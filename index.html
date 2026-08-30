@@ -666,7 +666,6 @@ if ('serviceWorker' in navigator) {
 .sbi-hero:hover{background:var(--verde,#0E7A4F);}
 .sbi-open:hover{background:linear-gradient(135deg,#13A56E 0%,#0E7A4F 55%,#0B5238 100%);}
 .sbi-fut:hover{background:linear-gradient(135deg,#FFFCF2 0%,#F6F0DD 100%);}
-.sbi-row:hover{background:var(--card,#fff);}
 .sbi-sq:hover{background:linear-gradient(180deg,#fff 0%,#F6FAF7 100%);}
 .sbi-newquiet:hover{background:transparent;}
 .sbi-voltar:hover{background:#fff;}
@@ -675,7 +674,6 @@ if ('serviceWorker' in navigator) {
 .sbi-chev{flex:0 0 auto;display:grid;place-items:center;}
 .sbi-chev svg{width:18px;height:18px;}
 .sbi-chev.light{color:#fff;opacity:.85;}
-.sbi-chev.green{color:var(--verde,#0E7A4F);opacity:.5;}
 
 /* Hero (Novo Evento) */
 .sbi-hero{background:var(--verde,#0E7A4F);border-radius:16px;padding:18px;gap:14px;box-shadow:0 10px 24px -12px rgba(14,122,79,.8);}
@@ -750,12 +748,6 @@ if ('serviceWorker' in navigator) {
   .sbj-cico{width:24px;height:24px;}
 }
 
-/* Atalho (cartão branco) */
-.sbi-row{background:var(--card,#fff);border:1px solid var(--linha,#DDE3DD);border-radius:13px;padding:12px 14px;gap:13px;box-shadow:0 3px 12px -10px rgba(11,59,43,.4);}
-.sbi-row .sbi-ico.g{color:var(--verde,#0E7A4F);background:var(--verde-claro,#E2EFE8);border-radius:10px;width:40px;height:40px;}
-.sbi-rtext{flex:1 1 auto;min-width:0;}
-.sbi-rname{font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:18px;line-height:1.05;display:block;color:var(--ink,#1B231F);letter-spacing:normal;text-transform:none;}
-.sbi-rdesc{font-size:11.5px;color:var(--ink-soft,#5B6661);margin-top:3px;display:block;letter-spacing:normal;text-transform:none;font-weight:400;}
 
 /* Pedido de pagamento por confirmar (ecrã inicial, só admin) */
 .sbi-pedido{background:var(--card,#fff);border:1px solid #E7D9A8;border-left:3px solid #B8911F;border-radius:13px;padding:12px 14px;margin-bottom:9px;box-shadow:0 3px 12px -10px rgba(11,59,43,.4);}
@@ -892,7 +884,6 @@ if ('serviceWorker' in navigator) {
     def:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="9" cy="8" r="2.6" fill="#fff"/><circle cx="15" cy="16" r="2.6" fill="#fff"/></svg>',
     up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 14 12 8 18 14"/></svg>',
     down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 10 12 16 18 10"/></svg>',
-    bola:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m12 7.2 4.2 3.1-1.6 5h-5.2l-1.6-5z" fill="currentColor" stroke="none" opacity=".55"/><path d="m12 7.2 4.2 3.1-1.6 5h-5.2l-1.6-5z"/><path d="M12 3v4.2M4.1 10.3l3.7 0M19.9 10.3l-3.7 0M7.6 20.1l1.8-4.8M16.4 20.1l-1.8-4.8"/></svg>'
   };
   var CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>';
   var NAVL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>';
@@ -1334,8 +1325,10 @@ if ('serviceWorker' in navigator) {
 
   /* "Próximos Jogos em Alvalade" — vive no FIM do ecrã, a seguir ao consumo:
      é agenda, não é trabalho por fazer, e não deve empurrar para baixo o que
-     precisa de atenção hoje. Aparece SEMPRE (mesmo sem jogos), porque é aqui
-     que o admin tem o botão para ir buscar o calendário. */
+     precisa de atenção hoje. Aparece SEMPRE (mesmo sem jogos), para haver onde
+     dizer que não há nenhum — os jogos entram aqui sozinhos, a partir do
+     calendário da app Goals (ver sincronizarJogosDoGoals no app.js); esta app
+     já não tem botão nenhum para ir buscar o calendário. */
   function proximosAlvalade(futuros, admin){
     var h = '<div class="sbi-eyebrow">Próximos Jogos em Alvalade'
           + (futuros.length ? ' <span class="sbi-count">'+futuros.length+'</span>' : '')
@@ -1353,15 +1346,7 @@ if ('serviceWorker' in navigator) {
       }
     } else {
       h += '<div class="sbi-vazio">Nenhum jogo em Alvalade por acontecer.'
-         + (admin ? ' Vai buscá-los ao calendário aqui em baixo.' : '') + '</div>';
-    }
-    if (admin){
-      h += '<div class="sbi-list" style="margin-top:9px;"><button class="sbi-tap sbi-row" id="cal-sync-btn" onclick="calSincronizar()">'
-         + '<span class="sbi-ico g">'+ICO.bola+'</span>'
-         + '<span class="sbi-rtext"><span class="sbi-rname">Sincronizar com o calendário</span>'
-         + '<span class="sbi-rdesc">Procura os jogos oficiais do Sporting e sugere os que faltam e as datas que mudaram</span></span>'
-         + '<span class="sbi-chev green">'+CHEV+'</span></button></div>';
-      h += '<div id="cal-sync-box" class="calsug" style="display:none;"></div>';
+         + (admin ? ' Aparecem aqui sozinhos assim que estiverem no calendário da app Goals.' : '') + '</div>';
     }
     return h;
   }
@@ -1389,9 +1374,6 @@ if ('serviceWorker' in navigator) {
     h += statsConsumo();
     h += proximosAlvalade(futuros, admin);
     el.innerHTML = h;
-    // O painel de sugestões vive em estado (não no DOM) — repõe-se a seguir a
-    // cada render, senão desaparecia a meio da conferência.
-    try { if (admin && typeof calRender === 'function') calRender(); } catch(e) {}
     // Sincroniza o FAB de novo evento (só visível neste ecrã e para admin).
     var fn = document.getElementById('fab-novo');
     if (fn) fn.style.display = (admin && el.style.display !== 'none') ? 'inline-flex' : 'none';

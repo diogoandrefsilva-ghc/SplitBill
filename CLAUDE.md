@@ -8,7 +8,7 @@ App pessoal de divisão de contas ("dia de jogo").
 - `app.js` — **toda a lógica** (~3700 linhas). É aqui que está quase tudo.
 - `style.css` — **todo o CSS** (~1400 linhas). Cores, tamanhos, espaçamento, layout.
 - `sw.js` — service worker (cache offline).
-- `db/` — migrações SQL para correr à mão no SQL Editor do Supabase. São idempotentes e a app é tolerante à falta delas (degrada, não rebenta).
+- `db/` — migrações SQL para correr à mão no SQL Editor do Supabase. São idempotentes e a app é tolerante à falta delas (degrada, não rebenta). A do calendário (`jogo-id.sql`) tem uma irmã no outro repo: `Goals/db/jogos-leitura-partilhada.sql`.
 - `logos-competicoes/` — os 5 PNG dos símbolos das competições, cópia dos do
   Goals. Estão cá (e não a apontar para o outro site) para o cartão dos
   Próximos Jogos funcionar offline, como o resto da PWA.
@@ -16,7 +16,7 @@ App pessoal de divisão de contas ("dia de jogo").
 
 ## Como NÃO gastar tokens à toa (importante)
 - **Não leias o `app.js` inteiro.** Está dividido em secções com comentários `/* ── título ── */`. Para achar algo, faz `grep` pelo título e lê só esse troço. Secções:
-  Custom confirm modal · **Pagador & Contas (dívidas)** · Page switching · FAB · **Core: cálculo de saldos** (dívidas + pagamentos) · Render · Payment form · Edit Ordem inline · **Importar Fatura** (foto/PDF → Gemini → conferência artigo a artigo) · **Jogo aberto & presenças** (abrir o jogo, vou/não vou) · Configs · **Supabase** (+ Sessão/refresh do token, Permissões, Agregação global, IDs únicos, Equivalências amigo↔conta)
+  Custom confirm modal · **Pagador & Contas (dívidas)** · Page switching · FAB · **Core: cálculo de saldos** (dívidas + pagamentos) · Render · Payment form · Edit Ordem inline · **Importar Fatura** (foto/PDF → Gemini → conferência artigo a artigo) · **Calendário do Sporting** (ler `goals.jogos`, guardar o mínimo cá) · **Jogo aberto & presenças** (abrir o jogo, vou/não vou) · Configs · **Supabase** (+ Sessão/refresh do token, Permissões, Agregação global, IDs únicos, Equivalências amigo↔conta)
 - `fatura-restaurante.ts` — Edge Function (Deno) que lê a fatura com o Gemini. **Não corre no site**: vive no Supabase, faz-se deploy à parte (`supabase functions deploy fatura-restaurante`). É irmã da `fatura-ocr` da FestasBV — mesmo projeto Supabase, schema e prompt diferentes.
 - **Fatura guardada:** o detalhe lido fica em `estado.fatura` e persiste na coluna `eventos.fatura` (jsonb, `db/fatura-detalhe.sql`). A correspondência linha-da-fatura ↔ artigo do menu **não** se guarda — é recalculada a cada render (`faturaConferir()`), de propósito: se o menu do evento mudar, a conferência acompanha. Sem a migração, `FATURA_COL=false` e a fatura fica só no localStorage.
 - **Convocados e menu do evento:** persistem nas colunas `eventos.amigos` / `eventos.menu` (jsonb, `db/convocados-menu.sql`). `ev.amigos` é a lista de **candidatos** (quem foi convocado); quem **consumiu** está em `ordem_amigos`/`oferta_para` — não confundir (`presentesNoEvento()` usa o segundo). Ao carregar da BD faz-se a união das duas (`convocadosDoEvento()`), para os eventos anteriores à migração não ficarem vazios. Sem a migração, `AMIGOS_COL`/`MENU_COL=false` e ficam só no localStorage.
@@ -26,78 +26,68 @@ App pessoal de divisão de contas ("dia de jogo").
 - Mudança **só visual** → `style.css`. Mudança de **lógica/dados** → `app.js`. Para localizar um botão/campo: procura o `id` no `index.html` e salta para o handler no `app.js`.
 - Faz **edições cirúrgicas** (diffs pequenos). **Nunca reescrevas o ficheiro inteiro.**
 
-## Calendário do Sporting (ecrã inicial › Calendário › "Jogos em Alvalade")
-Botão só do admin que vai buscar o calendário oficial da época e **sugere**
-(1) eventos a criar para os jogos em Alvalade que ainda não têm um e (2) datas
-que mudaram. **Nada é gravado sem confirmação linha a linha** — a leitura é por
-IA e um evento com a data errada estraga o dia de jogo todo.
-- Quem procura é a Edge Function **`calendario-sporting`**, **partilhada com a
-  app Goals**: o ficheiro vive no repo do Goals (`Goals/calendario-sporting.ts`,
-  deploy com `supabase functions deploy calendario-sporting`). Devolve SEMPRE a
-  época inteira (todas as competições, casa/fora/neutro) porque o Goals quer
-  tudo; aqui filtra-se com `_calEmAlvalade` (jogos de casa + campo neutro que
-  calhe ser em Alvalade). **Se mexeres no contrato, mexe nos dois lados.**
-- Usa grounding com pesquisa Google — sem isso o modelo inventava datas futuras
-  de memória. Só o admin pode chamar (verificação no servidor, não na UI).
-- Secção `CALENDÁRIO DO SPORTING` no `app.js`. O que interessa lá é
-  `_calPontuarEv`: mesmo dia decide sozinho (o evento do dia de jogo É o jogo,
-  chame-se ele o que se chamar); fora disso a descrição tem de nomear o
-  adversário (`_calSimDesc`, tolerante a "FC Porto"/"Porto") e a data tem de
-  andar a ≤21 dias. Eventos **já fechados** contam para não duplicar mas nunca
-  são tocados — a data deles é história.
+## Calendário: quem manda é o Goals; aqui só se lê (`goals.jogos`)
+Esta app **já não pergunta o calendário à IA**. Quem chama a Edge Function
+`calendario-sporting`, quem confere sugestão a sugestão e quem grava é a app
+**Goals** — o resultado fica em `goals.jogos`, no MESMO projeto Supabase, e é
+de lá que esta app lê. **Não há botão de sincronizar no SplitBill.**
+- **Porquê:** durante algum tempo as duas apps perguntaram o mesmo à mesma
+  função e guardaram a resposta cada uma para seu lado. Bastava sincronizar só
+  uma para as listas ficarem diferentes — a mesma pergunta, duas respostas, e
+  nenhuma obviamente a certa. Um calendário, um dono.
+- **O que fica deste lado:** um **evento** por jogo em Alvalade
+  (`splitbill.eventos`), porque é nele que vivem as coisas que só existem aqui —
+  convocados, menu, tesoureiro, quem vai ao jogo, quem vai ao Sá, ordens e
+  fatura. Da ficha do jogo (hora, competição, jornada, adversário, estádio) não
+  se guarda cópia: lê-se a cada render.
+- Secção **`CALENDÁRIO DO SPORTING`** no `app.js`, em três blocos:
+  helpers de nome/data · **LER `goals.jogos`** · **GUARDAR O MÍNIMO CÁ**.
+
+### Ler (`carregarCalendarioGoals`, `fichaJogoEvento`)
+- `GET /rest/v1/jogos` com `Accept-Profile: goals` (é o header que aponta para o
+  outro schema, nunca o URL), `por_definir=is.false` e `data>=hoje-45d`. **Só
+  SELECT** — escrever em `goals.jogos` é do admin do Goals.
+- **Migração:** `Goals/db/jogos-leitura-partilhada.sql` (o schema `goals` tem a
+  fonte de verdade nesse repo) — policy de SELECT para qualquer conta
+  autenticada. Sem ela só quem está em `goals.allowed_users` veria a ficha.
+  `goals.jogos` não tem colunas de dinheiro e já era legível pelo role `anon`
+  (acesso de convidado do Goals), por isso não abre nada de novo.
+- **TOLERANTE:** sem a migração, sem rede ou com o calendário por sincronizar,
+  `GOALS_JOGOS` fica vazio e `fichaJogoEvento()` tira o adversário e a
+  competição da **descrição do evento** ("Sporting vs Adversário [(Competição)]",
+  `_calDescricao`). Perde-se a hora e o escudo, mais nada.
+- **Escudos dos adversários:** o mesmo `logos.json` do repo público AppDataJSON
+  que o Goals já lê. Não passa pelo Supabase e não é dado de utilizador.
+- As duas leituras arrancam **sem `await`**: não podem atrasar a app, e
+  re-renderizam o ecrã inicial quando chegam.
+
+### Guardar o mínimo (`sincronizarJogosDoGoals`, `db/jogo-id.sql`)
+- **`eventos.jogo_id`** é a ligação evento ↔ jogo. Exacta, e por isso sobrevive
+  a remarcações e a mudanças de nome dos dois lados. O emparelhamento por
+  nome+data (`_calPontuarEv`: mesmo dia decide sozinho; fora disso a descrição
+  tem de nomear o adversário e a data andar a ≤21 dias) **só** serve os eventos
+  SEM ligação — os criados à mão e os anteriores à migração.
+- Corre **sozinha** na carga e no sincronizar, **só para o admin** (é quem tem
+  INSERT/UPDATE em `eventos`). **Sem confirmação linha a linha**, ao contrário
+  da sincronização por IA que substituiu — e de propósito: o que aqui chega já
+  foi confirmado à mão do lado do Goals; repetir era pedir a mesma decisão duas
+  vezes. **Idempotente** (a chave é o `jogo_id`), com um índice único parcial na
+  BD como última rede contra duas sessões a arrancar ao mesmo tempo.
+- **O que NUNCA faz:** criar eventos de jogos que já passaram; tocar num jogo já
+  aberto ou já fechado (a data desses é o que aconteceu); adoptar um evento que
+  não esteja em agenda; **apagar** seja o que for — um jogo que desapareça do
+  Goals deixa cá o evento, que o admin apaga à mão, porque apagá-lo levava com
+  ele as presenças e o consumo.
 - Os eventos criados nascem sem tesoureiro; convocados e menu vêm dos de sempre,
-  calculados **uma vez** antes do ciclo (ver comentário em `calAplicar`).
+  calculados **uma vez** antes do ciclo (ver comentário em
+  `sincronizarJogosDoGoals`).
 - **Nome do evento: `Sporting vs Adversário`** (`_calDescricao`), o mesmo formato
   dos criados à mão desde sempre. Já esteve com traço e o resultado foi a lista
   com dois formatos ao mesmo tempo — se mexeres no separador, mexe nos eventos
   que já lá estão.
-- **Quando falha:** o erro fica no ecrã (`_calErro`), com o passo e a hora, em
-  vez de uma mensagem que se some. O detalhe do lado do servidor (modelo, se
-  houve pesquisa Google, erro do Gemini) vai para `goals.sync_log` — a Edge
-  Function é que o escreve, com a service role, e o campo `app` diz que veio
-  daqui. Esta app não escreve lá directamente (não tem acesso ao schema
-  `goals`); só manda `app:'splitbill'` no pedido.
-
-## O calendário tem um dono só: `goals.jogos` (secção `CALENDÁRIO PARTILHADO`)
-A ficha de um jogo — hora, competição, jornada, adversário, estádio — já existe
-do outro lado: o Goals guarda a época inteira em **`goals.jogos`**, no MESMO
-projeto Supabase que esta app, noutro schema. Os "Próximos Jogos em Alvalade"
-**leem** de lá em tempo de render, em vez de a app guardar uma segunda cópia
-do calendário que diverge no dia em que só uma das duas é sincronizada.
-- O que NÃO mudou: os jogos futuros continuam a ser **eventos do SplitBill**.
-  É o evento que leva convocados, menu, tesoureiro, `aberto` e as presenças, e
-  nada disso tem lugar no Goals. De `goals.jogos` só vem a ficha do jogo, e só
-  para desenhar o cartão — não se grava cá nem se escreve lá (é SELECT e mais
-  nada; escrever em `goals.jogos` é do admin do Goals).
-- **Emparelhamento evento ↔ jogo:** `jogoGoalsDoEvento()`, que reaproveita o
-  `_calPontuarEv` do calendário (mesmo dia decide sozinho; fora disso o nome do
-  adversário tem de aparecer na descrição e a data andar a ≤21 dias), com um
-  desempate a favor de Alvalade — a lista do Goals traz a época inteira,
-  casa/fora/neutro, e os eventos daqui são sempre de casa. **O par não se
-  guarda**: o evento pode mudar de data à mão e o jogo pode ser remarcado no
-  Goals; recalcular a cada carga é o que mantém os dois em dia sem uma terceira
-  lista para sincronizar. Memoizado por `id|data` do evento (`_gjCache`).
-- Os jogos **`por_definir`** ficam de fora do pedido: sem adversário e com a
-  data a marcar só o início de uma janela, um deles a calhar no mesmo dia de um
-  jogo em Alvalade dava um par com 100 pontos e nome vazio.
-- **Migração:** `Goals/db/jogos-leitura-partilhada.sql` (vive no repo do Goals,
-  que é a fonte de verdade do schema `goals`) — uma policy de SELECT a deixar
-  qualquer conta autenticada ler `goals.jogos`. Sem ela só os utilizadores que
-  estão em `goals.allowed_users` é que veriam a ficha. `goals.jogos` não tem
-  colunas de dinheiro e já era legível pelo role `anon` (acesso de convidado do
-  Goals), por isso a policy não abre nada de novo.
-- **TOLERANTE como as colunas opcionais:** sem a migração, sem rede ou com o
-  calendário do Goals por sincronizar, `GOALS_JOGOS` fica vazio (`GOALS_JOGOS_OK
-  = false`) e o cartão desenha-se na mesma — `fichaJogoEvento()` tira o
-  adversário e a competição da **descrição do evento**, que desde sempre é
-  "Sporting vs Adversário [(Competição)]" (`_calDescricao`). Perde-se a hora e o
-  escudo, mais nada.
-- **Escudos dos adversários:** o mesmo `logos.json` do repo público AppDataJSON
-  que o Goals já lê, indexado pelo nome normalizado. Não passa pelo Supabase e
-  não é dado de utilizador. Logo em falta ou offline: o cartão fica sem escudo.
-- As duas leituras (`carregarCalendarioGoals`, `carregarLogosAdversarios`) são
-  disparadas **sem `await`** no arranque: são enfeite do cartão e não podem
-  atrasar a app; cada uma re-renderiza o ecrã inicial quando chega.
+- Só diz alguma coisa ao utilizador quando **fez** alguma coisa
+  (`_jogoSincResumo`): avisar "0 novidades" a cada arranque era só ruído. O
+  detalhe vai sempre para a consola.
 
 ## Jogos futuros no ecrã: o calendário da época não pode encher a lista
 Com o calendário criado de uma vez, "eventos em aberto" passou a incluir meia
@@ -108,7 +98,8 @@ Com o calendário criado de uma vez, "eventos em aberto" passou a incluir meia
   seguir ao Consumo** — é agenda, não é trabalho por fazer, e não deve empurrar
   para baixo o que precisa de atenção hoje. `FUTUROS_A_MOSTRAR` (2) à vista, o
   resto atrás de "mais N jogos". A secção aparece **sempre**, mesmo sem jogos: é
-  lá que o admin tem o botão de sincronizar (e só o admin o vê).
+  lá que há onde dizer que não há nenhum. Os jogos entram aqui **sozinhos**, a
+  partir do calendário do Goals — esta app já não tem botão de sincronizar.
   O **desenho do cartão** (`cardFuturo`, classe `.sbj` por cima do `.sbi-fut`) é
   o da lista de jogos do Goals — data · hora/dia da semana · escudo ·
   adversário/competição · presenças · símbolo da competição —, porque é o mesmo
@@ -194,7 +185,7 @@ sozinho conforme quem faltasse e ninguém percebia porquê.
   desenho nativo das **checkboxes**: elas mudam de estado mas ficam visualmente
   iguais — carrega-se e "não acontece nada". Qualquer checkbox nova precisa de
   `appearance: checkbox` e de desfazer padding/borda/fundo/cantos herdados (ver
-  `.calsug-row input`, `.conv-row input`).
+  `.conv-row input`).
 - **`hidden` não colapsa nada** dentro do ecrã inicial: `.sbi-list{display:flex}`
   é regra de autor e ganha ao `[hidden]` do browser — o bloco "mais N jogos"
   aparecia todo na mesma. Resolve-se com `.sbi-list[hidden]{display:none}` (já lá

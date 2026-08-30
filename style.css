@@ -1766,69 +1766,6 @@ html,body{touch-action:pan-x pan-y}
    histórico saíram com os jogos futuros — o histórico só tem o que já
    aconteceu. Ver eventosDoHistorico() no app.js.) */
 
-/* ── SUGESTÕES DO CALENDÁRIO (calSincronizar) ──────────────────────── */
-.calsug {
-    background: var(--card, #fff);
-    border: 1px solid var(--linha, #DDE3DD);
-    border-radius: 13px;
-    padding: 13px 14px;
-    margin-top: 9px;
-    box-shadow: 0 3px 12px -10px rgba(11,59,43,.4);
-}
-.calsug-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-.calsug-head strong { font-family: var(--display, sans-serif); font-size: 18px; color: var(--ink, #1B231F); }
-.calsug-x { background: none; border: none; color: var(--ink-soft, #5B6661); font-size: 16px; line-height: 1; cursor: pointer; padding: 2px 4px; }
-.calsug-nota { font-size: 11.5px; color: var(--ink-soft, #5B6661); line-height: 1.45; margin: 0 0 11px; }
-.calsug-nota.aviso { color: #8A6D12; background: var(--dourado-claro, #FBF4DC); border: 1px solid #E7D9A8; border-radius: 8px; padding: 7px 9px; }
-.calsug-sec { margin-bottom: 12px; }
-.calsug-sec-hd { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-soft, #5B6661); margin-bottom: 6px; }
-.calsug-link { background: none; border: none; padding: 0; font-size: 11px; color: var(--verde, #0E7A4F); cursor: pointer; text-transform: none; letter-spacing: 0; font-weight: 700; }
-.calsug-row { display: flex; align-items: center; gap: 9px; padding: 8px 9px; background: #FAFCFA; border: 1px solid var(--linha, #DDE3DD); border-radius: 10px; margin-bottom: 5px; cursor: pointer; }
-/* A app tem um `input, select { appearance: none }` global (para os campos de
-   texto). Numa checkbox isso apaga o desenho nativo: ela mudava de estado mas
-   ficava visualmente IGUAL, ticada ou não — carregava-se e não "acontecia
-   nada". Aqui devolve-se-lhe o aspecto nativo e desfaz-se o resto do que a
-   regra global lhe punha (padding, borda, fundo, cantos). */
-.calsug-row input[type="checkbox"] {
-    -webkit-appearance: checkbox;
-    appearance: checkbox;
-    flex: 0 0 auto;
-    width: 20px; height: 20px;
-    padding: 0; margin: 0;
-    border: 0; background: none; border-radius: 0;
-    min-width: 0;
-    accent-color: var(--verde, #0E7A4F);
-}
-.calsug-dt { flex: 0 0 auto; min-width: 58px; font-family: var(--display, sans-serif); font-weight: 700; font-size: 14px; letter-spacing: .04em; color: var(--verde, #0E7A4F); line-height: 1.15; }
-.calsug-dt.trocada { display: flex; flex-direction: column; }
-.calsug-dt s { color: var(--ink-soft, #5B6661); opacity: .8; }
-.calsug-dt b { color: var(--verde, #0E7A4F); font-weight: 700; }
-.calsug-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.calsug-adv { font-size: 13px; font-weight: 600; color: var(--ink, #1B231F); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* A etiqueta partilha a linha da competição. Fora do bloco de informação
-   disputava largura com o nome do jogo e partia-se a meio, com o texto a sair
-   da própria caixa. Aqui, quando não cabe ao lado, desce uma linha em vez de
-   comer o texto da competição. */
-.calsug-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; min-width: 0; }
-.calsug-meta { flex: 0 1 auto; min-width: 0; font-size: 11px; color: var(--ink-soft, #5B6661); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* Cinzento = contexto ("isto já aconteceu"), não aviso. Só a data por marcar
-   leva o âmbar — é a única que pede desconfiança. */
-.calsug-tag { flex: 0 0 auto; white-space: nowrap; font-size: 10px; font-weight: 700; line-height: 1.5; padding: 1px 8px; border-radius: 999px; background: #EEF1ED; color: #6B7671; border: 1px solid #E1E6E1; }
-.calsug-tag.aviso { background: var(--dourado-claro, #FBF4DC); color: #8A6D12; border-color: #E7D9A8; }
-.calsug-fontes { font-size: 10.5px; color: var(--ink-soft, #5B6661); line-height: 1.5; margin: 2px 0 11px; word-break: break-word; }
-.calsug-fontes a { color: var(--verde, #0E7A4F); text-decoration: none; }
-.calsug-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
-.calsug-btn { flex: 1 1 auto; border: 1.4px solid var(--linha, #DDE3DD); background: #fff; color: var(--ink-soft, #5B6661); border-radius: 9px; padding: 10px 12px; font-size: 13px; font-weight: 700; cursor: pointer; }
-.calsug-btn.ok { background: var(--verde, #0E7A4F); border-color: var(--verde, #0E7A4F); color: #fff; }
-.calsug-btn:disabled { opacity: .5; cursor: default; }
-#cal-sync-btn.a-ler { opacity: .6; }
-/* Barra indeterminada do "A procurar o calendário…" (calRender) */
-.calsug-barra { height: 4px; border-radius: 3px; background: var(--linha, #DDE3DD); overflow: hidden; margin-top: 4px; }
-.calsug-barra span { display: block; height: 100%; width: 38%; border-radius: 3px; background: var(--verde, #0E7A4F); animation: calsug-desliza 1.1s ease-in-out infinite; }
-@keyframes calsug-desliza { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
-@media (prefers-reduced-motion: reduce) { .calsug-barra span { animation: none; width: 100%; opacity: .5; } }
-.calsug-nota code { font-family: var(--mono, monospace); font-size: 10.5px; background: #F0F2EF; padding: 1px 4px; border-radius: 4px; }
-
 /* ── Convocados por defeito (painel do admin) ─────────────────────── */
 .conv-row { display: flex; align-items: center; gap: 11px; background: #fff; border: 1px solid var(--linha, #DDE3DD); border-radius: 11px; padding: 11px 13px; margin-bottom: 7px; cursor: pointer; transition: border-color .15s, background .15s; }
 .conv-row.on { border-color: #9CCDB4; background: #F5FBF7; }
@@ -1844,7 +1781,3 @@ html,body{touch-action:pan-x pan-y}
    Aqui neutraliza-se o hover herdado nos botões destes painéis. */
 .sbi-mais, .sbi-mais:hover { background: transparent; color: var(--ink-soft, #5B6661); }
 .sbi-mais:active { background: rgba(11,59,43,.04); }
-.calsug-link, .calsug-link:hover { background: none; color: var(--verde, #0E7A4F); }
-.calsug-x, .calsug-x:hover { background: none; color: var(--ink-soft, #5B6661); }
-.calsug-btn, .calsug-btn:hover { background: #fff; color: var(--ink-soft, #5B6661); }
-.calsug-btn.ok, .calsug-btn.ok:hover { background: var(--verde, #0E7A4F); color: #fff; }

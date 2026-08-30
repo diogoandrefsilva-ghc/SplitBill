@@ -747,7 +747,7 @@ function renderHistoricoDropdown() {
     ensureDividasExist();
     const saldosForCards = calcularSaldos();
     // Ordem por DATA e não por ordem de criação: desde que o calendário da época
-    // passou a poder ser criado de uma vez (calSincronizar), a ordem de criação
+    // passou a poder ser criado de uma vez (do calendário do Goals), a ordem de criação
     // deixou de dizer nada.
     const _card = ev => {
         const isAtual = ev.id === eventoAtualId;
@@ -973,7 +973,7 @@ function criarEvento(opts) {
         jogo: {},
         // Criado à mão para hoje (ou para uma data passada) = está a começar
         // agora: nasce aberto. Marcado para a frente, nasce em agenda, como os
-        // que vêm do calendário (ver _calCriarEvento) — só abre no dia.
+        // que vêm do calendário (ver _jogoCriarEvento) — só abre no dia.
         aberto: (_parsePgtoData(opts.data || '') || _hojeInicio()) <= _hojeInicio()
     };
     historico.push(novoEvt);
@@ -4090,31 +4090,31 @@ function toggleAjuda() {
     arrow.textContent = visible ? '▼' : '▲';
 }
 
-/* ── CALENDÁRIO DO SPORTING (Edge Function `calendario-sporting` + Gemini) ──
-   Botão só do admin, no ecrã inicial, que vai buscar o calendário oficial da
-   época e SUGERE (1) os jogos em Alvalade que ainda não têm evento criado e
-   (2) as datas que mudaram (adiamentos, remarcações da TV). Nada é gravado sem
-   o admin confirmar linha a linha — o calendário vem de uma leitura por IA, que
-   acerta na maioria mas não sempre, e um evento com a data errada estraga as
-   contas de um dia de jogo inteiro.
+/* ── CALENDÁRIO DO SPORTING: quem manda é o GOALS ────────────────────────
+   Esta app já NÃO pergunta o calendário à IA. A app Goals é que o faz — é lá
+   que se chama a Edge Function `calendario-sporting`, é lá que o admin confere
+   sugestão a sugestão, e é lá que o resultado fica, em `goals.jogos`. Aqui
+   só se LÊ.
 
-   A Edge Function é PARTILHADA com a app Goals e o ficheiro dela vive nesse
-   repo (`Goals/calendario-sporting.ts`, deploy com
-   `supabase functions deploy calendario-sporting`). Devolve SEMPRE a época
-   inteira — todas as competições oficiais, casa/fora/campo neutro — porque o
-   Goals quer tudo; aqui filtra-se para os jogos em Alvalade (ver
-   `_calEmAlvalade`), que são os únicos que dão dia de jogo. Se mexeres no
-   contrato da função, mexe nos dois lados.
+   Porquê: durante algum tempo as duas apps perguntaram o mesmo à mesma função
+   e guardaram a resposta cada uma para seu lado. Bastava sincronizar só uma
+   para as duas listas ficarem diferentes — a mesma pergunta, duas respostas,
+   e nenhuma delas obviamente a certa. Um calendário, um dono.
 
-   Eventos JÁ FECHADOS (com fatura) nunca são tocados: contam para não sugerir
-   um duplicado, mas a data deles é história e não se corrige. */
+   O que fica DESTE lado é só o que é desta app: um evento por jogo em Alvalade
+   (`splitbill.eventos`), que é onde vivem os convocados, o menu, o tesoureiro,
+   quem vai ao jogo, quem vai ao Sá, as ordens e a fatura. Da ficha do jogo não
+   se guarda cópia nenhuma — data à parte, que é a chave do dia de jogo em
+   quase tudo o resto da app.
 
-var _calSug = null;      // resposta crua da última leitura
-var _calNovos = [];      // {sug, passado}      — jogos sem evento criado
-var _calDatas = [];      // {ev, sug}           — eventos com data diferente
-var _calSel = { novos: [], datas: [] };
-var _calALer = false;
-var _calErro = null;     // {msg, passo, quando} — fica no ecrã até se fechar
+   Três blocos, por esta ordem:
+   1. helpers de nome/data (herdados da sincronização por IA — o
+      emparelhamento por nome ainda serve os eventos criados à mão);
+   2. LER `goals.jogos` — a ficha que o cartão mostra;
+   3. GUARDAR O MÍNIMO CÁ — o evento por jogo, criado a partir da lista de lá.
+
+   Se mexeres nas colunas que se leem de `goals.jogos`, mexe também no
+   `Goals/db/` — é lá que vive a fonte de verdade desse schema. */
 
 // Nome de clube reduzido ao essencial: sem acentos, sem pontuação e sem as
 // siglas/artigos que cada fonte escreve à sua maneira ("FC Porto"/"Porto").
@@ -4126,6 +4126,7 @@ function _calNorm(s) {
         .replace(/\b(sporting|clube|club|de|do|da|dos|das|futebol|fc|sc|cf|sl|cd|ac|as|rc|ss|us|afc|cp|sad)\b/g, ' ')
         .replace(/\s+/g, ' ').trim();
 }
+
 // Que fatia do nome do adversário aparece nesta descrição de evento? 0..1.
 // A descrição é livre ("Sporting–Benfica", "Jogo com o Benfica", "Almoço Sá"),
 // por isso a pergunta certa é de contenção e não de igualdade.
@@ -4138,35 +4139,34 @@ function _calSimDesc(adv, desc) {
     var hit = ta.filter(function (t) { return td.some(function (u) { return igual(t, u); }); }).length;
     return hit / ta.length;
 }
+
 function _calDias(isoA, isoB) {
     return Math.abs((new Date(isoA + 'T12:00:00') - new Date(isoB + 'T12:00:00')) / 86400000);
 }
-// 'dd/mm/aaaa' (formato guardado nos eventos) → 'aaaa-mm-dd' (formato da função)
+
+// 'dd/mm/aaaa' (formato guardado nos eventos) → 'aaaa-mm-dd' (formato do goals.jogos)
 function _calIso(dataPt) {
     var m = /(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(String(dataPt || ''));
     if (!m) return '';
     return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
 }
+
 function _calPt(iso) {
     var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
     return m ? (m[3] + '/' + m[2] + '/' + m[1]) : String(iso || '');
 }
+
 function _calHoje() {
     var d = new Date(), p = function (n) { return ('0' + n).slice(-2); };
     return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
 }
-// Época no formato que a função espera ("2025/26"), com o mesmo corte a 15/jul
-// que o _epocaLabel já usa no resto da app.
-function _calEpocaAtual() {
-    var hoje = new Date(), ano = hoje.getFullYear();
-    var a = (hoje.getTime() >= new Date(ano, 6, 15).getTime()) ? ano : ano - 1;
-    return a + '/' + ('0' + ((a + 1) % 100)).slice(-2);
-}
+
 // Só interessam os jogos que se jogam em Alvalade: os de casa e, raro mas
 // possível, um jogo em campo "neutro" que calhe ser aqui (uma final, por ex.).
 function _calEmAlvalade(s) {
     return s && (s.local === 'Casa' || /alvalade/i.test(String(s.estadio || '')));
 }
+
 // Descrição do evento a criar. A competição só entra quando não é a Liga, para
 // distinguir o Sporting–Benfica da Taça do da Liga sem encher o nome.
 /* "Sporting vs Adversário" — o mesmo formato dos eventos criados à mão desde
@@ -4176,18 +4176,18 @@ function _calDescricao(s) {
     var base = 'Sporting vs ' + s.adversario;
     return (s.competicao && s.competicao !== 'Liga Portugal') ? base + ' (' + s.competicao + ')' : base;
 }
-function _calDataCurta(iso) {
-    var d = new Date(iso + 'T12:00:00');
-    if (isNaN(d)) return iso;
-    return ('0' + d.getDate()).slice(-2) + ' ' + d.toLocaleString('pt-PT', { month: 'short' }).replace('.', '').toUpperCase();
-}
+
+// Escape de HTML. Nasceu com o painel de sugestões mas serve o resto da app
+// (folha do jogo, painel de convocados) — não morreu com ele.
 function _calEsc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
     });
 }
 
-/* Quão provável é esta sugestão ser ESTE evento já criado? 0 = não é.
+/* Quão provável é este JOGO ser ESTE evento já criado? 0 = não é. Só se usa
+   para os eventos SEM `jogo_id` — os criados à mão, e os anteriores à
+   migração db/jogo-id.sql. Um evento ligado nunca passa por aqui.
    Mesmo dia decide sozinho — dois eventos no mesmo dia não acontecem aqui, e o
    evento do dia de jogo é o jogo. Fora disso é preciso que a descrição nomeie o
    adversário e que a data ande perto (adiamentos são de dias/semanas). */
@@ -4200,296 +4200,8 @@ function _calPontuarEv(sug, ev) {
     if (nome >= 0.6 && dias <= 21) return 50 + nome * 10 - dias / 10;
     return 0;
 }
-// Emparelhamento guloso: todos os pares plausíveis, ordenados pela pontuação;
-// cada sugestão e cada evento só entram num par.
-function _calEmparelhar(sugs, evs) {
-    var pares = [];
-    sugs.forEach(function (s, si) {
-        evs.forEach(function (e, ei) {
-            var p = _calPontuarEv(s, e);
-            if (p > 0) pares.push({ si: si, ei: ei, p: p });
-        });
-    });
-    pares.sort(function (a, b) { return b.p - a.p; });
-    var sUsada = {}, eUsado = {}, map = {};
-    pares.forEach(function (pr) {
-        if (sUsada[pr.si] || eUsado[pr.ei]) return;
-        sUsada[pr.si] = 1; eUsado[pr.ei] = 1; map[pr.si] = evs[pr.ei];
-    });
-    return map;
-}
 
-async function calSincronizar() {
-    if (!isAdmin()) { mostrarMensagem('⚠️ Apenas o administrador pode sincronizar o calendário', false); return; }
-    if (_calALer) return;
-    if (!_sbSession) { mostrarMensagem('⚠️ Inicia sessão primeiro', false); return; }
-    var btn = document.getElementById('cal-sync-btn');
-    _calALer = true;
-    _calErro = null;
-    _calSug = null;
-    if (btn) { btn.disabled = true; btn.classList.add('a-ler'); }
-    calRender();                     // mostra já "A procurar" no corpo da página
-    var passo = 'chamada';
-    try {
-        // Rede de segurança própria: a função tem um limite interno de 55s, mas
-        // se o pedido nem lá chegar a responder o botão ficava a "pensar" para
-        // sempre. 70s dá margem ao limite interno mais o tempo de rede.
-        var ctrl = new AbortController();
-        var timer = setTimeout(function () { ctrl.abort(); }, 70000);
-        var r;
-        try {
-            r = await sbFetch(SB_URL + '/functions/v1/calendario-sporting', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY },
-                // `app` identifica a origem no registo que a função deixa em
-                // goals.sync_log — é o que distingue as chamadas das duas apps.
-                body: JSON.stringify({ epoca: _calEpocaAtual(), app: 'splitbill' }),
-                signal: ctrl.signal
-            });
-        } finally { clearTimeout(timer); }
-        passo = 'resposta (HTTP ' + r.status + ')';
-        if (!r.ok) {
-            var e = await r.json().catch(function () { return {}; });
-            if (r.status === 404 && !e.error) throw new Error('a função `calendario-sporting` ainda não está publicada no Supabase');
-            throw new Error(e.error || ('HTTP ' + r.status));
-        }
-        passo = 'leitura';
-        calPreparar(await r.json());
-    } catch (e) {
-        var m = String(e && e.message || e);
-        var rede = /load failed|failed to fetch|networkerror|timed? ?out/i.test(m) || (e && e.name === 'AbortError');
-        // O erro FICA no ecrã (ao contrário da mensagem, que se some sozinha) —
-        // é o que permite lê-lo com calma ou tirar-lhe uma fotografia. O registo
-        // do lado do servidor vive em goals.sync_log, escrito pela função.
-        _calErro = {
-            msg: rede ? 'A procura demorou demasiado ou falhou a ligação ao servidor. Volta a tentar daqui a pouco.' : m,
-            passo: passo,
-            quando: new Date().toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-        };
-        mostrarMensagem('❌ ' + _calErro.msg.slice(0, 60), false);
-    } finally {
-        _calALer = false;
-        if (btn) { btn.disabled = false; btn.classList.remove('a-ler'); }
-        calRender();
-    }
-}
-
-// Resposta da função → duas listas de sugestões (jogos sem evento, datas mudadas)
-function calPreparar(d) {
-    _calSug = d || {};
-    var sugs = (Array.isArray(d && d.jogos) ? d.jogos : []).filter(_calEmAlvalade);
-    var hoje = _calHoje();
-    var map = _calEmparelhar(sugs, historico);
-    _calNovos = []; _calDatas = []; _calSel = { novos: [], datas: [] };
-    sugs.forEach(function (s, i) {
-        var ev = map[i];
-        if (!ev) {
-            // Jogo sem evento criado. Os que já passaram vêm desmarcados: criar
-            // hoje um evento de um jogo antigo é quase sempre engano.
-            var passado = s.data < hoje;
-            _calNovos.push({ sug: s, passado: passado });
-            _calSel.novos.push(!passado);
-            return;
-        }
-        var iso = _calIso(ev.data);
-        if (iso === s.data) return;                 // já está certo
-        if (ev.totalFatura) return;                 // conta fechada: não se mexe
-        _calDatas.push({ ev: ev, sug: s });
-        _calSel.datas.push(true);
-    });
-    calRender();
-    var box = document.getElementById('cal-sync-box');
-    if (box) box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
-function calToggle(tipo, i, el) { _calSel[tipo][i] = !!el.checked; calAtualizarBotao(); }
-function calTodos(tipo, ligar) {
-    _calSel[tipo] = _calSel[tipo].map(function () { return !!ligar; });
-    calRender();
-}
-function calFechar() {
-    _calSug = null; _calNovos = []; _calDatas = []; _calErro = null; _calSel = { novos: [], datas: [] };
-    calRender();
-}
-function _calNSel() {
-    var n = 0;
-    _calSel.novos.forEach(function (v) { if (v) n++; });
-    _calSel.datas.forEach(function (v) { if (v) n++; });
-    return n;
-}
-function calAtualizarBotao() {
-    var b = document.getElementById('cal-aplicar-btn');
-    if (!b) return;
-    var n = _calNSel();
-    b.disabled = n === 0;
-    b.textContent = n ? ('Aplicar ' + n + ' alteraç' + (n === 1 ? 'ão' : 'ões')) : 'Nada selecionado';
-}
-
-// As etiquetas vivem DENTRO do bloco de informação, na linha da competição:
-// fora dele disputavam largura com o nome do jogo e partiam-se a meio.
-function _calLinhaNova(o, i) {
-    var s = o.sug;
-    var meta = [s.competicao, s.jornada, s.hora].filter(Boolean).join(' · ');
-    return '<label class="calsug-row">'
-        + '<input type="checkbox" ' + (_calSel.novos[i] ? 'checked' : '') + ' onchange="calToggle(\'novos\',' + i + ',this)">'
-        + '<span class="calsug-dt">' + _calEsc(_calDataCurta(s.data)) + '</span>'
-        + '<span class="calsug-info"><span class="calsug-adv">' + _calEsc(_calDescricao(s)) + '</span>'
-        + '<span class="calsug-sub"><span class="calsug-meta">' + _calEsc(meta) + '</span>'
-        + (o.passado ? '<span class="calsug-tag">já passou</span>' : '')
-        + (s.confirmado === false ? '<span class="calsug-tag aviso">provisória</span>' : '')
-        + '</span></span>'
-        + '</label>';
-}
-function _calLinhaData(o, i) {
-    var meta = [o.sug.competicao, o.sug.jornada, o.sug.hora].filter(Boolean).join(' · ');
-    return '<label class="calsug-row">'
-        + '<input type="checkbox" ' + (_calSel.datas[i] ? 'checked' : '') + ' onchange="calToggle(\'datas\',' + i + ',this)">'
-        + '<span class="calsug-dt trocada"><s>' + _calEsc(_calDataCurta(_calIso(o.ev.data))) + '</s>'
-        + '<b>' + _calEsc(_calDataCurta(o.sug.data)) + '</b></span>'
-        + '<span class="calsug-info"><span class="calsug-adv">' + _calEsc(o.ev.descricao || 'Sem nome') + '</span>'
-        + '<span class="calsug-sub"><span class="calsug-meta">' + _calEsc(meta) + '</span>'
-        + (o.sug.confirmado === false ? '<span class="calsug-tag aviso">provisória</span>' : '')
-        + '</span></span>'
-        + '</label>';
-}
-function _calFontesHTML() {
-    var f = (_calSug && _calSug.fontes) || [];
-    var semPesquisa = (_calSug && _calSug.pesquisa === false)
-        ? '<p class="calsug-nota aviso">⚠️ Sem pesquisa web nesta leitura — as datas futuras podem estar desatualizadas.</p>' : '';
-    if (!f.length) return semPesquisa;
-    return semPesquisa + '<div class="calsug-fontes">Fontes: ' + f.map(function (x) {
-        return '<a href="' + _calEsc(x.url) + '" target="_blank" rel="noopener">' + _calEsc(x.titulo) + '</a>';
-    }).join(' · ') + '</div>';
-}
-
-function calRender() {
-    var box = document.getElementById('cal-sync-box');
-    if (!box) return;
-    // "A procurar" vai para o CORPO da página e não só para o botão: no
-    // telemóvel o botão fica muitas vezes fora da vista logo a seguir ao toque,
-    // e sem isto parecia que carregar não fazia nada.
-    if (_calALer) {
-        box.style.display = 'block';
-        box.innerHTML = '<div class="calsug-head"><strong>A procurar o calendário…</strong></div>'
-            + '<p class="calsug-nota">A confirmar as datas oficiais do Sporting para ' + _calEsc(_calEpocaAtual())
-            + '. Pode demorar até um minuto.</p><div class="calsug-barra"><span></span></div>';
-        return;
-    }
-    if (_calErro) {
-        box.style.display = 'block';
-        box.innerHTML = '<div class="calsug-head"><strong>Não consegui procurar</strong>'
-            + '<button class="calsug-x" onclick="calFechar()" title="Fechar">✕</button></div>'
-            + '<p class="calsug-nota aviso">' + _calEsc(_calErro.msg) + '</p>'
-            + '<p class="calsug-nota" style="margin-bottom:0">' + _calEsc(_calErro.quando)
-            + ' · falhou em: ' + _calEsc(_calErro.passo) + ' · o detalhe do servidor fica em <code>goals.sync_log</code></p>';
-        return;
-    }
-    if (!_calSug) { box.style.display = 'none'; box.innerHTML = ''; return; }
-    box.style.display = 'block';
-    var emAlvalade = (Array.isArray(_calSug.jogos) ? _calSug.jogos : []).filter(_calEmAlvalade).length;
-    if (!_calNovos.length && !_calDatas.length) {
-        box.innerHTML = '<div class="calsug-head"><strong>Calendário conferido</strong>'
-            + '<button class="calsug-x" onclick="calFechar()" title="Fechar">✕</button></div>'
-            + '<p class="calsug-nota">Os ' + emAlvalade + ' jogos em Alvalade de ' + _calEsc(_calSug.epoca || '')
-            + ' já têm todos evento criado, com as datas certas.</p>' + _calFontesHTML();
-        return;
-    }
-    var partes = ['<div class="calsug-head"><strong>Sugestões do calendário</strong>'
-        + '<button class="calsug-x" onclick="calFechar()" title="Fechar">✕</button></div>'
-        + '<p class="calsug-nota">' + emAlvalade + ' jogos em Alvalade em ' + _calEsc(_calSug.epoca || '')
-        + '. Lido por IA a partir de fontes públicas — <strong>confere antes de aplicar</strong>. Nada é gravado até carregares em Aplicar.</p>'];
-    if (_calNovos.length) {
-        partes.push('<div class="calsug-sec"><div class="calsug-sec-hd"><span>Eventos a criar (' + _calNovos.length + ')</span>'
-            + '<span><button class="calsug-link" onclick="calTodos(\'novos\',true)">todos</button> · '
-            + '<button class="calsug-link" onclick="calTodos(\'novos\',false)">nenhum</button></span></div>'
-            + _calNovos.map(_calLinhaNova).join('') + '</div>');
-    }
-    if (_calDatas.length) {
-        partes.push('<div class="calsug-sec"><div class="calsug-sec-hd"><span>Datas diferentes (' + _calDatas.length + ')</span>'
-            + '<span><button class="calsug-link" onclick="calTodos(\'datas\',true)">todas</button> · '
-            + '<button class="calsug-link" onclick="calTodos(\'datas\',false)">nenhuma</button></span></div>'
-            + _calDatas.map(_calLinhaData).join('') + '</div>');
-    }
-    partes.push(_calFontesHTML());
-    partes.push('<div class="calsug-acoes"><button class="calsug-btn ok" id="cal-aplicar-btn" onclick="calAplicar()"></button>'
-        + '<button class="calsug-btn" onclick="calFechar()">Descartar</button></div>');
-    box.innerHTML = partes.join('');
-    calAtualizarBotao();
-}
-
-/* Cria o evento do jogo SEM o abrir: ao contrário de criarEvento(), que carrega
-   o evento novo no ecrã de trabalho, aqui podem nascer 20 de uma vez e o admin
-   continua onde estava. Convocados e menu partem do costume (os de sempre),
-   tesoureiro fica por escolher — é decidido no dia. */
-async function _calCriarEvento(sug, id, amigos, menu) {
-    var ev = {
-        id: id,
-        descricao: _calDescricao(sug),
-        data: _calPt(sug.data),
-        dataManual: true,          // data do calendário: não recalcular pelas ordens
-        ordens: [],
-        ofertas: [],
-        totalFatura: null,
-        fatura: null,
-        pagador: '',
-        dividas: {},
-        amigos: (amigos || []).slice(),
-        menu: Object.assign({}, menu || {}),
-        jogo: {},
-        // Agenda: só passa a "em aberto" quando alguém abrir o jogo (abrirJogo).
-        aberto: false
-    };
-    historico.push(ev);
-    try {
-        await sbGuardarEvento(ev, { criar: true });
-    } catch (e) {
-        // Não gravou no servidor → também não fica em memória, senão voltava a
-        // aparecer como "por criar" na carga seguinte e duplicava-se.
-        historico = historico.filter(function (h) { return h !== ev; });
-        throw e;
-    }
-    return ev;
-}
-
-async function calAplicar() {
-    if (!isAdmin()) { mostrarMensagem('⚠️ Apenas o administrador pode sincronizar o calendário', false); return; }
-    var novos = _calNovos.filter(function (o, i) { return _calSel.novos[i]; });
-    var datas = _calDatas.filter(function (o, i) { return _calSel.datas[i]; });
-    if (!novos.length && !datas.length) return;
-    var btn = document.getElementById('cal-aplicar-btn');
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ A gravar…'; }
-    var criados = 0, corrigidos = 0, erros = 0;
-    // Ids por Date.now() como no resto da app, mas com um passo por evento —
-    // criados em série, dois seguidos apanhariam o mesmo milissegundo.
-    var base = Date.now();
-    // Convocados e menu calculados UMA vez, antes do ciclo: amigosPorDefeito()
-    // olha para os últimos 10 eventos do histórico e, a criar 20 jogos de
-    // seguida, a partir do 11.º só via os que estas linhas acabaram de criar
-    // (vazios) — todos os eventos seguintes nasciam sem ninguém convocado.
-    var amigosBase = amigosPorDefeito();
-    var menuBase = menuAgregadoGlobal();
-    for (var i = 0; i < novos.length; i++) {
-        try { await _calCriarEvento(novos[i].sug, base + i, amigosBase, menuBase); criados++; }
-        catch (e) { erros++; }
-    }
-    for (var k = 0; k < datas.length; k++) {
-        var o = datas[k], antes = o.ev.data;
-        o.ev.data = _calPt(o.sug.data);
-        try { await sbGuardarEvento(o.ev); corrigidos++; }
-        catch (e) { o.ev.data = antes; erros++; }
-    }
-    salvarHistoricoLocal();
-    calFechar();
-    renderHistoricoDropdown();
-    try { if (typeof renderInicio === 'function') renderInicio(); } catch (e) {}
-    try { renderContas(); } catch (e) {}
-    var p = [];
-    if (criados) p.push(criados + ' evento' + (criados === 1 ? '' : 's') + ' criado' + (criados === 1 ? '' : 's'));
-    if (corrigidos) p.push(corrigidos + ' data' + (corrigidos === 1 ? '' : 's') + ' corrigida' + (corrigidos === 1 ? '' : 's'));
-    mostrarMensagem(p.length ? ('✓ ' + p.join(' · ') + (erros ? ' (' + erros + ' com erro)' : '')) : '❌ Nada gravado', p.length > 0);
-}
-
-/* ── CALENDÁRIO PARTILHADO (lê `goals.jogos`, a lista do Goals) ──────────
+/* ── LER `goals.jogos` ───────────────────────────────────────────────────
    A ficha de um jogo — hora, competição, jornada, adversário, estádio — já
    existe do outro lado: a app Goals guarda a época inteira em `goals.jogos`,
    no MESMO projeto Supabase que esta, noutro schema. Aqui NÃO se copia nada
@@ -4547,24 +4259,49 @@ async function carregarCalendarioGoals() {
     }
     _gjCache = {};
     try { if (typeof renderInicio === 'function') renderInicio(); } catch (e) {}
+    // Com a lista em mãos, pôr os eventos a par dela (só admin — ver
+    // sincronizarJogosDoGoals). Falhar aqui não pode estragar a leitura: o
+    // cartão desenha-se na mesma com o que já foi lido.
+    try {
+        var r = await sincronizarJogosDoGoals();
+        var msg = _jogoSincResumo(r);
+        if (msg) {
+            try { renderHistoricoDropdown(); } catch (e) {}
+            try { if (typeof renderInicio === 'function') renderInicio(); } catch (e) {}
+            mostrarMensagem(msg, true);
+        }
+    } catch (e) { console.warn('[SplitBill] falha a sincronizar os jogos do calendário', e); }
 }
 
-// O jogo do Goals que corresponde a este evento (ou null). Memoizado por
-// evento+data para não voltar a pontuar a lista inteira a cada render.
+/* O jogo do Goals que corresponde a este evento (ou null).
+   Primeiro pelo `jogo_id`, que é exacto e sobrevive a remarcações e a mudanças
+   de nome dos dois lados. A pontuação por nome+data é só a rede para os
+   eventos SEM ligação — os criados à mão e os anteriores à migração
+   db/jogo-id.sql. Memoizado por evento+data para não voltar a pontuar a lista
+   inteira a cada render. */
 function jogoGoalsDoEvento(ev) {
     if (!ev || !GOALS_JOGOS.length) return null;
     var k = String(ev.id) + '|' + String(ev.data || '');
     if (Object.prototype.hasOwnProperty.call(_gjCache, k)) return _gjCache[k];
-    var melhor = null, pontos = 0;
-    for (var i = 0; i < GOALS_JOGOS.length; i++) {
-        var p = _calPontuarEv(GOALS_JOGOS[i], ev);
-        // Desempate a favor de Alvalade: os eventos daqui são sempre de casa,
-        // e a lista do Goals traz a época inteira (casa, fora e neutro).
-        if (p > 0 && !_calEmAlvalade(GOALS_JOGOS[i])) p -= 0.5;
-        if (p > pontos) { pontos = p; melhor = GOALS_JOGOS[i]; }
+    var achado = null;
+    if (ev.jogoId != null) {
+        for (var n = 0; n < GOALS_JOGOS.length; n++) {
+            if (GOALS_JOGOS[n].id === ev.jogoId) { achado = GOALS_JOGOS[n]; break; }
+        }
     }
-    _gjCache[k] = melhor;
-    return melhor;
+    if (!achado) {
+        var melhor = null, pontos = 0;
+        for (var i = 0; i < GOALS_JOGOS.length; i++) {
+            var p = _calPontuarEv(GOALS_JOGOS[i], ev);
+            // Desempate a favor de Alvalade: os eventos daqui são sempre de casa,
+            // e a lista do Goals traz a época inteira (casa, fora e neutro).
+            if (p > 0 && !_calEmAlvalade(GOALS_JOGOS[i])) p -= 0.5;
+            if (p > pontos) { pontos = p; melhor = GOALS_JOGOS[i]; }
+        }
+        achado = melhor;
+    }
+    _gjCache[k] = achado;
+    return achado;
 }
 
 /* Escudos dos adversários: o mesmo `logos.json` que o Goals já lê (repo
@@ -4617,8 +4354,167 @@ function fichaJogoEvento(ev) {
     };
 }
 
+/* ── GUARDAR O MÍNIMO CÁ: um evento por jogo em Alvalade ─────────────────
+   O evento é a ÚNICA coisa que esta app precisa de guardar sobre um jogo, e
+   guarda-a porque é dela: quem vai ao jogo, quem vai ao Sá, os convocados, o
+   menu, o tesoureiro, as ordens e a fatura. Da ficha do jogo — data, hora,
+   adversário, competição — não se guarda cópia: lê-se de `goals.jogos` a cada
+   render (ver acima). É a coluna `eventos.jogo_id` (migração db/jogo-id.sql)
+   que liga as duas pontas.
+
+   NÃO HÁ CONFIRMAÇÃO LINHA A LINHA, ao contrário da sincronização por IA que
+   isto substituiu — e de propósito: o que aqui chega já foi confirmado à mão
+   pelo admin do lado do Goals, que é onde a leitura por IA acontece. Repetir a
+   conferência era pedir a mesma decisão duas vezes.
+
+   O que isto NUNCA faz:
+   · criar eventos de jogos que já passaram (a data é história, e um evento
+     novo com data velha só confunde o histórico);
+   · tocar num jogo já ABERTO ou já FECHADO — a data desses é o que aconteceu;
+   · apagar seja o que for. Um jogo que desapareça do Goals (ou deixe de ser em
+     Alvalade) deixa cá o evento, que o admin apaga à mão se quiser: apagá-lo
+     automaticamente levava com ele as presenças e o consumo. */
+
+/* A coluna `eventos.jogo_id` existe? Mesmo padrão das outras colunas
+   opcionais: sem a migração, JOGO_ID_COL fica false, a sincronização
+   desliga-se e a app comporta-se como antes (os eventos que já existem
+   continuam a mostrar a ficha, emparelhados por nome+data). */
+let JOGO_ID_COL = true;
+
+/* Cria o evento do jogo SEM o abrir: ao contrário de criarEvento(), que carrega
+   o evento novo no ecrã de trabalho, aqui podem nascer 20 de uma vez e o admin
+   continua onde estava. Convocados e menu partem do costume (os de sempre),
+   tesoureiro fica por escolher — é decidido no dia. */
+async function _jogoCriarEvento(j, id, amigos, menu) {
+    var ev = {
+        id: id,
+        jogoId: j.id,
+        descricao: _calDescricao(j),
+        data: _calPt(j.data),
+        dataManual: true,          // data do calendário: não recalcular pelas ordens
+        ordens: [],
+        ofertas: [],
+        totalFatura: null,
+        fatura: null,
+        pagador: '',
+        dividas: {},
+        amigos: (amigos || []).slice(),
+        menu: Object.assign({}, menu || {}),
+        jogo: {},
+        // Agenda: só passa a "em aberto" quando alguém abrir o jogo (abrirJogo).
+        aberto: false
+    };
+    historico.push(ev);
+    try {
+        await sbGuardarEvento(ev, { criar: true });
+    } catch (e) {
+        // Não gravou no servidor → também não fica em memória, senão voltava a
+        // aparecer como "por criar" na carga seguinte e duplicava-se.
+        historico = historico.filter(function (h) { return h !== ev; });
+        throw e;
+    }
+    return ev;
+}
+
+/* Põe os eventos a par do calendário do Goals. Corre sozinha na carga (e no
+   sincronizar), só para o admin — é quem tem INSERT/UPDATE em `eventos`, e
+   pedir isto a um convocado só dava erros de RLS.
+
+   É IDEMPOTENTE: a ligação é o `jogo_id`, não o nome nem a data, por isso
+   correr duas vezes não cria nada de novo. O índice único parcial da migração
+   é a última rede — duas sessões a arrancar ao mesmo tempo não conseguem
+   duplicar o mesmo jogo. */
+async function sincronizarJogosDoGoals() {
+    if (!isAdmin() || !JOGO_ID_COL || !GOALS_JOGOS.length) return null;
+    var hoje = _calHoje();
+    var jogos = GOALS_JOGOS.filter(function (j) {
+        return _calEmAlvalade(j) && String(j.data || '') >= hoje;
+    });
+    if (!jogos.length) return null;
+
+    // Índice dos eventos já ligados. Os que não têm `jogo_id` (criados à mão,
+    // ou anteriores à migração) entram pela pontuação, e ligam-se em vez de
+    // dar origem a um segundo evento para o mesmo jogo.
+    var porJogo = {};
+    historico.forEach(function (e) { if (e.jogoId != null) porJogo[e.jogoId] = e; });
+    // Só se adopta um evento que ainda esteja em AGENDA. Um jogo já aberto ou
+    // já fechado é história: ligá-lo a um jogo FUTURO com o mesmo adversário
+    // (uma segunda volta a menos de 21 dias, por exemplo) dava-lhe a ficha
+    // errada e deixava o jogo verdadeiro por criar.
+    var soltos = historico.filter(function (e) {
+        return e.jogoId == null && !jogoAberto(e) && !e.totalFatura;
+    });
+
+    var criados = 0, ligados = 0, datas = 0, erros = 0;
+    // Uma vez, antes do ciclo: amigosPorDefeito() olha para os últimos eventos
+    // com consumo e, a criar 20 de seguida, a partir do 11.º só veria os que
+    // estas linhas acabaram de criar (vazios) — nasciam todos sem ninguém.
+    var amigosBase = amigosPorDefeito();
+    var menuBase = menuAgregadoGlobal();
+
+    for (var i = 0; i < jogos.length; i++) {
+        var j = jogos[i];
+        var ev = porJogo[j.id];
+
+        // Sem evento ligado: adoptar um solto que seja claramente este jogo,
+        // antes de criar. Sem isto, um evento criado à mão para o dia de jogo
+        // ficava a viver ao lado de um evento novo — o dia de jogo a dobrar.
+        if (!ev) {
+            var melhor = null, pontos = 0;
+            soltos.forEach(function (e) {
+                var p = _calPontuarEv(j, e);
+                if (p > pontos) { pontos = p; melhor = e; }
+            });
+            if (melhor) {
+                melhor.jogoId = j.id;
+                porJogo[j.id] = melhor;
+                soltos = soltos.filter(function (e) { return e !== melhor; });
+                ev = melhor;
+                try { await sbGuardarEvento(ev); ligados++; }
+                catch (e2) { melhor.jogoId = null; erros++; continue; }
+            }
+        }
+
+        if (!ev) {
+            // nextId() por evento (e não base+i): é ele que garante ids
+            // estritamente crescentes, e somar ao mesmo base colidia com o id
+            // seguinte que a app pedisse no mesmo milissegundo.
+            try { await _jogoCriarEvento(j, nextId(), amigosBase, menuBase); criados++; }
+            catch (e3) { erros++; }
+            continue;
+        }
+
+        // Data remarcada do lado do Goals. Só em jogos ainda em AGENDA: a data
+        // de um jogo aberto ou já fechado é o que aconteceu, não se corrige.
+        if (_calIso(ev.data) !== j.data && !jogoAberto(ev) && !ev.totalFatura) {
+            var antes = ev.data;
+            ev.data = _calPt(j.data);
+            try { await sbGuardarEvento(ev); datas++; }
+            catch (e4) { ev.data = antes; erros++; }
+        }
+    }
+
+    if (criados || ligados || datas || erros) {
+        salvarHistoricoLocal();
+        _gjCache = {};
+        console.info('[SplitBill] calendário do Goals:', { criados: criados, ligados: ligados, datas: datas, erros: erros });
+    }
+    return { criados: criados, ligados: ligados, datas: datas, erros: erros };
+}
+
+// Frase para o toast, ou '' quando não houve nada a fazer (o caso normal —
+// avisar "0 novidades" a cada arranque seria só ruído).
+function _jogoSincResumo(r) {
+    if (!r) return '';
+    var p = [];
+    if (r.criados) p.push(r.criados + (r.criados === 1 ? ' jogo novo' : ' jogos novos'));
+    if (r.datas) p.push(r.datas + (r.datas === 1 ? ' data corrigida' : ' datas corrigidas'));
+    if (!p.length) return '';
+    return '✓ Calendário: ' + p.join(' · ') + (r.erros ? ' (' + r.erros + ' com erro)' : '');
+}
+
 /* ── JOGO ABERTO & PRESENÇAS (Próximos Jogos em Alvalade) ────────────────
-   Com a época inteira criada de uma vez (calSincronizar), "evento por fechar"
+   Com a época inteira criada de uma vez (do calendário do Goals), "evento por fechar"
    deixou de querer dizer "dia de jogo": bastava a data chegar para o jogo
    aparecer no ecrã inicial como conta por fechar, tivesse lá ido alguém ou não.
    Agora o jogo nasce em AGENDA e só passa a "em aberto" quando o admin — ou o
@@ -5350,7 +5246,7 @@ async function guardarConvocadosDefault(lista) {
 
 /* Evento a abrir quando não há um escolhido (arranque, importação, o evento
    aberto foi apagado). Era "o último do histórico" — o último a ser CRIADO —
-   e com o calendário da época criado de uma vez (calSincronizar) isso passou a
+   e com o calendário da época criado de uma vez (do Goals) isso passou a
    ser o último jogo da época, daqui a meses. Agora é o mais próximo de hoje,
    com preferência pelo passado/hoje: é aí que há conta por fechar. */
 function eventoPorDefeito() {
@@ -5378,7 +5274,7 @@ function amigosPorDefeito() {
     if (CONVOCADOS_DEFAULT && CONVOCADOS_DEFAULT.length) return CONVOCADOS_DEFAULT.slice();
     // Últimos 10 eventos COM consumo, e não as últimas 10 linhas do histórico:
     // desde que o calendário da época pode ser criado de uma vez
-    // (calSincronizar), as últimas linhas passaram a ser jogos futuros ainda sem
+    // (do calendário do Goals), as últimas linhas passaram a ser jogos futuros ainda sem
     // uma única ordem — a contagem dava zero e os eventos novos nasciam sem
     // ninguém convocado.
     const ultimos = historico.filter(ev => (ev.ordens || []).length || (ev.ofertas || []).length).slice(-10);
@@ -5491,10 +5387,10 @@ async function sbAposLogin() {
 
     await sbCarregarConfigAcesso();
     await sbCarregarDados();
-    // Ficha dos jogos (hora/competição/escudos) para os Próximos Jogos em
-    // Alvalade — vem do calendário do Goals e do logos.json. Sem `await`: é
-    // enfeite do cartão, não pode atrasar o arranque, e cada uma re-renderiza
-    // o ecrã inicial quando chega (ver CALENDÁRIO PARTILHADO).
+    // Calendário do Goals (a ficha dos jogos) e os escudos. Sem `await`: não
+    // podem atrasar o arranque, e cada um re-renderiza o ecrã inicial quando
+    // chega. A sincronização dos eventos vai atrás da leitura, dentro do
+    // carregarCalendarioGoals() — ver CALENDÁRIO DO SPORTING.
     carregarCalendarioGoals();
     carregarLogosAdversarios();
     init();
@@ -5583,7 +5479,9 @@ async function sbCarregarDados() {
             MENU_COL = tem('menu');
             ABERTO_COL = tem('aberto');
             VAI_JOGO_COL = tem('vai_jogo');
+            JOGO_ID_COL = tem('jogo_id');
         }
+        if (!JOGO_ID_COL) console.warn('[SplitBill] coluna eventos.jogo_id ausente — corre db/jogo-id.sql para os jogos virem sozinhos do calendário do Goals');
         if (!ABERTO_COL) console.warn('[SplitBill] coluna eventos.aberto ausente — corre db/jogo-aberto.sql para o jogo só abrir quando alguém o abrir');
         if (!VAI_JOGO_COL) console.warn('[SplitBill] coluna eventos.vai_jogo ausente — corre db/vai-jogo.sql para separar "vais ao jogo?" do Sá');
         if (!FATURA_COL) console.warn('[SplitBill] coluna eventos.fatura ausente — corre db/fatura-detalhe.sql para guardar o detalhe da fatura no servidor');
@@ -5678,7 +5576,11 @@ async function sbCarregarDados() {
                 substituto: ev.substituto_email || null,
                 // undefined (coluna ausente) ≠ false: é o que faz jogoAberto()
                 // cair no critério antigo, a data.
-                aberto: ABERTO_COL ? (ev.aberto === null ? undefined : !!ev.aberto) : undefined
+                aberto: ABERTO_COL ? (ev.aberto === null ? undefined : !!ev.aberto) : undefined,
+                // Ligação ao jogo em `goals.jogos` (db/jogo-id.sql). null = evento
+                // criado à mão, ou anterior à migração: a ficha resolve-se por
+                // nome+data (ver jogoGoalsDoEvento).
+                jogoId: JOGO_ID_COL ? (ev.jogo_id ?? null) : null
             };
         });
 
@@ -5910,6 +5812,9 @@ async function sbGuardarEvento(ev, opts) {
         // `aberto` só vai se souber o valor: um evento anterior à migração tem
         // isto a undefined e escrever false punha-o de volta em agenda.
         if (ABERTO_COL && ev.aberto != null) campos.aberto = !!ev.aberto;
+        // A ligação ao jogo do Goals só se escreve quando se sabe qual é: um
+        // PATCH com null apagava-a nos eventos que o retroactivo já ligou.
+        if (JOGO_ID_COL && ev.jogoId != null) campos.jogo_id = ev.jogoId;
         // sbOk: se a linha-pai não gravar, as ordens seguintes rebentam na chave
         // estrangeira. Sem esta verificação a causa real ficava escondida e só
         // se via o erro derivado (ou nada).
