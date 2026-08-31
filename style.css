@@ -624,8 +624,9 @@ html,body{touch-action:pan-x pan-y}
         .modal-actions button + button { border-left: 1px solid #E6EAE4; }
 
         /* Folha de um jogo por abrir (ecrã inicial › Próximos Jogos em Alvalade):
-           data, vou/não vou, convocados e — só para quem o pode abrir — a nota
-           do que abrir o jogo faz. Os botões neutralizam a regra global
+           data, vou/não vou, a hora a partir da qual se pode estar no Sá,
+           convocados e — só para quem o pode abrir — a nota do que abrir o
+           jogo faz. Os botões neutralizam a regra global
            button:hover (verde escuro), que de outra forma ganhava sempre e no
            telemóvel ficava colada depois do toque. */
         .jf-data { font-family: var(--mono, monospace); font-size: 12px; letter-spacing: .04em; color: #5B6661; }
@@ -651,6 +652,21 @@ html,body{touch-action:pan-x pan-y}
         .jf-aviso { margin-top: 12px; font-size: 12px; color: #B3402F; line-height: 1.45; }
         .jf-hint { margin-top: 10px; font-size: 11.5px; color: #7C8782; line-height: 1.45; text-align: left; }
         .jf-hint strong { color: #5B6661; }
+        /* Hora do Sá: o campo (mesmo desenho da linha da data, reaproveita o
+           .jf-data-btn) e, mais abaixo, quem vai com a hora de cada um. */
+        .jf-hora-edit { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+        .jf-hora-edit input[type="time"] { flex: 1; font-family: var(--mono, monospace); font-size: 12.5px; }
+        .jf-horas { margin-top: 6px; border: 1px solid #E6EAE4; border-radius: 10px; overflow: hidden; }
+        .jf-hora-linha {
+            display: flex; justify-content: space-between; align-items: center; gap: 10px;
+            padding: 7px 11px; font-size: 12.5px; color: #0B3B2B; text-align: left;
+        }
+        .jf-hora-linha + .jf-hora-linha { border-top: 1px solid #EFF2EE; }
+        .jf-h-ok { font-family: var(--mono, monospace); font-weight: 700; color: #0E5C3F; }
+        .jf-h-falta { font-size: 11.5px; color: #A9B2AC; }
+        .jf-mesa { margin-top: 8px; padding: 9px 11px; border-radius: 10px; background: #E2EFE8; color: #0E5C3F; font-size: 12.5px; line-height: 1.45; text-align: left; }
+        .jf-mesa strong { font-family: var(--mono, monospace); font-size: 14px; }
+        .jf-mesa span { color: #5B6661; font-size: 11.5px; }
         @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes modalSlideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 

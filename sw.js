@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v82';
+const CACHE_VERSION = 'v83';
 const CACHE_NAME = `splitbill-${CACHE_VERSION}`;
 
 // Assets to cache on install
@@ -101,8 +101,9 @@ self.addEventListener('fetch', (e) => {
   );
 });
 
-// Notificações push (novo valor a pagamento) — a Edge Function push-notificar
-// manda um payload {title, body, url}; aqui só se mostra a notificação.
+// Notificações push (dívidas, pagamentos, gamebox livre, hora do Sá) — a Edge
+// Function push-notificar manda um payload {title, body, url}; aqui só se
+// mostra a notificação, seja qual for o momento que a originou.
 self.addEventListener('push', (e) => {
   let data = { title: 'SplitBill', body: 'Tens uma novidade na app.', url: '/SplitBill/' };
   try { Object.assign(data, e.data.json()); } catch (err) { /* payload vazio ou não-JSON */ }

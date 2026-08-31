@@ -971,6 +971,7 @@ function criarEvento(opts) {
         amigos: novosAmigos,
         menu: novoMenu,
         jogo: {},
+        saHora: {},
         // Criado à mão para hoje (ou para uma data passada) = está a começar
         // agora: nasce aberto. Marcado para a frente, nasce em agenda, como os
         // que vêm do calendário (ver _jogoCriarEvento) — só abre no dia.
@@ -4401,6 +4402,7 @@ async function _jogoCriarEvento(j, id, amigos, menu) {
         amigos: (amigos || []).slice(),
         menu: Object.assign({}, menu || {}),
         jogo: {},
+        saHora: {},
         // Agenda: só passa a "em aberto" quando alguém abrir o jogo (abrirJogo).
         aberto: false
     };
@@ -4524,15 +4526,25 @@ function _jogoSincResumo(r) {
    Sem a migração, ABERTO_COL fica false, o botão de abrir esconde-se e tudo se
    comporta como antes: manda a data (jogoAberto cai no ramo do legado).
 
-   No mesmo cartão há DUAS perguntas. "Vais ao Sá?" mexe na lista de
+   No mesmo cartão há TRÊS perguntas. "Vais ao Sá?" mexe na lista de
    convocados do evento (`ev.amigos`) — é o que sempre existiu, e é o que
-   conta para o consumo (quem aparece na grelha de amigos). "Vais ao jogo?" é
-   independente (`ev.jogo`, migração db/vai-jogo.sql): por defeito segue o Sá
+   conta para o consumo (quem aparece na grelha de amigos). A HORA a partir da
+   qual se pode lá estar (`ev.saHora`, migração db/sa-hora.sql) só se pergunta
+   a quem disse que vai: é o que falta para marcar a mesa, e a que decide é a
+   do último a chegar (mesaSaEvento). "Vais ao jogo?" é independente
+   (`ev.jogo`, migração db/vai-jogo.sql): por defeito segue o Sá
    (vaiAoJogoPessoa), mas cada um pode responder às duas de forma diferente —
    ir ao jogo sem ir ao Sá acontece com frequência, e é o que interessa para
    gerir lugares. Quem pode editar o evento grava pelo caminho normal; os
-   outros vão pelas funções do servidor `marcar_presenca`/`marcar_presenca_jogo`
-   (ver sbMarcarPresenca/sbMarcarPresencaJogo). */
+   outros vão pelas funções do servidor `marcar_presenca` /
+   `marcar_presenca_jogo` / `marcar_hora_sa` (ver sbMarcarPresenca,
+   sbMarcarPresencaJogo, sbMarcarHoraSa).
+
+   DUAS DAS RESPOSTAS SAEM DAQUI EM NOTIFICAÇÃO, porque só servem se chegarem
+   antes do dia: um "não vou ao jogo" avisa o grupo de que há lugar na gamebox
+   a mais (sbNotificarGamebox), e uma hora do Sá avisa quem marca a mesa
+   (sbNotificarHoraSa). O resto do grupo não precisa de saber a hora de cada
+   um — vê-a na folha, que mostra sempre a lista completa (_saHorasHTML). */
 
 function _hojeInicio() { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); }
 
@@ -4589,12 +4601,38 @@ function vouAoJogoReal(ev) {
     return meus.some(m => vaiAoJogoPessoa(ev, m));
 }
 
-// Algum dos meus nomes já respondeu explicitamente à pergunta do jogo (em vez
-// de estar a seguir o defeito do Sá)?
-function _jogoTemOverride(ev) {
+// A que horas ESTE NOME pode estar no Sá? '' = ainda não respondeu. Só conta
+// para quem vai ao Sá: a resposta de quem entretanto desistiu é apagada
+// (ver marcarPresenca), mas um evento antigo pode trazê-la à mesma.
+function horaSaPessoa(ev, nome) {
+    if (!(ev.amigos || []).includes(nome)) return '';
+    const h = (ev.saHora || {})[nome];
+    return (typeof h === 'string' && /^\d{2}:\d{2}$/.test(h)) ? h : '';
+}
+
+// A MINHA hora neste evento ('' se ainda não respondi). Agrega por conta como
+// o vouAoSa: vale a primeira dos meus nomes que já tenha resposta.
+function minhaHoraSa(ev) {
     const meus = meusAmigos();
-    const ov = ev.jogo || {};
-    return meus.some(m => Object.prototype.hasOwnProperty.call(ov, m));
+    for (const m of meus) { const h = horaSaPessoa(ev, m); if (h) return h; }
+    return '';
+}
+
+// Quem vai ao Sá, com a hora de cada um — ordenado pela hora (quem ainda não
+// respondeu vai para o fim). É esta a lista que se mostra na folha do jogo.
+function horasSaEvento(ev) {
+    return (ev.amigos || [])
+        .map(nome => ({ nome, hora: horaSaPessoa(ev, nome) }))
+        .sort((a, b) => (a.hora ? 0 : 1) - (b.hora ? 0 : 1) || a.hora.localeCompare(b.hora) || a.nome.localeCompare(b.nome, 'pt'));
+}
+
+// A hora a que a mesa pode ser marcada = a do ÚLTIMO a poder chegar (é a única
+// a que estão todos lá). `falta` é quanta gente ainda não respondeu — sem isso
+// a hora parecia definitiva quando ainda podia recuar.
+function mesaSaEvento(ev) {
+    const linhas = horasSaEvento(ev);
+    const horas = linhas.map(l => l.hora).filter(Boolean);
+    return { hora: horas.length ? horas[horas.length - 1] : '', falta: linhas.length - horas.length };
 }
 
 // Quem vai ao Sá e quem vai ao jogo neste evento — contagens agregadas (não a
@@ -4682,12 +4720,21 @@ async function marcarPresenca(id, vai) {
     if (!meus.length) { mostrarMensagem('⚠️ A tua conta ainda não está associada a nenhum nome — pede ao administrador', false); return false; }
 
     const antes = (ev.amigos || []).slice();
+    const antesHoras = Object.assign({}, ev.saHora || {});
     let lista;
     if (vai) { lista = antes.slice(); meus.forEach(m => { if (!lista.includes(m)) lista.push(m); }); }
     else     { lista = antes.filter(a => !meus.includes(a)); }
     if (lista.length === antes.length) return true;   // já estava assim: nada a gravar
 
     ev.amigos = lista;
+    // Quem deixa de ir leva a hora à frente: deixá-la lá fazia a mesa ser
+    // marcada à espera de quem já tinha dito que não ia.
+    const tinhaHora = meus.some(m => Object.prototype.hasOwnProperty.call(antesHoras, m));
+    if (!vai && tinhaHora) {
+        const h = Object.assign({}, antesHoras);
+        meus.forEach(m => { delete h[m]; });
+        ev.saHora = h;
+    }
     // O evento pode ser o que está carregado no ecrã de trabalho: sem isto o
     // auto-save de 2s carimbava por cima a lista antiga (vem da global `amigos`).
     if (String(eventoAtualId) === String(ev.id)) amigos = lista.slice();
@@ -4698,9 +4745,14 @@ async function marcarPresenca(id, vai) {
         try { await sbGuardarEvento(ev); ok = true; } catch (e) { ok = false; }
     } else {
         ok = await sbMarcarPresenca(ev.id, vai);
+        // A lista e a hora vivem em colunas diferentes e a função do servidor
+        // só mexe na primeira — sem esta segunda chamada a hora ficava lá para
+        // quem não pode editar o evento.
+        if (ok && !vai && tinhaHora && SA_HORA_COL) await sbMarcarHoraSa(ev.id, null);
     }
     if (!ok) {
         ev.amigos = antes;
+        ev.saHora = antesHoras;
         if (String(eventoAtualId) === String(ev.id)) amigos = antes.slice();
         salvarHistoricoLocal();
         return false;
@@ -4720,6 +4772,9 @@ async function marcarPresencaJogo(id, vai) {
     const meus = meusAmigos();
     if (!meus.length) { mostrarMensagem('⚠️ A tua conta ainda não está associada a nenhum nome — pede ao administrador', false); return false; }
 
+    // Guardado ANTES de escrever: é a diferença entre "mudou para não vou" e
+    // "voltou a carregar no mesmo botão" que decide se sai o aviso da gamebox.
+    const antesVai = vouAoJogoReal(ev);
     const antes = Object.assign({}, ev.jogo || {});
     const novo = Object.assign({}, antes);
     meus.forEach(m => { novo[m] = !!vai; });
@@ -4737,17 +4792,82 @@ async function marcarPresencaJogo(id, vai) {
         salvarHistoricoLocal();
         return false;
     }
+    // Lugar na gamebox potencialmente livre — avisa o grupo. Só na MUDANÇA
+    // para "não vou": quem carrega duas vezes no mesmo botão não volta a tocar
+    // os telemóveis todos.
+    if (!vai && antesVai !== false) sbNotificarGamebox(ev, meus[0] || '');
+    return true;
+}
+
+/* Grava a hora a partir da qual posso estar no Sá (`ev.saHora`, migração
+   db/sa-hora.sql) e avisa quem trata da marcação da mesa. `hora` a vazio apaga
+   a resposta. Só faz sentido para quem vai ao Sá — a folha só mostra o campo
+   nesse caso, mas confirma-se aqui à mesma. */
+async function marcarHoraSa(id, hora) {
+    const ev = historico.find(e => String(e.id) === String(id));
+    if (!ev || ev.totalFatura) return false;
+    if (!SA_HORA_COL) { mostrarMensagem('⚠️ Falta a coluna eventos.sa_hora — corre db/sa-hora.sql no Supabase', false); return false; }
+    const meus = meusAmigos();
+    if (!meus.length) { mostrarMensagem('⚠️ A tua conta ainda não está associada a nenhum nome — pede ao administrador', false); return false; }
+    if (!vouAoSa(ev)) { mostrarMensagem('⚠️ Diz primeiro que vais ao Sá', false); return false; }
+    const limpa = /^([01]\d|2[0-3]):[0-5]\d$/.test(hora || '') ? hora : '';
+    if (hora && !limpa) { mostrarMensagem('⚠️ Hora inválida', false); return false; }
+
+    const antes = Object.assign({}, ev.saHora || {});
+    const novo = Object.assign({}, antes);
+    meus.forEach(m => { if (limpa) novo[m] = limpa; else delete novo[m]; });
+    ev.saHora = novo;
+    salvarHistoricoLocal();
+
+    let ok;
+    if (podeEditarEvento(ev)) {
+        try { await sbGuardarEvento(ev); ok = true; } catch (e) { ok = false; }
+    } else {
+        ok = await sbMarcarHoraSa(ev.id, limpa);
+    }
+    if (!ok) {
+        ev.saHora = antes;
+        salvarHistoricoLocal();
+        return false;
+    }
+    // É o Barrona que marca a mesa: a hora só lhe serve se lhe chegar hoje.
+    if (limpa) sbNotificarHoraSa(ev, meus[0] || '', limpa);
     return true;
 }
 
 /* Folha de um jogo por abrir (tocar no cartão dos Próximos Jogos): a data, as
-   duas perguntas (Sá / jogo), quem já está convocado e — só para quem o pode
-   abrir, e só no próximo — o botão de abrir o jogo. */
+   perguntas (Sá / hora / jogo), quem já está convocado com a hora de cada um,
+   a hora a que a mesa dá para marcar e — só para quem o pode abrir, e só no
+   próximo — o botão de abrir o jogo. */
 // "dd/mm/aaaa" → "aaaa-mm-dd" (formato do <input type="date">). Inverso de
 // _isoParaDataPt(), já usado na criação de eventos.
 function _dataPtParaIso(dataPt) {
     const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(dataPt || '');
     return m ? (m[3] + '-' + m[2] + '-' + m[1]) : _hojeIso();
+}
+
+/* Quem vai ao Sá e a que horas pode lá estar — a informação que fica à vista
+   sempre que se entra num jogo por abrir, e não só no momento de responder.
+   A linha da mesa em baixo é a que o Barrona lê: a hora do último a chegar,
+   com quantas respostas ainda faltam para ela poder recuar. */
+function _saHorasHTML(ev) {
+    const linhas = horasSaEvento(ev);
+    const cabeca = '<div class="jf-conv"><strong>' + linhas.length + '</strong> ' + _pluralVai(linhas.length) + ' ao Sá';
+    // Sem a migração não há horas nenhumas: fica a lista de nomes de sempre.
+    if (!SA_HORA_COL || !linhas.length) {
+        return cabeca + (linhas.length ? ': ' + _calEsc(linhas.map(l => l.nome).join(', ')) : '') + '</div>';
+    }
+    let h = cabeca + '</div>';
+    h += '<div class="jf-horas">' + linhas.map(l =>
+        '<div class="jf-hora-linha"><span>' + _calEsc(l.nome) + '</span>'
+        + '<span class="' + (l.hora ? 'jf-h-ok' : 'jf-h-falta') + '">' + (l.hora ? _calEsc(l.hora) : 'sem horas') + '</span></div>'
+    ).join('') + '</div>';
+    const mesa = mesaSaEvento(ev);
+    h += '<div class="jf-mesa">' + (mesa.hora
+        ? 'Mesa a partir das <strong>' + _calEsc(mesa.hora) + '</strong>'
+          + (mesa.falta ? ' <span>(ainda ' + (mesa.falta === 1 ? 'falta 1 resposta' : 'faltam ' + mesa.falta + ' respostas') + ')</span>' : '')
+        : 'Ainda ninguém disse a que horas pode chegar.') + '</div>';
+    return h;
 }
 
 function _jogoSheetHTML(ev) {
@@ -4768,18 +4888,25 @@ function _jogoSheetHTML(ev) {
            + '<button type="button" class="jf-btn vou' + (vouSa ? ' on' : '') + '" onclick="jogoSheetPresenca(' + ev.id + ',true)">✓ Vou</button>'
            + '<button type="button" class="jf-btn nao' + (vouSa === false ? ' on' : '') + '" onclick="jogoSheetPresenca(' + ev.id + ',false)">✕ Não vou</button>'
            + '</div>';
+        // A hora só se pergunta a quem já disse que vai — e é a resposta do
+        // último a chegar que decide a marcação da mesa (ver mesaSaEvento).
+        if (vouSa && SA_HORA_COL) {
+            const minha = minhaHoraSa(ev);
+            h += '<div class="jf-lbl">A partir de que horas podes estar no Sá?</div>'
+               + '<div class="jf-hora-edit">'
+               + '<input type="time" id="jf-hora-input" step="300" value="' + _calEsc(minha) + '">'
+               + '<button type="button" class="jf-data-btn" onclick="jogoSheetHoraSa(' + ev.id + ')">Guardar</button>'
+               + '</div>'
+               + (minha ? '' : '<div class="jf-hint">Ainda não disseste as horas — é o que falta para marcar a mesa.</div>');
+        }
         h += '<div class="jf-lbl">Vais ao jogo?</div>'
            + '<div class="jf-btns">'
            + '<button type="button" class="jf-btn vou' + (vouJogo ? ' on' : '') + '" onclick="jogoSheetPresencaJogo(' + ev.id + ',true)">✓ Vou</button>'
            + '<button type="button" class="jf-btn nao' + (vouJogo === false ? ' on' : '') + '" onclick="jogoSheetPresencaJogo(' + ev.id + ',false)">✕ Não vou</button>'
            + '</div>';
-        if (!_jogoTemOverride(ev)) {
-            h += '<div class="jf-hint">Por defeito, segue a resposta ao Sá — muda só se fores a um e não ao outro.</div>';
-        }
     }
+    h += _saHorasHTML(ev);
     const contagem = contagemPresencas(ev);
-    h += '<div class="jf-conv"><strong>' + contagem.sa.length + '</strong> ' + _pluralVai(contagem.sa.length) + ' ao Sá'
-       + (contagem.sa.length ? ': ' + _calEsc(contagem.sa.join(', ')) : '') + '</div>';
     h += '<div class="jf-conv"><strong>' + contagem.jogo.length + '</strong> ' + _pluralVai(contagem.jogo.length) + ' ao jogo'
        + (contagem.jogo.length ? ': ' + _calEsc(contagem.jogo.join(', ')) : '') + '</div>';
     if (podeAbrirJogo(ev)) {
@@ -4816,6 +4943,19 @@ async function jogoSheetPresencaJogo(id, vai) {
     const box = document.getElementById('modal-msg');
     if (ev && box) box.innerHTML = _jogoSheetHTML(ev);
     try { if (typeof renderInicio === 'function') renderInicio(); } catch (e) {}
+}
+
+// Irmã das anteriores para a hora do Sá (input#jf-hora-input). Redesenha a
+// folha para a lista de horas e a linha da mesa acompanharem logo a resposta.
+async function jogoSheetHoraSa(id) {
+    const input = document.getElementById('jf-hora-input');
+    if (!input) return;
+    const ok = await marcarHoraSa(id, input.value || '');
+    if (!ok) return;
+    const ev = historico.find(e => String(e.id) === String(id));
+    const box = document.getElementById('modal-msg');
+    if (ev && box) box.innerHTML = _jogoSheetHTML(ev);
+    mostrarMensagem(input.value ? '✓ Horas guardadas' : '✓ Horas apagadas', true);
 }
 
 // Muda a data de um jogo por abrir, direto na folha (input#jf-data-input).
@@ -4873,6 +5013,12 @@ async function abrirFolhaJogo(id) {
 const SB_URL = 'https://gjweqwfbnkgnibhajldc.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdqd2Vxd2ZibmtnbmliaGFqbGRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDk4NzUsImV4cCI6MjA5NjY4NTg3NX0.h6st-RayGhQdsqH7E2Ko-rPWk2QZUpTevO6cbjvlSnk';
 const ADMIN_EMAIL = 'diogo.andre.f.silva@gmail.com';
+// Quem trata da marcação da mesa no Sá: é a pessoa avisada quando alguém diz a
+// partir de que horas pode lá estar (ver sbNotificarHoraSa). É um NOME de amigo,
+// não um email — a Edge Function resolve nome→email por `amigo_users`, como no
+// resto das notificações. Se um dia a mesa passar a ser de outra pessoa, muda-se
+// aqui (e nada rebenta se o nome não existir: não há a quem mandar, mais nada).
+const GESTOR_MESA_SA = 'Barrona';
 // Par de chaves só para notificações Web Push (não é a chave do Supabase).
 // A privada vive só como secret da Edge Function push-notificar.
 const VAPID_PUBLIC_KEY = 'BFiwf_z5NJzkXFP6gzxS_naH9cNC2MfCEmejJf32MID8Y_1i49cb8sGINYhH-aFAZmFQLf3V__2ZyeotQIZYQ0U';
@@ -5440,6 +5586,14 @@ let PRESENCA_RPC = true;
 let VAI_JOGO_COL = true;
 let PRESENCA_JOGO_RPC = true;
 
+/* Hora a partir da qual cada um pode estar no Sá (`eventos.sa_hora`, migração
+   db/sa-hora.sql) — é o que o Barrona precisa para marcar a mesa, e a que
+   interessa é a do último a chegar. Mesmo padrão de degradação: sem a coluna,
+   SA_HORA_COL fica false e a pergunta da hora esconde-se, ficando só o
+   "vais ao Sá?" de sempre. `HORA_SA_RPC` é a irmã para `marcar_hora_sa`. */
+let SA_HORA_COL = true;
+let HORA_SA_RPC = true;
+
 /* Pedidos de pagamento por confirmar (`pagamentos.declarado_por`, migração
    db/pagamentos-pendentes.sql) — permite a um utilizador declarar que já pagou
    uma dívida (pendente ou prescrita); fica tipo='pendente' até o admin
@@ -5479,11 +5633,13 @@ async function sbCarregarDados() {
             MENU_COL = tem('menu');
             ABERTO_COL = tem('aberto');
             VAI_JOGO_COL = tem('vai_jogo');
+            SA_HORA_COL = tem('sa_hora');
             JOGO_ID_COL = tem('jogo_id');
         }
         if (!JOGO_ID_COL) console.warn('[SplitBill] coluna eventos.jogo_id ausente — corre db/jogo-id.sql para os jogos virem sozinhos do calendário do Goals');
         if (!ABERTO_COL) console.warn('[SplitBill] coluna eventos.aberto ausente — corre db/jogo-aberto.sql para o jogo só abrir quando alguém o abrir');
         if (!VAI_JOGO_COL) console.warn('[SplitBill] coluna eventos.vai_jogo ausente — corre db/vai-jogo.sql para separar "vais ao jogo?" do Sá');
+        if (!SA_HORA_COL) console.warn('[SplitBill] coluna eventos.sa_hora ausente — corre db/sa-hora.sql para recolher a que horas cada um pode estar no Sá');
         if (!FATURA_COL) console.warn('[SplitBill] coluna eventos.fatura ausente — corre db/fatura-detalhe.sql para guardar o detalhe da fatura no servidor');
         if (!AMIGOS_COL || !MENU_COL) console.warn('[SplitBill] colunas eventos.amigos/menu ausentes — corre db/convocados-menu.sql para os convocados e o menu do evento viajarem entre dispositivos');
 
@@ -5526,13 +5682,14 @@ async function sbCarregarDados() {
         // O mesmo vale para os convocados e o menu enquanto db/convocados-menu.sql
         // não for corrida: sem as colunas, o servidor não os devolve e o histórico
         // reconstruído por cima levava-os à frente.
-        const faturasLocais = {}, amigosLocais = {}, menusLocais = {}, jogoLocais = {};
+        const faturasLocais = {}, amigosLocais = {}, menusLocais = {}, jogoLocais = {}, saHoraLocais = {};
         (historico || []).forEach(e => {
             if (!e) return;
             if (e.fatura) faturasLocais[e.id] = e.fatura;
             if (Array.isArray(e.amigos) && e.amigos.length) amigosLocais[e.id] = e.amigos;
             if (e.menu && Object.keys(e.menu).length) menusLocais[e.id] = e.menu;
             if (e.jogo && Object.keys(e.jogo).length) jogoLocais[e.id] = e.jogo;
+            if (e.saHora && Object.keys(e.saHora).length) saHoraLocais[e.id] = e.saHora;
         });
 
         historico = eventos.map(ev => {
@@ -5571,6 +5728,7 @@ async function sbCarregarDados() {
                     evOrdens, evOfertas, ev.pagador),
                 menu: (MENU_COL && ev.menu && typeof ev.menu === 'object') ? ev.menu : (menusLocais[ev.id] || {}),
                 jogo: (VAI_JOGO_COL && ev.vai_jogo && typeof ev.vai_jogo === 'object') ? ev.vai_jogo : (jogoLocais[ev.id] || {}),
+                saHora: (SA_HORA_COL && ev.sa_hora && typeof ev.sa_hora === 'object') ? ev.sa_hora : (saHoraLocais[ev.id] || {}),
                 dividas: evDividas,
                 fatura: (FATURA_COL && ev.fatura) ? ev.fatura : (faturasLocais[ev.id] || null),
                 substituto: ev.substituto_email || null,
@@ -5752,6 +5910,32 @@ async function sbMarcarPresencaJogo(eventoId, vai) {
     }
 }
 
+/* Terceira irmã: a HORA a partir da qual posso estar no Sá (migração
+   db/sa-hora.sql). `hora` a null apaga a resposta — é o que corre quando
+   alguém deixa de ir ao Sá. Mesma razão para SECURITY DEFINER do lado da BD. */
+async function sbMarcarHoraSa(eventoId, hora) {
+    if (!_sbSession) return false;
+    if (!HORA_SA_RPC) { mostrarMensagem('⚠️ Falta a função marcar_hora_sa — corre db/sa-hora.sql no Supabase', false); return false; }
+    try {
+        const r = await sbFetch(`${SB_URL}/rest/v1/rpc/marcar_hora_sa`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Accept': 'application/json' }),
+            body: JSON.stringify({ p_evento_id: eventoId, p_hora: hora || null })
+        });
+        if (r.status === 404) {
+            HORA_SA_RPC = false;
+            mostrarMensagem('⚠️ Falta a função marcar_hora_sa — corre db/sa-hora.sql no Supabase', false);
+            return false;
+        }
+        await sbOk(r, 'marcar hora do Sá');
+        return true;
+    } catch (e) {
+        console.error('Erro ao marcar a hora do Sá:', e);
+        mostrarMensagem('⚠️ Não gravado [' + (e.ctx || 'rede') + ']: ' + sbErroLegivel(e), false);
+        return false;
+    }
+}
+
 // Sincroniza uma tabela-pai (ordens/ofertas) + a tabela-filho respetiva
 // (ordem_amigos/oferta_para) com o padrão UPSERT + PRUNE: insere/atualiza tudo
 // PRIMEIRO e só DEPOIS remove o que sobra. Nunca apaga linhas-pai antes de a
@@ -5809,6 +5993,7 @@ async function sbGuardarEvento(ev, opts) {
         if (AMIGOS_COL) campos.amigos = ev.amigos || [];
         if (MENU_COL) campos.menu = ev.menu || {};
         if (VAI_JOGO_COL) campos.vai_jogo = ev.jogo || {};
+        if (SA_HORA_COL) campos.sa_hora = ev.saHora || {};
         // `aberto` só vai se souber o valor: um evento anterior à migração tem
         // isto a undefined e escrever false punha-o de volta em agenda.
         if (ABERTO_COL && ev.aberto != null) campos.aberto = !!ev.aberto;
@@ -6824,11 +7009,12 @@ async function pushDesativar() {
     pushRenderStatus();
 }
 
-// Base comum aos 3 momentos (divida/pagamento_declarado/lembrete) — chama a
-// Edge Function push-notificar, que decide o texto pelo `tipo` (nunca vem
-// livre do cliente). Devolve {enviados, falhados} ou null se falhou a
-// chamada em si (rede, timeout).
-async function sbEnviarPush(tipo, pessoas, descricao, quem) {
+// Base comum a todos os momentos (divida/pagamento_declarado/lembrete/gamebox/
+// hora_sa) — chama a Edge Function push-notificar, que decide o texto pelo
+// `tipo` (nunca vem livre do cliente; de `extra` só se aproveita o que ela
+// souber validar, como a hora do Sá). Devolve {enviados, falhados} ou null se
+// falhou a chamada em si (rede, timeout).
+async function sbEnviarPush(tipo, pessoas, descricao, quem, extra) {
     if (!PUSH_COL || !_sbSession || !pessoas || !pessoas.length) return null;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 15000);
@@ -6836,7 +7022,7 @@ async function sbEnviarPush(tipo, pessoas, descricao, quem) {
         const r = await sbFetch(`${SB_URL}/functions/v1/push-notificar`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY },
-            body: JSON.stringify({ tipo, pessoas, descricao: descricao || '', quem: quem || '' }),
+            body: JSON.stringify(Object.assign({ tipo, pessoas, descricao: descricao || '', quem: quem || '' }, extra || {})),
             signal: ctrl.signal
         });
         return await r.json().catch(() => null);
@@ -6861,6 +7047,42 @@ function sbNotificarPagamentoDeclarado(pessoa, eventoId, valor) {
     const ev = historico.find(h => h.id === eventoId);
     if (!ev || !ev.pagador) return;
     sbEnviarPush('pagamento_declarado', [{ amigo: ev.pagador, valor }], ev.descricao, pessoa);
+}
+
+/* 4) Fire-and-forget: alguém disse que NÃO vai a um jogo → o lugar dele na
+   gamebox fica potencialmente livre, e quem o quiser aproveitar tem de saber
+   ANTES do dia. Vai para toda a gente do grupo menos quem desistiu — não é
+   uma dívida de ninguém, é uma oportunidade para os outros. Só dispara quando
+   a resposta MUDA para "não vou" (ver marcarPresencaJogo): repetir o toque no
+   mesmo botão não volta a tocar os telemóveis todos. */
+function sbNotificarGamebox(ev, quem) {
+    const pessoas = _grupoParaAvisar(ev, meusAmigos()).map(amigo => ({ amigo, valor: 0 }));
+    sbEnviarPush('gamebox', pessoas, ev.descricao, quem);
+}
+
+/* 5) Fire-and-forget: alguém confirmou a partir de que horas pode estar no Sá
+   → avisa quem trata da marcação da mesa (GESTOR_MESA_SA). Só ele: a hora de
+   cada um interessa a quem marca, e mandá-la ao grupo inteiro era ruído a
+   cada resposta. Se for o próprio a responder, não se avisa a si mesmo. */
+function sbNotificarHoraSa(ev, quem, hora) {
+    if (!hora) return;
+    if (meusAmigos().includes(GESTOR_MESA_SA)) return;
+    sbEnviarPush('hora_sa', [{ amigo: GESTOR_MESA_SA, valor: 0 }], ev.descricao, quem, { hora });
+}
+
+/* Toda a gente que interessa avisar sobre um evento: os convocados por defeito
+   (a lista fixa do admin) mais quem já respondeu a alguma das perguntas deste
+   evento — menos os nomes em `excluir`, que é sempre quem disparou o aviso.
+   A união é o que evita avisar de menos quando o evento ainda está vazio (só
+   há a lista por defeito) e quando alguém entrou fora dela. */
+function _grupoParaAvisar(ev, excluir) {
+    const fora = new Set(excluir || []);
+    const vistos = new Set(); const lista = [];
+    const add = a => { if (a && !fora.has(a) && !vistos.has(a)) { vistos.add(a); lista.push(a); } };
+    amigosPorDefeito().forEach(add);
+    (ev.amigos || []).forEach(add);
+    Object.keys(ev.jogo || {}).forEach(add);
+    return lista;
 }
 
 // Fire-and-forget: avisa o admin quando alguém pede acesso à app pela
