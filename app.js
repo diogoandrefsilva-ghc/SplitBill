@@ -4541,8 +4541,8 @@ function _jogoSincResumo(r) {
    sbMarcarPresencaJogo, sbMarcarHoraSa).
 
    DUAS DAS RESPOSTAS SAEM DAQUI EM NOTIFICAÇÃO, porque só servem se chegarem
-   antes do dia: um "não vou ao jogo" avisa o grupo de que há lugar na gamebox
-   a mais (sbNotificarGamebox), e uma hora do Sá avisa quem marca a mesa
+   antes do dia: o primeiro "não vou ao jogo" de cada um avisa o grupo de que há
+   lugar na gamebox a mais (sbNotificarGamebox), e uma hora do Sá avisa quem marca a mesa
    (sbNotificarHoraSa). O resto do grupo não precisa de saber a hora de cada
    um — vê-a na folha, que mostra sempre a lista completa (_saHorasHTML). */
 
@@ -4792,11 +4792,39 @@ async function marcarPresencaJogo(id, vai) {
         salvarHistoricoLocal();
         return false;
     }
-    // Lugar na gamebox potencialmente livre — avisa o grupo. Só na MUDANÇA
-    // para "não vou": quem carrega duas vezes no mesmo botão não volta a tocar
-    // os telemóveis todos.
-    if (!vai && antesVai !== false) sbNotificarGamebox(ev, meus[0] || '');
+    // Lugar na gamebox potencialmente livre — avisa o grupo. Duas condições, e
+    // as duas fazem falta: só na MUDANÇA para "não vou" (carregar duas vezes no
+    // mesmo botão não é notícia nenhuma) e só se ainda não tiver avisado por
+    // causa deste jogo (mudar de ideias também não é). A marca fica ANTES do
+    // envio, que é fire-and-forget: entre arriscar um aviso a menos e um aviso
+    // a mais, é o de menos que não incomoda ninguém — e é também o que fecha a
+    // corrida de dois toques rápidos, em que ambos liam `antesVai` antes de
+    // qualquer um ter gravado.
+    if (!vai && antesVai !== false && !_gameboxJaAvisou(ev)) {
+        _gameboxMarcarAvisado(ev);
+        sbNotificarGamebox(ev, meus[0] || '');
+    }
     return true;
+}
+
+/* O aviso da gamebox é UM por pessoa e por jogo, não um por mudança de ideias.
+   Quem carrega em "não vou", depois em "vou", depois outra vez em "não vou"
+   está a decidir-se — e cada transição para "não vou" tocava os telemóveis do
+   grupo todo. A informação, do lado de quem recebe, é sempre a mesma: pode
+   haver lugar. Basta dizê-la à primeira.
+
+   A memória vive no localStorage, e não na BD, porque quem dispara o aviso é
+   sempre quem muda a PRÓPRIA resposta, no próprio telemóvel — é aí que ela faz
+   falta, e assim não precisa de coluna nova nem de mexer na função do servidor.
+   O preço: quem responder de outro dispositivo pode dar um segundo aviso. Um a
+   mais, não uma enxurrada, que era o problema. Fica pela vida do evento — não
+   se apaga ao voltar a "vou", senão o vaivém voltava a tocar toda a gente. */
+function _gameboxChave(ev) { return 'gamebox_avisado_' + ev.id + '_' + (emailAtual() || ''); }
+function _gameboxJaAvisou(ev) {
+    try { return localStorage.getItem(_gameboxChave(ev)) === '1'; } catch (e) { return false; }
+}
+function _gameboxMarcarAvisado(ev) {
+    try { localStorage.setItem(_gameboxChave(ev), '1'); } catch (e) {}
 }
 
 /* Grava a hora a partir da qual posso estar no Sá (`ev.saHora`, migração
@@ -7052,9 +7080,10 @@ function sbNotificarPagamentoDeclarado(pessoa, eventoId, valor) {
 /* 4) Fire-and-forget: alguém disse que NÃO vai a um jogo → o lugar dele na
    gamebox fica potencialmente livre, e quem o quiser aproveitar tem de saber
    ANTES do dia. Vai para toda a gente do grupo menos quem desistiu — não é
-   uma dívida de ninguém, é uma oportunidade para os outros. Só dispara quando
-   a resposta MUDA para "não vou" (ver marcarPresencaJogo): repetir o toque no
-   mesmo botão não volta a tocar os telemóveis todos. */
+   uma dívida de ninguém, é uma oportunidade para os outros. Sai UMA vez por
+   pessoa e por jogo (ver marcarPresencaJogo e _gameboxJaAvisou): nem repetir o
+   toque no mesmo botão, nem mudar de ideias, volta a tocar os telemóveis
+   todos. */
 function sbNotificarGamebox(ev, quem) {
     const pessoas = _grupoParaAvisar(ev, meusAmigos()).map(amigo => ({ amigo, valor: 0 }));
     sbEnviarPush('gamebox', pessoas, ev.descricao, quem);

@@ -166,8 +166,15 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   segunda pergunta e fica só a de sempre.
   A resposta "não vou" **notifica o grupo todo** (`sbNotificarGamebox`): o
   lugar na gamebox fica potencialmente livre e isso só serve a quem o quiser
-  antes do dia. Só dispara na **mudança** para "não vou" — carregar duas vezes
-  no mesmo botão não volta a tocar os telemóveis todos.
+  antes do dia. Sai **uma vez por pessoa e por jogo**: nem repetir o toque no
+  mesmo botão (guarda `antesVai`), nem mudar de ideias — *não vou → vou → não
+  vou* tocava os telemóveis do grupo a cada volta, e do lado de quem recebe a
+  informação é sempre a mesma. A memória (`_gameboxJaAvisou`) vive no
+  **localStorage**, não na BD: quem dispara o aviso é sempre quem muda a
+  própria resposta, no próprio telemóvel. Custo assumido: responder de outro
+  dispositivo pode dar um segundo aviso — um a mais, não uma enxurrada. A marca
+  põe-se **antes** do envio (que é fire-and-forget) e não se apaga ao voltar a
+  "vou"; sem localStorage degrada para o comportamento antigo, não rebenta.
 - **A que horas podes estar no Sá** (`db/sa-hora.sql`, coluna
   `eventos.sa_hora`, jsonb `{"Nome": "HH:MM"}`): terceira pergunta da folha,
   só para quem já disse que **vai** ao Sá. Saber quem vai nunca chegou para
