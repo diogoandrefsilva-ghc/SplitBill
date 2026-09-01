@@ -1,6 +1,6 @@
 // supabase/functions/push-notificar/index.ts
 // SplitBill — Envia notificações Web Push (Notification/Push API, sem
-// Telegram). Seis momentos, todos chamados pela app:
+// Telegram). Sete momentos, todos chamados pela app:
 //   'divida'              fecharComFatura() → todos os devedores do evento
 //                          que acabou de fechar (fire-and-forget)
 //   'pagamento_declarado' declararPagamento() → o pagador/tesoureiro do
@@ -19,14 +19,20 @@
 //   'hora_sa'              marcarHoraSa() → só quem trata da marcação da mesa
 //                          no Sá, com a hora a partir da qual a pessoa pode lá
 //                          estar (fire-and-forget)
+//   'mesa_marcada'         marcarMesaHora() → o grupo todo menos quem a marcou:
+//                          a mesa ficou marcada a uma hora, e isso é o que
+//                          toda a gente estava à espera de saber. É o inverso
+//                          do 'hora_sa' — aquele recolhe, este anuncia
+//                          (fire-and-forget)
 //
 // Resolve amigo→email via `amigo_users` (mesma tabela usada nas outras
 // políticas de equivalência) e manda o push a cada `push_subscriptions`
 // dessa pessoa. Subscriptions que já não existem do lado do browser
 // (404/410) são apagadas aqui mesmo. O texto da notificação é sempre
 // escolhido AQUI (por `tipo`), nunca vindo livre do cliente — só os nomes/
-// valores são interpolados, e a `hora` do 'hora_sa' só entra depois de passar
-// pelo formato HH:MM (é o único campo de texto que o cliente escolhe).
+// valores são interpolados, e a `hora` do 'hora_sa'/'mesa_marcada' só entra
+// depois de passar pelo formato HH:MM (é o único campo de texto que o cliente
+// escolhe).
 //
 // Chamada pelo browser com o JWT do utilizador (verify_jwt fica LIGADO no
 // deploy). Por cima disso confirma-se que o email consta de
@@ -143,10 +149,12 @@ type Tipo =
   | "lembrete"
   | "pedido_acesso"
   | "gamebox"
-  | "hora_sa";
+  | "hora_sa"
+  | "mesa_marcada";
 
-// Nem todos os momentos falam de dinheiro: 'gamebox' e 'hora_sa' vêm sem valor
-// (ou com zero), e um .toFixed() direto num undefined rebentava a função toda.
+// Nem todos os momentos falam de dinheiro: 'gamebox', 'hora_sa' e
+// 'mesa_marcada' vêm sem valor (ou com zero), e um .toFixed() direto num
+// undefined rebentava a função toda.
 function montarMensagem(tipo: Tipo, p: Pessoa, descricao?: string, quem?: string, hora?: string) {
   const suf = descricao ? ` — ${descricao}` : "";
   const valor = (p.valor ?? 0).toFixed(2);
@@ -160,6 +168,12 @@ function montarMensagem(tipo: Tipo, p: Pessoa, descricao?: string, quem?: string
     return {
       title: "🍽️ Hora para o Sá",
       body: `${quem || "Alguém"} pode estar no Sá a partir das ${hora}${suf}`,
+    };
+  }
+  if (tipo === "mesa_marcada") {
+    return {
+      title: "🍽️ Mesa marcada no Sá",
+      body: `${quem || "Alguém"} marcou a mesa para as ${hora}${suf}`,
     };
   }
   if (tipo === "pagamento_declarado") {
@@ -216,14 +230,16 @@ Deno.serve(async (req) => {
 
     if (!(await estaAutorizado(emailChamador))) return json({ error: "não autorizado" }, 403);
 
-    const TIPOS: Tipo[] = ["pagamento_declarado", "lembrete", "gamebox", "hora_sa"];
+    const TIPOS: Tipo[] = ["pagamento_declarado", "lembrete", "gamebox", "hora_sa", "mesa_marcada"];
     const tipoOk: Tipo = tipo && TIPOS.includes(tipo) ? tipo : "divida";
     if (!Array.isArray(pessoas) || pessoas.length === 0) return json({ enviados: 0, falhados: 0 });
 
     // Único texto do cliente que chega ao corpo de uma notificação — por isso
     // passa pelo formato antes de lá entrar. Sem hora válida não há aviso a dar.
     const horaOk = /^([01]\d|2[0-3]):[0-5]\d$/.test(hora ?? "") ? hora : "";
-    if (tipoOk === "hora_sa" && !horaOk) return json({ error: "hora inválida" }, 400);
+    if ((tipoOk === "hora_sa" || tipoOk === "mesa_marcada") && !horaOk) {
+      return json({ error: "hora inválida" }, 400);
+    }
 
     // amigo → email (só os amigos pedidos)
     const nomes = [...new Set(pessoas.map((p) => p.amigo).filter(Boolean))];

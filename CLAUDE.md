@@ -18,7 +18,7 @@ App pessoal de divisão de contas ("dia de jogo").
 - **Não leias o `app.js` inteiro.** Está dividido em secções com comentários `/* ── título ── */`. Para achar algo, faz `grep` pelo título e lê só esse troço. Secções:
   Custom confirm modal · **Pagador & Contas (dívidas)** · Page switching · FAB · **Core: cálculo de saldos** (dívidas + pagamentos) · Render · Payment form · Edit Ordem inline · **Importar Fatura** (foto/PDF → Gemini → conferência artigo a artigo) · **Calendário do Sporting** (ler `goals.jogos`, guardar o mínimo cá) · **Jogo aberto & presenças** (abrir o jogo, vou/não vou, hora do Sá) · Configs · **Supabase** (+ Sessão/refresh do token, Permissões, Agregação global, IDs únicos, Equivalências amigo↔conta)
 - `fatura-restaurante.ts` — Edge Function (Deno) que lê a fatura com o Gemini. **Não corre no site**: vive no Supabase, faz-se deploy à parte (`supabase functions deploy fatura-restaurante`). É irmã da `fatura-ocr` da FestasBV — mesmo projeto Supabase, schema e prompt diferentes.
-- `push-notificar.ts` — a outra Edge Function, a das notificações Web Push. Também **não corre no site** (`supabase functions deploy push-notificar`): se mexeres nos `tipo` daqui, o texto novo só aparece depois desse deploy. O corpo da notificação é escolhido **lá**, nunca vem livre do cliente — só nomes, valores e a hora do Sá (validada `HH:MM` dos dois lados) são interpolados.
+- `push-notificar.ts` — a outra Edge Function, a das notificações Web Push. Também **não corre no site** (`supabase functions deploy push-notificar`): se mexeres nos `tipo` daqui, o texto novo só aparece depois desse deploy. O corpo da notificação é escolhido **lá**, nunca vem livre do cliente — só nomes, valores e as horas (a do Sá e a da mesa, validadas `HH:MM` dos dois lados) são interpoladas.
 - **Fatura guardada:** o detalhe lido fica em `estado.fatura` e persiste na coluna `eventos.fatura` (jsonb, `db/fatura-detalhe.sql`). A correspondência linha-da-fatura ↔ artigo do menu **não** se guarda — é recalculada a cada render (`faturaConferir()`), de propósito: se o menu do evento mudar, a conferência acompanha. Sem a migração, `FATURA_COL=false` e a fatura fica só no localStorage.
 - **Convocados e menu do evento:** persistem nas colunas `eventos.amigos` / `eventos.menu` (jsonb, `db/convocados-menu.sql`). `ev.amigos` é a lista de **candidatos** (quem foi convocado); quem **consumiu** está em `ordem_amigos`/`oferta_para` — não confundir (`presentesNoEvento()` usa o segundo). Ao carregar da BD faz-se a união das duas (`convocadosDoEvento()`), para os eventos anteriores à migração não ficarem vazios. Sem a migração, `AMIGOS_COL`/`MENU_COL=false` e ficam só no localStorage.
 - Excepção conhecida: o **ecrã inicial** (hub) tem o CSS todo num
@@ -212,9 +212,13 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   tinham a cumprir. Quem não a pode marcar não vê linha nenhuma enquanto a mesa
   estiver por marcar. **Se a mesa passar a ser de outra pessoa muda-se em dois
   sítios:** `GESTOR_MESA_SA` no `app.js` (quem recebe a notificação das horas) e
-  a chave `gestor_mesa` em `splitbill.config` (quem pode gravar). Sem a
-  migração, `MESA_HORA_COL=false` e a folha volta a mostrar só o resumo dos
-  votos. O formato `HH:MM` é validado nos **dois** lados: é o único
+  a chave `gestor_mesa` em `splitbill.config` (quem pode gravar). Marcar a mesa
+  **notifica o grupo** (`sbNotificarMesa`, tipo `mesa_marcada` na
+  `push-notificar.ts`) — é o inverso do `hora_sa`, que recolhe: este anuncia, e
+  é a resposta que toda a gente esperava. Só na **mudança** para uma hora nova:
+  desmarcar não toca em telemóvel nenhum, e gravar a mesma hora outra vez
+  também não. Sem a migração, `MESA_HORA_COL=false` e a folha volta a mostrar
+  só o resumo dos votos. O formato `HH:MM` é validado nos **dois** lados: é o único
   texto escolhido pelo utilizador que chega ao corpo de uma notificação.
 - O cartão do jogo por abrir tem cor própria (`.sbi-fut`, dourado/creme). O verde
   (`.sbi-open`) é do jogo em aberto: são coisas diferentes e não se podem

@@ -4541,10 +4541,11 @@ function _jogoSincResumo(r) {
    `marcar_presenca_jogo` / `marcar_hora_sa` (ver sbMarcarPresenca,
    sbMarcarPresencaJogo, sbMarcarHoraSa).
 
-   DUAS DAS RESPOSTAS SAEM DAQUI EM NOTIFICAÇÃO, porque só servem se chegarem
+   TRÊS DAS RESPOSTAS SAEM DAQUI EM NOTIFICAÇÃO, porque só servem se chegarem
    antes do dia: um "não vou ao jogo" avisa o grupo de que há lugar na gamebox
-   a mais (sbNotificarGamebox), e uma hora do Sá avisa quem marca a mesa
-   (sbNotificarHoraSa). O resto do grupo não precisa de saber a hora de cada
+   a mais (sbNotificarGamebox), uma hora do Sá avisa quem marca a mesa
+   (sbNotificarHoraSa), e a mesa marcada avisa o grupo (sbNotificarMesa) —
+   é a resposta que todos esperavam, e chega uma vez por evento. O resto do grupo não precisa de saber a hora de cada
    um — vê-a na folha: o resumo traz as horas todas com quanta gente há em
    cada uma, e a tabela de quem vai abre-se a um toque (_quemVaiHTML). */
 
@@ -4831,6 +4832,9 @@ async function marcarMesaHora(id, hora) {
         salvarHistoricoLocal();
         return false;
     }
+    // Só na MUDANÇA para uma hora nova: desmarcar não toca os telemóveis, e
+    // gravar a mesma hora outra vez também não.
+    if (limpa && limpa !== antes) sbNotificarMesa(ev, (meusAmigos()[0] || ''), limpa);
     return true;
 }
 
@@ -7262,6 +7266,17 @@ function sbNotificarPagamentoDeclarado(pessoa, eventoId, valor) {
 function sbNotificarGamebox(ev, quem) {
     const pessoas = _grupoParaAvisar(ev, meusAmigos()).map(amigo => ({ amigo, valor: 0 }));
     sbEnviarPush('gamebox', pessoas, ev.descricao, quem);
+}
+
+/* Fire-and-forget: a mesa ficou marcada a uma hora → avisa o grupo todo menos
+   quem a marcou. É o inverso do sbNotificarHoraSa: aquele RECOLHE (a hora de
+   cada um, e só para quem marca a mesa), este ANUNCIA (uma hora só, para toda
+   a gente). Aqui o ruído não se põe: é a resposta que o grupo estava à espera,
+   e chega uma vez por evento. */
+function sbNotificarMesa(ev, quem, hora) {
+    if (!hora) return;
+    const pessoas = _grupoParaAvisar(ev, meusAmigos()).map(amigo => ({ amigo, valor: 0 }));
+    sbEnviarPush('mesa_marcada', pessoas, ev.descricao, quem, { hora });
 }
 
 /* 5) Fire-and-forget: alguém confirmou a partir de que horas pode estar no Sá
