@@ -4792,6 +4792,48 @@ async function marcarPresencaJogo(id, vai) {
     return true;
 }
 
+/* A mesa: a hora a que ficou MARCADA (`ev.mesaHora`, migração
+   db/mesa-hora.sql). É a hora do restaurante, uma só para o evento — não se
+   confunde com a `saHora`, que é a de cada pessoa. Quem a põe é quem trata da
+   marcação (GESTOR_MESA_SA), o admin ou o substituto do evento: é uma hora do
+   grupo, e não faria sentido qualquer um a mudar. */
+function mesaHoraEvento(ev) {
+    const h = (ev && ev.mesaHora) || '';
+    return /^([01]\d|2[0-3]):[0-5]\d$/.test(h) ? h : '';
+}
+function podeMarcarMesa(ev) {
+    if (!ev || ev.totalFatura || !MESA_HORA_COL) return false;
+    return podeEditarEvento(ev) || meusAmigos().includes(GESTOR_MESA_SA);
+}
+
+// `hora` a vazio desmarca a mesa. Mesmo padrão das outras respostas da folha:
+// grava já em memória, e desfaz se o servidor recusar.
+async function marcarMesaHora(id, hora) {
+    const ev = historico.find(e => String(e.id) === String(id));
+    if (!ev || ev.totalFatura) return false;
+    if (!MESA_HORA_COL) { mostrarMensagem('⚠️ Falta a coluna eventos.mesa_hora — corre db/mesa-hora.sql no Supabase', false); return false; }
+    if (!podeMarcarMesa(ev)) { mostrarMensagem('⚠️ Só quem trata da marcação (ou o administrador) pode pôr a hora da mesa', false); return false; }
+    const limpa = /^([01]\d|2[0-3]):[0-5]\d$/.test(hora || '') ? hora : '';
+    if (hora && !limpa) { mostrarMensagem('⚠️ Hora inválida', false); return false; }
+
+    const antes = ev.mesaHora || '';
+    ev.mesaHora = limpa;
+    salvarHistoricoLocal();
+
+    let ok;
+    if (podeEditarEvento(ev)) {
+        try { await sbGuardarEvento(ev); ok = true; } catch (e) { ok = false; }
+    } else {
+        ok = await sbMarcarMesaHora(ev.id, limpa);
+    }
+    if (!ok) {
+        ev.mesaHora = antes;
+        salvarHistoricoLocal();
+        return false;
+    }
+    return true;
+}
+
 /* Grava a hora a partir da qual posso estar no Sá (`ev.saHora`, migração
    db/sa-hora.sql) e avisa quem trata da marcação da mesa. `hora` a vazio apaga
    a resposta. Só faz sentido para quem vai ao Sá — a folha só mostra o campo
@@ -4862,13 +4904,34 @@ function _horasAgrupadas(ev) {
 
 function _horasResumoHTML(ev) {
     const grupos = _horasAgrupadas(ev);
-    if (!grupos.length) return '<div class="jf-mesa vazia">Ainda ninguém disse a que horas pode chegar.</div>';
-    const semHora = horasSaEvento(ev).filter(l => !l.hora).length;
-    return '<div class="jf-mesa"><span class="jf-mesa-lbl">A partir de que horas</span>'
-         + '<div class="jf-mesa-horas">'
-         + grupos.map(g => '<span>' + _calEsc(g.hora) + (g.n > 1 ? '<em>(' + g.n + 'p)</em>' : '') + '</span>').join('')
-         + (semHora ? '<span class="jf-sem-horas">' + semHora + ' sem responder</span>' : '')
-         + '</div></div>';
+    const marcada = mesaHoraEvento(ev);
+    const posso = podeMarcarMesa(ev);
+    if (!grupos.length && !marcada && !posso) {
+        return '<div class="jf-mesa vazia">Ainda ninguém disse a que horas pode chegar.</div>';
+    }
+    let h = '<div class="jf-mesa' + (marcada ? ' marcada' : '') + '">';
+    // A hora da mesa é a que manda quando existe — os votos são o que ajudou a
+    // escolhê-la. Só quem trata da marcação vê o campo; para os outros, uma
+    // mesa por marcar simplesmente não ocupa linha nenhuma.
+    if (marcada || posso) {
+        h += '<div class="jf-mesa-res"><span class="jf-mesa-lbl">Mesa marcada para</span>'
+           + (posso
+               ? '<input type="time" class="jf-mesa-input' + (marcada ? ' on' : '') + '" id="jf-mesa-input"'
+                 + ' step="300" value="' + _calEsc(marcada) + '" onblur="jogoSheetMesaHora(' + ev.id + ')">'
+               : '<strong>' + _calEsc(marcada) + '</strong>')
+           + '</div>';
+    }
+    if (grupos.length) {
+        const semHora = horasSaEvento(ev).filter(l => !l.hora).length;
+        h += '<span class="jf-mesa-lbl">' + (marcada ? 'Podem chegar a partir das' : 'A partir de que horas') + '</span>'
+           + '<div class="jf-mesa-horas">'
+           + grupos.map(g => '<span>' + _calEsc(g.hora) + (g.n > 1 ? '<em>(' + g.n + 'p)</em>' : '') + '</span>').join('')
+           + (semHora ? '<span class="jf-sem-horas">' + semHora + ' sem responder</span>' : '')
+           + '</div>';
+    } else if (posso) {
+        h += '<div class="jf-mesa-nada">Ainda ninguém disse a que horas pode chegar.</div>';
+    }
+    return h + '</div>';
 }
 
 /* A lista dobrável da folha. O estado vive FORA do HTML porque a folha se
@@ -4930,7 +4993,7 @@ function _quemVaiHTML(ev) {
     // A linha fechada leva as duas contagens: é o que antes obrigava a duas
     // listas separadas só para as ler.
     const resumo = '<strong>' + nSa + '</strong> ' + _pluralVai(nSa) + ' ao Sá · <strong>' + nJogo + '</strong> ao jogo';
-    return (SA_HORA_COL ? _horasResumoHTML(ev) : '') + _jfFoldHTML('quem', resumo, _jfTabelaHTML(linhas));
+    return ((SA_HORA_COL || MESA_HORA_COL) ? _horasResumoHTML(ev) : '') + _jfFoldHTML('quem', resumo, _jfTabelaHTML(linhas));
 }
 
 // Uma linha do cartão de respostas: pergunta à esquerda, resposta à direita.
@@ -5036,6 +5099,21 @@ async function jogoSheetHoraSa(id) {
     const box = document.getElementById('modal-msg');
     if (box) box.innerHTML = _jogoSheetHTML(ev);
     mostrarMensagem(valor ? '✓ Horas guardadas' : '✓ Horas apagadas', true);
+}
+
+// Irmã da anterior para a hora da MESA (input#jf-mesa-input), com a mesma
+// razão para gravar ao sair do campo em vez de a cada roda do seletor.
+async function jogoSheetMesaHora(id) {
+    const input = document.getElementById('jf-mesa-input');
+    const ev = historico.find(e => String(e.id) === String(id));
+    if (!input || !ev) return;
+    const valor = input.value || '';
+    if (valor === mesaHoraEvento(ev)) return;
+    const ok = await marcarMesaHora(id, valor);
+    if (!ok) return;
+    const box = document.getElementById('modal-msg');
+    if (box) box.innerHTML = _jogoSheetHTML(ev);
+    mostrarMensagem(valor ? '✓ Mesa marcada para as ' + valor : '✓ Mesa desmarcada', true);
 }
 
 // Muda a data de um jogo por abrir, direto na folha (input#jf-data-input).
@@ -5680,6 +5758,13 @@ let PRESENCA_JOGO_RPC = true;
 let SA_HORA_COL = true;
 let HORA_SA_RPC = true;
 
+/* Hora a que a MESA ficou marcada (`eventos.mesa_hora`, migração
+   db/mesa-hora.sql) — uma hora do evento, posta por quem trata da marcação.
+   Sem a coluna, MESA_HORA_COL fica false e a folha volta a mostrar só o resumo
+   dos votos. `MESA_HORA_RPC` é a irmã para `marcar_mesa_hora`. */
+let MESA_HORA_COL = true;
+let MESA_HORA_RPC = true;
+
 /* Pedidos de pagamento por confirmar (`pagamentos.declarado_por`, migração
    db/pagamentos-pendentes.sql) — permite a um utilizador declarar que já pagou
    uma dívida (pendente ou prescrita); fica tipo='pendente' até o admin
@@ -5720,12 +5805,14 @@ async function sbCarregarDados() {
             ABERTO_COL = tem('aberto');
             VAI_JOGO_COL = tem('vai_jogo');
             SA_HORA_COL = tem('sa_hora');
+            MESA_HORA_COL = tem('mesa_hora');
             JOGO_ID_COL = tem('jogo_id');
         }
         if (!JOGO_ID_COL) console.warn('[SplitBill] coluna eventos.jogo_id ausente — corre db/jogo-id.sql para os jogos virem sozinhos do calendário do Goals');
         if (!ABERTO_COL) console.warn('[SplitBill] coluna eventos.aberto ausente — corre db/jogo-aberto.sql para o jogo só abrir quando alguém o abrir');
         if (!VAI_JOGO_COL) console.warn('[SplitBill] coluna eventos.vai_jogo ausente — corre db/vai-jogo.sql para separar "vais ao jogo?" do Sá');
         if (!SA_HORA_COL) console.warn('[SplitBill] coluna eventos.sa_hora ausente — corre db/sa-hora.sql para recolher a que horas cada um pode estar no Sá');
+        if (!MESA_HORA_COL) console.warn('[SplitBill] coluna eventos.mesa_hora ausente — corre db/mesa-hora.sql para o gestor da mesa poder pôr a hora a que a marcou');
         if (!FATURA_COL) console.warn('[SplitBill] coluna eventos.fatura ausente — corre db/fatura-detalhe.sql para guardar o detalhe da fatura no servidor');
         if (!AMIGOS_COL || !MENU_COL) console.warn('[SplitBill] colunas eventos.amigos/menu ausentes — corre db/convocados-menu.sql para os convocados e o menu do evento viajarem entre dispositivos');
 
@@ -5768,7 +5855,7 @@ async function sbCarregarDados() {
         // O mesmo vale para os convocados e o menu enquanto db/convocados-menu.sql
         // não for corrida: sem as colunas, o servidor não os devolve e o histórico
         // reconstruído por cima levava-os à frente.
-        const faturasLocais = {}, amigosLocais = {}, menusLocais = {}, jogoLocais = {}, saHoraLocais = {};
+        const faturasLocais = {}, amigosLocais = {}, menusLocais = {}, jogoLocais = {}, saHoraLocais = {}, mesaHoraLocais = {};
         (historico || []).forEach(e => {
             if (!e) return;
             if (e.fatura) faturasLocais[e.id] = e.fatura;
@@ -5776,6 +5863,7 @@ async function sbCarregarDados() {
             if (e.menu && Object.keys(e.menu).length) menusLocais[e.id] = e.menu;
             if (e.jogo && Object.keys(e.jogo).length) jogoLocais[e.id] = e.jogo;
             if (e.saHora && Object.keys(e.saHora).length) saHoraLocais[e.id] = e.saHora;
+            if (e.mesaHora) mesaHoraLocais[e.id] = e.mesaHora;
         });
 
         historico = eventos.map(ev => {
@@ -5815,6 +5903,7 @@ async function sbCarregarDados() {
                 menu: (MENU_COL && ev.menu && typeof ev.menu === 'object') ? ev.menu : (menusLocais[ev.id] || {}),
                 jogo: (VAI_JOGO_COL && ev.vai_jogo && typeof ev.vai_jogo === 'object') ? ev.vai_jogo : (jogoLocais[ev.id] || {}),
                 saHora: (SA_HORA_COL && ev.sa_hora && typeof ev.sa_hora === 'object') ? ev.sa_hora : (saHoraLocais[ev.id] || {}),
+                mesaHora: MESA_HORA_COL ? (ev.mesa_hora || '') : (mesaHoraLocais[ev.id] || ''),
                 dividas: evDividas,
                 fatura: (FATURA_COL && ev.fatura) ? ev.fatura : (faturasLocais[ev.id] || null),
                 substituto: ev.substituto_email || null,
@@ -6022,6 +6111,32 @@ async function sbMarcarHoraSa(eventoId, hora) {
     }
 }
 
+/* Irmã da sbMarcarHoraSa para a hora da MESA (db/mesa-hora.sql). O servidor é
+   que decide se quem chama pode marcá-la — admin, substituto do evento ou o
+   gestor da mesa (config 'gestor_mesa'). */
+async function sbMarcarMesaHora(eventoId, hora) {
+    if (!_sbSession) return false;
+    if (!MESA_HORA_RPC) { mostrarMensagem('⚠️ Falta a função marcar_mesa_hora — corre db/mesa-hora.sql no Supabase', false); return false; }
+    try {
+        const r = await sbFetch(`${SB_URL}/rest/v1/rpc/marcar_mesa_hora`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Accept': 'application/json' }),
+            body: JSON.stringify({ p_evento_id: eventoId, p_hora: hora || null })
+        });
+        if (r.status === 404) {
+            MESA_HORA_RPC = false;
+            mostrarMensagem('⚠️ Falta a função marcar_mesa_hora — corre db/mesa-hora.sql no Supabase', false);
+            return false;
+        }
+        await sbOk(r, 'marcar a hora da mesa');
+        return true;
+    } catch (e) {
+        console.error('Erro ao marcar a hora da mesa:', e);
+        mostrarMensagem('⚠️ Não gravado [' + (e.ctx || 'rede') + ']: ' + sbErroLegivel(e), false);
+        return false;
+    }
+}
+
 // Sincroniza uma tabela-pai (ordens/ofertas) + a tabela-filho respetiva
 // (ordem_amigos/oferta_para) com o padrão UPSERT + PRUNE: insere/atualiza tudo
 // PRIMEIRO e só DEPOIS remove o que sobra. Nunca apaga linhas-pai antes de a
@@ -6080,6 +6195,9 @@ async function sbGuardarEvento(ev, opts) {
         if (MENU_COL) campos.menu = ev.menu || {};
         if (VAI_JOGO_COL) campos.vai_jogo = ev.jogo || {};
         if (SA_HORA_COL) campos.sa_hora = ev.saHora || {};
+        // A coluna aceita NULL (mesa por marcar) mas não '' — o CHECK do
+        // formato rejeitava a string vazia (ver db/mesa-hora.sql).
+        if (MESA_HORA_COL) campos.mesa_hora = mesaHoraEvento(ev) || null;
         // `aberto` só vai se souber o valor: um evento anterior à migração tem
         // isto a undefined e escrever false punha-o de volta em agenda.
         if (ABERTO_COL && ev.aberto != null) campos.aberto = !!ev.aberto;

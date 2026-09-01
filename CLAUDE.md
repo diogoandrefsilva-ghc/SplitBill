@@ -200,7 +200,21 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   Mesmo padrão de permissões e de degradação: PATCH normal para quem edita o
   evento, `marcar_hora_sa` (`sbMarcarHoraSa`) SECURITY DEFINER para os outros,
   e sem a migração `SA_HORA_COL=false` esconde a pergunta e volta à lista de
-  nomes de sempre. O formato `HH:MM` é validado nos **dois** lados: é o único
+  nomes de sempre.
+- **A hora a que a mesa ficou marcada** (`db/mesa-hora.sql`, coluna
+  `eventos.mesa_hora`, texto `HH:MM`): as horas acima são as que cada um
+  **pode**; esta é a que o restaurante **deu**. Quem a põe é quem trata da
+  marcação (`GESTOR_MESA_SA`), o admin ou o substituto do evento — é uma hora
+  do grupo, não uma resposta pessoal, daí a permissão apertada
+  (`podeMarcarMesa`, e do lado do servidor a `marcar_mesa_hora`, que confirma o
+  mesmo). Na folha fica **em destaque** por cima dos votos, e com ela marcada
+  os votos ficam mais discretos (`.jf-mesa.marcada`): já cumpriram o que
+  tinham a cumprir. Quem não a pode marcar não vê linha nenhuma enquanto a mesa
+  estiver por marcar. **Se a mesa passar a ser de outra pessoa muda-se em dois
+  sítios:** `GESTOR_MESA_SA` no `app.js` (quem recebe a notificação das horas) e
+  a chave `gestor_mesa` em `splitbill.config` (quem pode gravar). Sem a
+  migração, `MESA_HORA_COL=false` e a folha volta a mostrar só o resumo dos
+  votos. O formato `HH:MM` é validado nos **dois** lados: é o único
   texto escolhido pelo utilizador que chega ao corpo de uma notificação.
 - O cartão do jogo por abrir tem cor própria (`.sbi-fut`, dourado/creme). O verde
   (`.sbi-open`) é do jogo em aberto: são coisas diferentes e não se podem

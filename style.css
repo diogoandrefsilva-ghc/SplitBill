@@ -674,15 +674,31 @@ html,body{touch-action:pan-x pan-y}
 
         .jf-aviso { margin-top: 12px; font-size: 12px; color: #B3402F; line-height: 1.45; }
 
-        /* Resumo dos votos das horas: cada hora com quanta gente a votou. Sem
-           conclusão nenhuma — com uns a chegar às 16:00 e outros às 19:00, a
-           mesa não se pede a uma hora só e quem a marca lê melhor o mapa. */
+        /* A mesa. Em cima, a hora a que ficou MARCADA — a que manda, e por isso
+           a maior coisa da caixa; é o campo de quem trata da marcação e texto
+           para todos os outros. Por baixo, o resumo dos votos: cada hora com
+           quanta gente a votou, que é o que ajudou a escolher a de cima e não
+           uma conclusão da app. Com a mesa marcada, os votos ficam mais
+           discretos (.marcada) — já cumpriram o que tinham a cumprir. */
         .jf-mesa { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: #E2EFE8; text-align: left; }
         .jf-mesa.vazia { font-size: 12px; color: #5B6661; line-height: 1.45; }
         .jf-mesa-lbl {
             display: block; font-family: var(--mono, monospace); font-size: 9.5px; font-weight: 600;
             letter-spacing: .11em; text-transform: uppercase; color: #4C7A64;
         }
+        .jf-mesa-res { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .jf-mesa-res + .jf-mesa-lbl { margin-top: 9px; }
+        .jf-mesa-res strong {
+            font-family: var(--mono, monospace); font-size: 23px; font-weight: 700;
+            color: #0E5C3F; line-height: 1.1;
+        }
+        .jf-mesa-input {
+            flex: 0 0 auto; width: auto; font-family: var(--mono, monospace); font-size: 17px;
+            font-weight: 700; color: #A9B2AC; background: #fff; border: 1px solid #CBE1D5;
+            border-radius: 9px; padding: 4px 9px;
+        }
+        .jf-mesa-input.on { color: #0E5C3F; }
+        .jf-mesa-nada { margin-top: 8px; font-size: 11.5px; color: #5B6661; line-height: 1.4; }
         .jf-mesa-horas { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
         .jf-mesa-horas span {
             font-family: var(--mono, monospace); font-size: 12px; font-weight: 700; color: #0E5C3F;
@@ -691,6 +707,9 @@ html,body{touch-action:pan-x pan-y}
         .jf-mesa-horas em { font-style: normal; font-weight: 400; color: #5B6661; margin-left: 3px; }
         .jf-mesa-horas .jf-sem-horas {
             font-family: inherit; font-size: 11.5px; font-weight: 400; color: #5B6661; background: rgba(255,255,255,.45);
+        }
+        .jf-mesa.marcada .jf-mesa-horas span {
+            font-size: 11px; font-weight: 600; color: #43705C; background: rgba(255,255,255,.5); padding: 3px 9px;
         }
 
         /* Listas dobráveis (quem vai ao Sá / ao jogo): o resumo é a linha, o
