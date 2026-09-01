@@ -4544,7 +4544,8 @@ function _jogoSincResumo(r) {
    antes do dia: um "não vou ao jogo" avisa o grupo de que há lugar na gamebox
    a mais (sbNotificarGamebox), e uma hora do Sá avisa quem marca a mesa
    (sbNotificarHoraSa). O resto do grupo não precisa de saber a hora de cada
-   um — vê-a na folha, que mostra sempre a lista completa (_saHorasHTML). */
+   um — vê-a na folha: o resumo traz as horas todas com quanta gente há em
+   cada uma, e a lista nome a nome abre-se a um toque (_saHorasHTML). */
 
 function _hojeInicio() { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); }
 
@@ -4846,75 +4847,139 @@ function _dataPtParaIso(dataPt) {
     return m ? (m[3] + '-' + m[2] + '-' + m[1]) : _hojeIso();
 }
 
-/* Quem vai ao Sá e a que horas pode lá estar — a informação que fica à vista
-   sempre que se entra num jogo por abrir, e não só no momento de responder.
-   A linha da mesa em baixo é a que o Barrona lê: a hora do último a chegar,
-   com quantas respostas ainda faltam para ela poder recuar. */
+/* Quem vai ao Sá e a que horas pode lá estar. O que fica À VISTA é o RESUMO:
+   a hora a que a mesa pode ser marcada (a do último a poder chegar), quantas
+   respostas ainda faltam para ela poder recuar, e TODAS as horas com quanta
+   gente há em cada uma — "17:30 (2p)". A hora do último não chegava: vão uns
+   mais cedo com frequência, e quem marca a mesa precisa de ver isso sem abrir
+   nada. A lista nome a nome fica atrás de um toque (_jfFold) — é detalhe, e
+   desdobrada empurrava o resumo e as perguntas para fora do ecrã. */
+
+// As horas com gente, por ordem de chegada: [{hora:'17:30', n:2}, …]. Quem
+// ainda não respondeu fica de fora — esses são o `falta` de mesaSaEvento().
+function _horasAgrupadas(ev) {
+    const conta = new Map();
+    horasSaEvento(ev).forEach(l => { if (l.hora) conta.set(l.hora, (conta.get(l.hora) || 0) + 1); });
+    return Array.from(conta, ([hora, n]) => ({ hora, n })).sort((a, b) => a.hora.localeCompare(b.hora));
+}
+
+function _mesaHTML(ev) {
+    const mesa = mesaSaEvento(ev);
+    if (!mesa.hora) return '<div class="jf-mesa vazia">Ainda ninguém disse a que horas pode chegar.</div>';
+    const grupos = _horasAgrupadas(ev);
+    let h = '<div class="jf-mesa"><div class="jf-mesa-top">'
+          + '<span><span class="jf-mesa-lbl">Mesa a partir das</span><strong>' + _calEsc(mesa.hora) + '</strong></span>'
+          + (mesa.falta ? '<span class="jf-mesa-falta">ainda ' + (mesa.falta === 1 ? 'falta 1 resposta' : 'faltam ' + mesa.falta + ' respostas') + '</span>' : '')
+          + '</div>';
+    // Só vale a pena repetir as horas quando há mais do que uma: com toda a
+    // gente à mesma hora, a linha de cima já disse tudo o que há para dizer.
+    if (grupos.length > 1) {
+        h += '<div class="jf-mesa-horas">' + grupos.map(g =>
+            '<span>' + _calEsc(g.hora) + (g.n > 1 ? '<em>(' + g.n + 'p)</em>' : '') + '</span>').join('') + '</div>';
+    }
+    return h + '</div>';
+}
+
+/* As duas listas dobráveis da folha (quem vai ao Sá / ao jogo). O estado vive
+   FORA do HTML porque a folha se redesenha a cada resposta: sem isto, marcar
+   presença fechava a lista que se tinha acabado de abrir. Volta a zero a cada
+   abertura da folha (abrirFolhaJogo). */
+let _jfFold = { sa: false, jogo: false };
+
+function jogoSheetFold(qual) {
+    _jfFold[qual] = !_jfFold[qual];
+    const corpo = document.getElementById('jf-fold-' + qual);
+    const btn = document.getElementById('jf-foldbtn-' + qual);
+    if (corpo) corpo.hidden = !_jfFold[qual];
+    if (btn) {
+        btn.classList.toggle('aberto', _jfFold[qual]);
+        btn.setAttribute('aria-expanded', _jfFold[qual] ? 'true' : 'false');
+    }
+}
+
+// Linha "N vão ao Sá ▾" que abre para `corpo`.
+function _jfFoldHTML(qual, resumo, corpo) {
+    const aberto = !!_jfFold[qual];
+    return '<button type="button" class="jf-fold' + (aberto ? ' aberto' : '') + '" id="jf-foldbtn-' + qual + '"'
+         + ' aria-expanded="' + (aberto ? 'true' : 'false') + '" onclick="jogoSheetFold(\'' + qual + '\')">'
+         + '<span>' + resumo + '</span><span class="jf-chev">▾</span></button>'
+         + '<div class="jf-fold-corpo" id="jf-fold-' + qual + '"' + (aberto ? '' : ' hidden') + '>' + corpo + '</div>';
+}
+
 function _saHorasHTML(ev) {
     const linhas = horasSaEvento(ev);
-    const cabeca = '<div class="jf-conv"><strong>' + linhas.length + '</strong> ' + _pluralVai(linhas.length) + ' ao Sá';
-    // Sem a migração não há horas nenhumas: fica a lista de nomes de sempre.
+    // Sem a migração não há horas nenhumas: fica a linha de nomes de sempre.
     if (!SA_HORA_COL || !linhas.length) {
-        return cabeca + (linhas.length ? ': ' + _calEsc(linhas.map(l => l.nome).join(', ')) : '') + '</div>';
+        return '<div class="jf-conv"><strong>' + linhas.length + '</strong> ' + _pluralVai(linhas.length) + ' ao Sá'
+             + (linhas.length ? ': ' + _calEsc(linhas.map(l => l.nome).join(', ')) : '') + '</div>';
     }
-    let h = cabeca + '</div>';
-    h += '<div class="jf-horas">' + linhas.map(l =>
+    const comHora = linhas.filter(l => l.hora).length;
+    const corpo = '<div class="jf-horas">' + linhas.map(l =>
         '<div class="jf-hora-linha"><span>' + _calEsc(l.nome) + '</span>'
         + '<span class="' + (l.hora ? 'jf-h-ok' : 'jf-h-falta') + '">' + (l.hora ? _calEsc(l.hora) : 'sem horas') + '</span></div>'
     ).join('') + '</div>';
-    const mesa = mesaSaEvento(ev);
-    h += '<div class="jf-mesa">' + (mesa.hora
-        ? 'Mesa a partir das <strong>' + _calEsc(mesa.hora) + '</strong>'
-          + (mesa.falta ? ' <span>(ainda ' + (mesa.falta === 1 ? 'falta 1 resposta' : 'faltam ' + mesa.falta + ' respostas') + ')</span>' : '')
-        : 'Ainda ninguém disse a que horas pode chegar.') + '</div>';
-    return h;
+    return _mesaHTML(ev) + _jfFoldHTML('sa',
+        '<strong>' + linhas.length + '</strong> ' + _pluralVai(linhas.length) + ' ao Sá · ' + comHora + ' com horas', corpo);
+}
+
+// Uma linha do cartão de respostas: pergunta à esquerda, resposta à direita.
+function _jfLinha(pergunta, controlo) {
+    return '<div class="jf-row"><span class="jf-q">' + pergunta + '</span>' + controlo + '</div>';
+}
+// Botão duplo Vou/Não vou. `vai` pode ser null (conta sem nome associado), e
+// aí nenhum dos dois fica ligado.
+function _jfSeg(id, fn, vai) {
+    return '<span class="jf-seg">'
+         + '<button type="button" class="jf-sbtn vou' + (vai ? ' on' : '') + '" onclick="' + fn + '(' + id + ',true)">✓ Vou</button>'
+         + '<button type="button" class="jf-sbtn nao' + (vai === false ? ' on' : '') + '" onclick="' + fn + '(' + id + ',false)">✕ Não</button>'
+         + '</span>';
+}
+
+// O lápis do cabeçalho: mostra (ou esconde) o campo da data. A data muda-se
+// uma vez ou nenhuma, não vale uma linha inteira da folha sempre à vista.
+function jogoSheetMostrarData() {
+    const box = document.getElementById('jf-data-edit');
+    if (!box) return;
+    box.hidden = !box.hidden;
+    if (!box.hidden) { const i = document.getElementById('jf-data-input'); if (i) i.focus(); }
 }
 
 function _jogoSheetHTML(ev) {
     const vouSa = vouAoSa(ev);
-    // Data editável só para quem pode gerir o jogo (admin/substituto) — os
-    // outros só a veem. Fica sempre dataManual=true depois de editada, para
-    // não ser recalculada a partir das ordens (ver salvarNoLocalStorage()).
-    let h = _podeGerirJogo(ev)
-        ? '<div class="jf-data-edit"><input type="date" id="jf-data-input" value="' + _dataPtParaIso(ev.data) + '">'
-          + '<button type="button" class="jf-data-btn" onclick="jogoSheetEditarData(' + ev.id + ')">Guardar</button></div>'
-        : '<div class="jf-data">' + _calEsc(ev.data || '—') + '</div>';
+    const gere = _podeGerirJogo(ev);
+    const ficha = fichaJogoEvento(ev);
+    // Cabeçalho: a data (e a hora do jogo, quando o calendário do Goals a
+    // tem) numa linha de leitura, com o lápis para quem pode gerir o jogo.
+    let h = '<div class="jf-sub">' + _calEsc(ev.data || '—') + (ficha.hora ? ' · ' + _calEsc(ficha.hora) : '')
+          + (gere ? '<button type="button" class="jf-pencil" onclick="jogoSheetMostrarData()" aria-label="Mudar a data">✎</button>' : '')
+          + '</div>';
+    // Grava ao escolher a data (onchange): o botão Guardar era mais uma linha
+    // para uma acção que o calendário do sistema já confirma. Fica sempre
+    // dataManual=true depois de editada, para não ser recalculada a partir
+    // das ordens (ver salvarNoLocalStorage()).
+    if (gere) {
+        h += '<div class="jf-data-edit" id="jf-data-edit" hidden>'
+           + '<input type="date" id="jf-data-input" value="' + _dataPtParaIso(ev.data) + '" onchange="jogoSheetEditarData(' + ev.id + ')">'
+           + '</div>';
+    }
     if (vouSa === null) {
         h += '<div class="jf-aviso">A tua conta ainda não está associada a nenhum nome — pede ao administrador para te associar nas Definições.</div>';
     } else {
-        const vouJogo = vouAoJogoReal(ev);
-        h += '<div class="jf-lbl">Vais ao Sá?</div>'
-           + '<div class="jf-btns">'
-           + '<button type="button" class="jf-btn vou' + (vouSa ? ' on' : '') + '" onclick="jogoSheetPresenca(' + ev.id + ',true)">✓ Vou</button>'
-           + '<button type="button" class="jf-btn nao' + (vouSa === false ? ' on' : '') + '" onclick="jogoSheetPresenca(' + ev.id + ',false)">✕ Não vou</button>'
-           + '</div>';
+        h += '<div class="jf-card">' + _jfLinha('Vais ao Sá?', _jfSeg(ev.id, 'jogoSheetPresenca', vouSa));
         // A hora só se pergunta a quem já disse que vai — e é a resposta do
         // último a chegar que decide a marcação da mesa (ver mesaSaEvento).
         if (vouSa && SA_HORA_COL) {
             const minha = minhaHoraSa(ev);
-            h += '<div class="jf-lbl">A partir de que horas podes estar no Sá?</div>'
-               + '<div class="jf-hora-edit">'
-               + '<input type="time" id="jf-hora-input" step="300" value="' + _calEsc(minha) + '">'
-               + '<button type="button" class="jf-data-btn" onclick="jogoSheetHoraSa(' + ev.id + ')">Guardar</button>'
-               + '</div>'
-               + (minha ? '' : '<div class="jf-hint">Ainda não disseste as horas — é o que falta para marcar a mesa.</div>');
+            h += _jfLinha('Podes estar às',
+                '<input type="time" class="jf-chip-hora' + (minha ? ' on' : '') + '" id="jf-hora-input" step="300"'
+                + ' value="' + _calEsc(minha) + '" onchange="jogoSheetHoraSa(' + ev.id + ')">');
         }
-        h += '<div class="jf-lbl">Vais ao jogo?</div>'
-           + '<div class="jf-btns">'
-           + '<button type="button" class="jf-btn vou' + (vouJogo ? ' on' : '') + '" onclick="jogoSheetPresencaJogo(' + ev.id + ',true)">✓ Vou</button>'
-           + '<button type="button" class="jf-btn nao' + (vouJogo === false ? ' on' : '') + '" onclick="jogoSheetPresencaJogo(' + ev.id + ',false)">✕ Não vou</button>'
-           + '</div>';
+        h += _jfLinha('Vais ao jogo?', _jfSeg(ev.id, 'jogoSheetPresencaJogo', vouAoJogoReal(ev))) + '</div>';
     }
     h += _saHorasHTML(ev);
     const contagem = contagemPresencas(ev);
-    h += '<div class="jf-conv"><strong>' + contagem.jogo.length + '</strong> ' + _pluralVai(contagem.jogo.length) + ' ao jogo'
-       + (contagem.jogo.length ? ': ' + _calEsc(contagem.jogo.join(', ')) : '') + '</div>';
-    if (podeAbrirJogo(ev)) {
-        h += '<div class="jf-nota">Abrir o jogo passa-o para <strong>Em aberto</strong> no ecrã inicial: é aí que se lançam as ordens e se fecha a conta.</div>';
-    }
-    if (_podeGerirJogo(ev)) {
-        h += '<div class="jf-hint"><strong>Preparar</strong> abre a página do evento sem abrir o jogo — para acertar o menu, os convocados ou o tesoureiro antes do dia.</div>';
-    }
+    h += _jfFoldHTML('jogo', '<strong>' + contagem.jogo.length + '</strong> ' + _pluralVai(contagem.jogo.length) + ' ao jogo',
+        '<div class="jf-nomes">' + (contagem.jogo.length ? _calEsc(contagem.jogo.join(', ')) : 'Ainda ninguém.') + '</div>');
     return h;
 }
 
@@ -4995,6 +5060,9 @@ async function abrirFolhaJogo(id) {
     const ev = historico.find(e => String(e.id) === String(id));
     if (!ev) return;
     const podeAbrir = podeAbrirJogo(ev);
+    // Cada abertura da folha começa com as listas fechadas: o resumo (as
+    // perguntas e a hora da mesa) é o que tem de caber no primeiro ecrã.
+    _jfFold = { sa: false, jogo: false };
     const r = await mostrarModal({
         icon: '⚽',
         title: ev.descricao || 'Jogo',

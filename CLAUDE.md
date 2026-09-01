@@ -142,6 +142,16 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   A folha tem até três botões: Fechar · **Preparar** (admin/substituto, abre a
   página do evento sem abrir o jogo) · **Abrir jogo** (só no primeiro). O
   "Preparar" usa o `extraText` do `mostrarModal`.
+- **A folha tem de caber num ecrã** (`_jogoSheetHTML`): quem a abre vem
+  responder e ver a que horas é a mesa, e isso não pode estar atrás de scroll.
+  Daí o desenho actual — a data numa linha de leitura com um lápis
+  (`jogoSheetMostrarData`) em vez de um campo sempre à vista, as três perguntas
+  como três linhas de um cartão (`_jfLinha`/`_jfSeg`) em vez de três títulos com
+  botões de largura inteira, a data e a hora a gravar no `onchange` em vez de um
+  botão Guardar cada, e as listas de quem vai dobradas (`_jfFoldHTML`, estado em
+  `_jfFold` para não fecharem a cada resposta). **Coisa nova na folha = ver o que
+  sai**, senão volta a crescer. As notas de rodapé (o que abrir o jogo faz, o que
+  o Preparar faz) saíram por isso mesmo: os botões já o dizem.
 - Um evento criado à mão nasce aberto se a data for de hoje/passado; marcado para
   a frente nasce em agenda. Os do calendário nascem sempre em agenda.
 - **Vou / Não vou ao Sá:** na mesma folha, qualquer convocado marca se vai à
@@ -173,9 +183,10 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   só para quem já disse que **vai** ao Sá. Saber quem vai nunca chegou para
   marcar a mesa — o que falta é a hora do **último a poder chegar**, e é essa
   que `mesaSaEvento()` calcula e a folha mostra em destaque, com quantas
-  respostas ainda faltam (a hora ainda pode recuar). A lista completa
-  (`_saHorasHTML`) fica **sempre** visível a quem entra no jogo, não só no
-  momento de responder. Quem **desmarca** a ida ao Sá perde a hora
+  respostas ainda faltam (a hora ainda pode recuar). Por baixo vêm **todas** as
+  horas com quanta gente há em cada uma (`_horasAgrupadas`, "17:30 (2p)"): ir
+  uns mais cedo é frequente, e a hora do último sozinha não dizia isso. A lista
+  nome a nome (`_saHorasHTML`) está lá, mas **dobrada** — ver abaixo. Quem **desmarca** a ida ao Sá perde a hora
   (`marcarPresenca`), senão a mesa ficava à espera de quem já disse que não ia.
   Cada resposta notifica **só** o `GESTOR_MESA_SA` (o Barrona, no `app.js`), que
   é quem trata da marcação — mandá-la ao grupo era ruído a cada resposta.

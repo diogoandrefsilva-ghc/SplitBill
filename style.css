@@ -624,39 +624,92 @@ html,body{touch-action:pan-x pan-y}
         .modal-actions button + button { border-left: 1px solid #E6EAE4; }
 
         /* Folha de um jogo por abrir (ecrã inicial › Próximos Jogos em Alvalade):
-           data, vou/não vou, a hora a partir da qual se pode estar no Sá,
-           convocados e — só para quem o pode abrir — a nota do que abrir o
-           jogo faz. Os botões neutralizam a regra global
-           button:hover (verde escuro), que de outra forma ganhava sempre e no
-           telemóvel ficava colada depois do toque. */
-        .jf-data { font-family: var(--mono, monospace); font-size: 12px; letter-spacing: .04em; color: #5B6661; }
-        .jf-data-edit { display: flex; gap: 8px; align-items: center; }
+           data, as três perguntas num cartão de linhas, o resumo da mesa e as
+           listas dobráveis de quem vai. Tudo desenhado para caber num ecrã
+           sem rolar — daí não haver aqui um título por pergunta nem notas de
+           rodapé. Os botões neutralizam a regra global button:hover (verde
+           escuro), que de outra forma ganhava sempre e no telemóvel ficava
+           colada depois do toque. */
+        /* Cabeçalho: a data (e a hora do jogo) numa linha de leitura. O campo
+           só aparece a quem pode gerir o jogo, e só depois do lápis. */
+        .jf-sub {
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            font-family: var(--mono, monospace); font-size: 11.5px; letter-spacing: .04em; color: #7C8782;
+        }
+        .jf-pencil, .jf-pencil:hover {
+            background: #FAFBF9; border: 1px solid #E6EAE4; color: #7C8782; border-radius: 6px;
+            width: 22px; height: 22px; padding: 0; display: inline-flex; align-items: center;
+            justify-content: center; font-size: 11px; line-height: 1; cursor: pointer;
+        }
+        .jf-pencil:active { transform: scale(.94); }
+        .jf-data-edit { display: flex; margin-top: 8px; }
+        /* O [hidden] do browser não colapsa um display de autor (ver
+           "Armadilhas do CSS" no CLAUDE.md): sem este par, o campo da data e
+           as listas dobráveis apareciam na mesma. */
+        .jf-data-edit[hidden] { display: none; }
         .jf-data-edit input[type="date"] { flex: 1; font-family: var(--mono, monospace); font-size: 12.5px; }
-        .jf-data-btn, .jf-data-btn:hover {
-            padding: 10px 14px; border-radius: 9px; border: 1.5px solid #0E7A4F;
-            background: #fff; color: #0E7A4F; font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap;
+
+        /* Cartão das respostas: pergunta à esquerda, botões à direita, uma
+           linha por pergunta. Antes era um título e dois botões de largura
+           inteira cada — três perguntas enchiam meio ecrã. */
+        .jf-card { margin-top: 12px; border: 1px solid #E6EAE4; border-radius: 12px; overflow: hidden; text-align: left; }
+        .jf-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 11px; }
+        .jf-row + .jf-row { border-top: 1px solid #EFF2EE; }
+        .jf-q { font-size: 12.5px; font-weight: 700; color: #0B3B2B; }
+        .jf-seg { display: flex; border: 1px solid #E6EAE4; border-radius: 8px; overflow: hidden; flex: 0 0 auto; }
+        .jf-sbtn, .jf-sbtn:hover {
+            background: #fff; border: none; color: #7C8782; font-size: 12px;
+            padding: 7px 11px; line-height: 1.1; cursor: pointer;
         }
-        .jf-data-btn:active { transform: scale(.98); background: #E2EFE8; }
-        .jf-lbl { margin-top: 14px; font-size: 12.5px; font-weight: 700; color: #0B3B2B; }
-        .jf-btns { display: flex; gap: 8px; margin-top: 8px; }
-        .jf-btn, .jf-btn:hover {
-            flex: 1; padding: 11px 8px; border-radius: 10px; border: 1.5px solid #DDE3DD;
-            background: #fff; color: #5B6661; font-size: 13.5px; font-weight: 700; cursor: pointer;
+        .jf-sbtn + .jf-sbtn { border-left: 1px solid #E6EAE4; }
+        .jf-sbtn.vou.on, .jf-sbtn.vou.on:hover { background: #E2EFE8; color: #0E5C3F; }
+        .jf-sbtn.nao.on, .jf-sbtn.nao.on:hover { background: rgba(179,64,47,.10); color: #B3402F; }
+        .jf-sbtn:active { transform: scale(.97); }
+        .jf-chip-hora {
+            flex: 0 0 auto; width: auto; font-family: var(--mono, monospace); font-size: 12.5px;
+            font-weight: 700; color: #A9B2AC; background: #F3F5F1; border: 1px solid #E6EAE4;
+            border-radius: 8px; padding: 6px 10px;
         }
-        .jf-btn.vou.on, .jf-btn.vou.on:hover { background: #E2EFE8; color: #0E5C3F; border-color: #0E7A4F; }
-        .jf-btn.nao.on, .jf-btn.nao.on:hover { background: rgba(179,64,47,.10); color: #B3402F; border-color: #B3402F; }
-        .jf-btn:active { transform: scale(.98); }
+        .jf-chip-hora.on { color: #0E5C3F; background: #E2EFE8; border-color: #CBE1D5; }
+
         .jf-conv { margin-top: 12px; font-size: 12px; color: #5B6661; line-height: 1.45; }
         .jf-conv strong { color: #0B3B2B; }
-        .jf-nota { margin-top: 12px; padding: 9px 11px; border-radius: 10px; background: #FBF4DC; color: #8A6D14; font-size: 12px; line-height: 1.45; text-align: left; }
         .jf-aviso { margin-top: 12px; font-size: 12px; color: #B3402F; line-height: 1.45; }
-        .jf-hint { margin-top: 10px; font-size: 11.5px; color: #7C8782; line-height: 1.45; text-align: left; }
-        .jf-hint strong { color: #5B6661; }
-        /* Hora do Sá: o campo (mesmo desenho da linha da data, reaproveita o
-           .jf-data-btn) e, mais abaixo, quem vai com a hora de cada um. */
-        .jf-hora-edit { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
-        .jf-hora-edit input[type="time"] { flex: 1; font-family: var(--mono, monospace); font-size: 12.5px; }
-        .jf-horas { margin-top: 6px; border: 1px solid #E6EAE4; border-radius: 10px; overflow: hidden; }
+
+        /* Resumo da mesa: a hora do último a poder chegar em destaque e, por
+           baixo, todas as horas com quanta gente há em cada uma — vão uns mais
+           cedo com frequência, e é isso que decide se a mesa se pede em dois
+           tempos. */
+        .jf-mesa { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: #E2EFE8; text-align: left; }
+        .jf-mesa.vazia { font-size: 12px; color: #5B6661; line-height: 1.45; }
+        .jf-mesa-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+        .jf-mesa-lbl {
+            display: block; font-family: var(--mono, monospace); font-size: 9.5px; font-weight: 600;
+            letter-spacing: .11em; text-transform: uppercase; color: #4C7A64;
+        }
+        .jf-mesa-top strong { font-family: var(--mono, monospace); font-size: 23px; font-weight: 700; color: #0E5C3F; line-height: 1.15; }
+        .jf-mesa-falta { font-size: 11px; color: #5B6661; text-align: right; line-height: 1.35; }
+        .jf-mesa-horas { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+        .jf-mesa-horas span {
+            font-family: var(--mono, monospace); font-size: 11px; font-weight: 600; color: #0E5C3F;
+            background: rgba(255,255,255,.75); border-radius: 20px; padding: 3px 9px; line-height: 1.3;
+        }
+        .jf-mesa-horas em { font-style: normal; font-weight: 400; color: #5B6661; margin-left: 3px; }
+
+        /* Listas dobráveis (quem vai ao Sá / ao jogo): o resumo é a linha, o
+           detalhe abre-se por baixo dela sem moldura repetida. */
+        .jf-fold, .jf-fold:hover {
+            display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
+            margin-top: 8px; padding: 9px 11px; background: #fff; border: 1px solid #E6EAE4;
+            border-radius: 10px; font-family: inherit; font-size: 12px; font-weight: 400;
+            letter-spacing: normal; text-transform: none; color: #5B6661; text-align: left; cursor: pointer;
+        }
+        .jf-fold strong { color: #0B3B2B; }
+        .jf-fold.aberto, .jf-fold.aberto:hover { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+        .jf-chev { color: #A9B2AC; font-size: 10px; transition: transform .15s; }
+        .jf-fold.aberto .jf-chev { transform: rotate(180deg); }
+        .jf-fold-corpo[hidden] { display: none; }
+        .jf-horas { border: 1px solid #E6EAE4; border-top: none; border-radius: 0 0 10px 10px; overflow: hidden; }
         .jf-hora-linha {
             display: flex; justify-content: space-between; align-items: center; gap: 10px;
             padding: 7px 11px; font-size: 12.5px; color: #0B3B2B; text-align: left;
@@ -664,9 +717,10 @@ html,body{touch-action:pan-x pan-y}
         .jf-hora-linha + .jf-hora-linha { border-top: 1px solid #EFF2EE; }
         .jf-h-ok { font-family: var(--mono, monospace); font-weight: 700; color: #0E5C3F; }
         .jf-h-falta { font-size: 11.5px; color: #A9B2AC; }
-        .jf-mesa { margin-top: 8px; padding: 9px 11px; border-radius: 10px; background: #E2EFE8; color: #0E5C3F; font-size: 12.5px; line-height: 1.45; text-align: left; }
-        .jf-mesa strong { font-family: var(--mono, monospace); font-size: 14px; }
-        .jf-mesa span { color: #5B6661; font-size: 11.5px; }
+        .jf-nomes {
+            border: 1px solid #E6EAE4; border-top: none; border-radius: 0 0 10px 10px;
+            padding: 9px 11px; font-size: 12px; color: #5B6661; line-height: 1.45; text-align: left;
+        }
         @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes modalSlideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
