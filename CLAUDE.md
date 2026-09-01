@@ -145,12 +145,13 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
 - **A folha tem de caber num ecrã** (`_jogoSheetHTML`): quem a abre vem
   responder e ver a que horas é a mesa, e isso não pode estar atrás de scroll.
   Daí o desenho actual — a data numa linha de leitura com um lápis
-  (`jogoSheetMostrarData`) em vez de um campo sempre à vista, as três perguntas
-  como três linhas de um cartão (`_jfLinha`/`_jfSeg`) em vez de três títulos com
-  botões de largura inteira, a data e a hora a gravar **ao sair do campo**
+  (`jogoSheetMostrarData`) em vez de um campo sempre à vista, as perguntas
+  como linhas de um cartão (`_jfLinha`/`_jfSeg`) em vez de títulos com
+  botões de largura inteira — e as duas que só interessam a parte do grupo (a
+  hora do Sá, a gamebox) só a essa parte aparecem, a data e a hora a gravar **ao sair do campo**
   (`onblur`) em vez de um botão Guardar cada — o `change` do seletor dispara a
   cada roda que se mexe, e gravar aí era um PATCH e uma notificação por volta,
-  com o redesenho a fechar o seletor na cara de quem o estava a usar; e quem vai numa **tabela só** — nome · Sá · horas · jogo
+  com o redesenho a fechar o seletor na cara de quem o estava a usar; e quem vai numa **tabela só** — nome · Sá · horas · jogo · box
   (`_jfTabelaHTML`) — **dobrada** (`_jfFoldHTML`, estado em `_jfFold` para não
   fechar a cada resposta). A tabela substituiu duas listas para as mesmas
   pessoas: quem ia ao jogo sem ir ao Sá aparecia numa e faltava na outra, e
@@ -179,10 +180,28 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   (`sbMarcarPresencaJogo`) SECURITY DEFINER para os outros. `VAI_JOGO_COL`
   degrada como as outras colunas opcionais — sem a migração, some-se a
   segunda pergunta e fica só a de sempre.
-  A resposta "não vou" **notifica o grupo todo** (`sbNotificarGamebox`): o
-  lugar na gamebox fica potencialmente livre e isso só serve a quem o quiser
-  antes do dia. Só dispara na **mudança** para "não vou" — carregar duas vezes
-  no mesmo botão não volta a tocar os telemóveis todos.
+  A resposta "não vou" **já não notifica ninguém** — quem avisa o grupo é a
+  pergunta da gamebox, a seguir.
+- **Gamebox disponível?** (`db/gamebox.sql`, coluna `eventos.gamebox`, jsonb
+  `{"Nome": true|false}`): quarta pergunta da folha, e **só aparece a quem já
+  disse que NÃO vai ao jogo** — quem lá vai ocupa a própria box, e por isso
+  passar a "vou" **apaga** a resposta (`marcarPresencaJogo`), como desmarcar a
+  ida ao Sá apaga a hora. Ao contrário do "vais ao jogo?", aqui o silêncio
+  **nunca** vale por resposta: sem um sim explícito não há box livre
+  (`gameboxDisponivelPessoa`). Ninguém dá a box sem o dizer — e quem a dá pode
+  fazê-lo só até certa hora, ou até alguém a pedir.
+  **É esta resposta que notifica o grupo todo** (`sbNotificarGamebox`, tipo
+  `gamebox` na `push-notificar.ts`), e já não o "não vou ao jogo": não ir ao
+  jogo e a box ficar livre são coisas diferentes, e o grupo era chamado por
+  lugares que muitas vezes não existiam — um aviso que costuma não dar em nada
+  deixa de se ler. Só na **mudança** para disponível; retirar a box não toca em
+  telemóvel nenhum. Mesmo padrão de permissões e de degradação das outras:
+  PATCH normal para quem edita o evento, `marcar_gamebox` (`sbMarcarGamebox`)
+  SECURITY DEFINER para os outros — e essa **volta a confirmar no servidor**
+  que quem vai ao jogo não a pode disponibilizar. Sem a migração,
+  `GAMEBOX_COL=false`, a pergunta some-se e a tabela perde a coluna da box.
+  As boxes livres contam-se na linha dobrada da folha e numa **pílula própria**
+  no cartão dos Próximos Jogos (`.sbi-box`), que só aparece quando há alguma.
 - **A que horas podes estar no Sá** (`db/sa-hora.sql`, coluna
   `eventos.sa_hora`, jsonb `{"Nome": "HH:MM"}`): terceira pergunta da folha,
   só para quem já disse que **vai** ao Sá. Saber quem vai nunca chegou para

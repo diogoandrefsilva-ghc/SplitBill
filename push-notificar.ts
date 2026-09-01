@@ -12,10 +12,12 @@
 //   'pedido_acesso'        sbSolicitarAcesso() → avisa o ADMIN_EMAIL quando
 //                          alguém pede acesso à app pela primeira vez
 //                          (fire-and-forget)
-//   'gamebox'              marcarPresencaJogo(false) → o grupo todo menos quem
-//                          desistiu: há um lugar na gamebox potencialmente
-//                          livre, e só serve saber-se antes do dia
-//                          (fire-and-forget)
+//   'gamebox'              marcarGamebox(true) → o grupo todo menos quem a deu:
+//                          uma gamebox ficou livre, e só serve saber-se antes
+//                          do dia. Quem disparava isto era o "não vou ao
+//                          jogo", e avisava a mais — não ir ao jogo não quer
+//                          dizer box livre (pode já estar dada, ou ficar
+//                          livre só até certa hora) (fire-and-forget)
 //   'hora_sa'              marcarHoraSa() → só quem trata da marcação da mesa
 //                          no Sá, com a hora a partir da qual a pessoa pode lá
 //                          estar (fire-and-forget)
@@ -160,8 +162,8 @@ function montarMensagem(tipo: Tipo, p: Pessoa, descricao?: string, quem?: string
   const valor = (p.valor ?? 0).toFixed(2);
   if (tipo === "gamebox") {
     return {
-      title: "🎟️ Gamebox possivelmente livre",
-      body: `${quem || "Alguém"} não vai ao jogo${suf} — pode haver lugar a mais`,
+      title: "🎟️ Gamebox disponível",
+      body: `${quem || "Alguém"} disponibilizou a gamebox${suf} — quem a quiser, que diga`,
     };
   }
   if (tipo === "hora_sa") {

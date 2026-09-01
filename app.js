@@ -971,6 +971,7 @@ function criarEvento(opts) {
         amigos: novosAmigos,
         menu: novoMenu,
         jogo: {},
+        gamebox: {},
         saHora: {},
         // Criado à mão para hoje (ou para uma data passada) = está a começar
         // agora: nasce aberto. Marcado para a frente, nasce em agenda, como os
@@ -4402,6 +4403,7 @@ async function _jogoCriarEvento(j, id, amigos, menu) {
         amigos: (amigos || []).slice(),
         menu: Object.assign({}, menu || {}),
         jogo: {},
+        gamebox: {},
         saHora: {},
         // Agenda: só passa a "em aberto" quando alguém abrir o jogo (abrirJogo).
         aberto: false
@@ -4526,7 +4528,7 @@ function _jogoSincResumo(r) {
    Sem a migração, ABERTO_COL fica false, o botão de abrir esconde-se e tudo se
    comporta como antes: manda a data (jogoAberto cai no ramo do legado).
 
-   No mesmo cartão há TRÊS perguntas. "Vais ao Sá?" mexe na lista de
+   No mesmo cartão há QUATRO perguntas. "Vais ao Sá?" mexe na lista de
    convocados do evento (`ev.amigos`) — é o que sempre existiu, e é o que
    conta para o consumo (quem aparece na grelha de amigos). A HORA a partir da
    qual se pode lá estar (`ev.saHora`, migração db/sa-hora.sql) só se pergunta
@@ -4536,16 +4538,24 @@ function _jogoSincResumo(r) {
    (`ev.jogo`, migração db/vai-jogo.sql): por defeito segue o Sá
    (vaiAoJogoPessoa), mas cada um pode responder às duas de forma diferente —
    ir ao jogo sem ir ao Sá acontece com frequência, e é o que interessa para
-   gerir lugares. Quem pode editar o evento grava pelo caminho normal; os
-   outros vão pelas funções do servidor `marcar_presenca` /
-   `marcar_presenca_jogo` / `marcar_hora_sa` (ver sbMarcarPresenca,
-   sbMarcarPresencaJogo, sbMarcarHoraSa).
+   gerir lugares. "Gamebox disponível?" (`ev.gamebox`, migração
+   db/gamebox.sql) só se pergunta a quem já disse que NÃO vai — quem lá vai
+   ocupa a própria box — e aqui o silêncio nunca vale por resposta: sem um sim
+   explícito não há box livre (gameboxDisponivelPessoa). Quem pode editar o
+   evento grava pelo caminho normal; os outros vão pelas funções do servidor
+   `marcar_presenca` / `marcar_presenca_jogo` / `marcar_hora_sa` /
+   `marcar_gamebox` (ver sbMarcarPresenca, sbMarcarPresencaJogo,
+   sbMarcarHoraSa, sbMarcarGamebox).
 
    TRÊS DAS RESPOSTAS SAEM DAQUI EM NOTIFICAÇÃO, porque só servem se chegarem
-   antes do dia: um "não vou ao jogo" avisa o grupo de que há lugar na gamebox
-   a mais (sbNotificarGamebox), uma hora do Sá avisa quem marca a mesa
+   antes do dia: uma box disponibilizada avisa o grupo de que há lugar a mais
+   (sbNotificarGamebox), uma hora do Sá avisa quem marca a mesa
    (sbNotificarHoraSa), e a mesa marcada avisa o grupo (sbNotificarMesa) —
-   é a resposta que todos esperavam, e chega uma vez por evento. O resto do grupo não precisa de saber a hora de cada
+   é a resposta que todos esperavam, e chega uma vez por evento. Quem avisava
+   antes era o "não vou ao jogo", e avisava a mais: não ir ao jogo e a box
+   ficar livre são coisas diferentes (pode já estar dada, pode ficar livre só
+   até certa hora), e o grupo era chamado por lugares que não existiam.
+   O resto do grupo não precisa de saber a hora de cada
    um — vê-a na folha: o resumo traz as horas todas com quanta gente há em
    cada uma, e a tabela de quem vai abre-se a um toque (_quemVaiHTML). */
 
@@ -4604,6 +4614,34 @@ function vouAoJogoReal(ev) {
     return meus.some(m => vaiAoJogoPessoa(ev, m));
 }
 
+/* A gamebox: quem NÃO vai ao jogo pode deixar a sua livre para quem a
+   quiser. Duas regras que o resto da secção assume:
+   1) quem VAI ao jogo nunca a tem disponível — ocupa-a ele, e por isso a
+      pergunta nem lhe aparece na folha (marcarPresencaJogo apaga a resposta
+      a quem passe a ir);
+   2) ao contrário do "vais ao jogo?", o silêncio NÃO vale por resposta: sem
+      um sim explícito não há box livre. Ninguém dá a box sem o dizer, e o
+      aviso ao grupo sai desta resposta (ver marcarGamebox). */
+function gameboxDisponivelPessoa(ev, nome) {
+    if (!GAMEBOX_COL) return false;
+    if (vaiAoJogoPessoa(ev, nome)) return false;
+    return !!(ev.gamebox || {})[nome];
+}
+
+// A MINHA box está disponível? true/false, ou null se a conta não tem nome
+// associado. Agrega por conta como o vouAoSa: basta uma das minhas.
+function tenhoGameboxDisponivel(ev) {
+    const meus = meusAmigos();
+    if (!meus.length) return null;
+    return meus.some(m => gameboxDisponivelPessoa(ev, m));
+}
+
+// Os nomes com box livre neste jogo — a contagem que o cartão dos Próximos
+// Jogos mostra e que a folha resume.
+function gameboxDisponiveis(ev) {
+    return Object.keys((ev && ev.gamebox) || {}).filter(n => gameboxDisponivelPessoa(ev, n));
+}
+
 // A que horas ESTE NOME pode estar no Sá? '' = ainda não respondeu. Só conta
 // para quem vai ao Sá: a resposta de quem entretanto desistiu é apagada
 // (ver marcarPresenca), mas um evento antigo pode trazê-la à mesma.
@@ -4629,14 +4667,15 @@ function horasSaEvento(ev) {
         .sort((a, b) => (a.hora ? 0 : 1) - (b.hora ? 0 : 1) || a.hora.localeCompare(b.hora) || a.nome.localeCompare(b.nome, 'pt'));
 }
 
-// Quem vai ao Sá e quem vai ao jogo neste evento — contagens agregadas (não a
-// resposta desta conta), usadas na folha e no cartão dos Próximos Jogos.
+// Quem vai ao Sá, quem vai ao jogo e que boxes estão livres neste evento —
+// contagens agregadas (não a resposta desta conta), usadas na folha e no
+// cartão dos Próximos Jogos.
 function contagemPresencas(ev) {
     const sa = (ev.amigos || []).slice();
     const nomes = new Set(sa);
     Object.keys(ev.jogo || {}).forEach(n => nomes.add(n));
     const jogo = Array.from(nomes).filter(n => vaiAoJogoPessoa(ev, n));
-    return { sa, jogo };
+    return { sa, jogo, box: gameboxDisponiveis(ev) };
 }
 
 // "1 vai" / "3 vão" — concordância do verbo com a contagem.
@@ -4766,13 +4805,21 @@ async function marcarPresencaJogo(id, vai) {
     const meus = meusAmigos();
     if (!meus.length) { mostrarMensagem('⚠️ A tua conta ainda não está associada a nenhum nome — pede ao administrador', false); return false; }
 
-    // Guardado ANTES de escrever: é a diferença entre "mudou para não vou" e
-    // "voltou a carregar no mesmo botão" que decide se sai o aviso da gamebox.
-    const antesVai = vouAoJogoReal(ev);
     const antes = Object.assign({}, ev.jogo || {});
+    const antesBox = Object.assign({}, ev.gamebox || {});
     const novo = Object.assign({}, antes);
     meus.forEach(m => { novo[m] = !!vai; });
     ev.jogo = novo;
+    // Quem passa a ir ao jogo ocupa a própria box: a oferta que lá estivesse
+    // cai — como a hora do Sá cai a quem desmarca a ida (ver marcarPresenca).
+    // Apaga-se a chave em vez de a pôr a false: quem voltar a não ir tem de
+    // disponibilizar a box outra vez, de propósito.
+    const tinhaBox = meus.some(m => Object.prototype.hasOwnProperty.call(antesBox, m));
+    if (vai && tinhaBox) {
+        const g = Object.assign({}, antesBox);
+        meus.forEach(m => { delete g[m]; });
+        ev.gamebox = g;
+    }
     salvarHistoricoLocal();
 
     let ok;
@@ -4780,16 +4827,59 @@ async function marcarPresencaJogo(id, vai) {
         try { await sbGuardarEvento(ev); ok = true; } catch (e) { ok = false; }
     } else {
         ok = await sbMarcarPresencaJogo(ev.id, vai);
+        // A resposta ao jogo e a box vivem em colunas diferentes e a função do
+        // servidor só mexe na primeira — sem esta segunda chamada a box ficava
+        // anunciada como livre para quem afinal vai ao jogo.
+        if (ok && vai && tinhaBox && GAMEBOX_COL) await sbMarcarGamebox(ev.id, null);
     }
     if (!ok) {
         ev.jogo = antes;
+        ev.gamebox = antesBox;
         salvarHistoricoLocal();
         return false;
     }
-    // Lugar na gamebox potencialmente livre — avisa o grupo. Só na MUDANÇA
-    // para "não vou": quem carrega duas vezes no mesmo botão não volta a tocar
-    // os telemóveis todos.
-    if (!vai && antesVai !== false) sbNotificarGamebox(ev, meus[0] || '');
+    // NÃO se notifica ninguém daqui: um "não vou" não quer dizer box livre —
+    // quem a quiser dar diz-lo na pergunta da gamebox, e é essa que avisa.
+    return true;
+}
+
+/* Disponibiliza (ou retira) a MINHA gamebox neste jogo — a resposta que avisa
+   o grupo. Só faz sentido a quem NÃO vai: quem lá vai ocupa a própria box. A
+   folha nem lhe mostra a pergunta, mas confirma-se aqui à mesma (e outra vez
+   na função do servidor, ver db/gamebox.sql). */
+async function marcarGamebox(id, disp) {
+    const ev = historico.find(e => String(e.id) === String(id));
+    if (!ev || ev.totalFatura) return false;
+    if (!GAMEBOX_COL) { mostrarMensagem('⚠️ Falta a coluna eventos.gamebox — corre db/gamebox.sql no Supabase', false); return false; }
+    const meus = meusAmigos();
+    if (!meus.length) { mostrarMensagem('⚠️ A tua conta ainda não está associada a nenhum nome — pede ao administrador', false); return false; }
+    if (disp && vouAoJogoReal(ev)) { mostrarMensagem('⚠️ Vais ao jogo — a box é tua para lá estares', false); return false; }
+
+    // Guardado ANTES de escrever: é a diferença entre "passou a disponível" e
+    // "voltou a carregar no mesmo botão" que decide se sai o aviso ao grupo.
+    const antesDisp = tenhoGameboxDisponivel(ev);
+    const antes = Object.assign({}, ev.gamebox || {});
+    const novo = Object.assign({}, antes);
+    meus.forEach(m => { novo[m] = !!disp; });
+    ev.gamebox = novo;
+    salvarHistoricoLocal();
+
+    let ok;
+    if (podeEditarEvento(ev)) {
+        try { await sbGuardarEvento(ev); ok = true; } catch (e) { ok = false; }
+    } else {
+        ok = await sbMarcarGamebox(ev.id, !!disp);
+    }
+    if (!ok) {
+        ev.gamebox = antes;
+        salvarHistoricoLocal();
+        return false;
+    }
+    // O aviso ao grupo é ESTE. Só na MUDANÇA para disponível: carregar duas
+    // vezes no mesmo botão não volta a tocar os telemóveis todos, e retirar a
+    // box não é notícia para ninguém — quem a queria já foi falar com quem a
+    // deu.
+    if (disp && !antesDisp) sbNotificarGamebox(ev, meus[0] || '');
     return true;
 }
 
@@ -4964,39 +5054,54 @@ function _jfFoldHTML(qual, resumo, corpo) {
 }
 
 // Uma linha da tabela por pessoa: os convocados do Sá pela hora a que podem
-// chegar (horasSaEvento), e a seguir quem vai ao jogo sem ir ao Sá — esses não
-// estão em ev.amigos e de outra forma não apareciam em lado nenhum.
+// chegar (horasSaEvento), e a seguir quem vai ao jogo ou deu a box sem ir ao
+// Sá — esses não estão em ev.amigos e de outra forma não apareciam em lado
+// nenhum. Quem deu a box é o caso mais fácil de perder: não vai ao jogo nem
+// ao Sá, e é dele que o grupo anda à procura.
 function _quemVaiLinhas(ev) {
-    const noSa = horasSaEvento(ev).map(l => ({ nome: l.nome, hora: l.hora, sa: true, jogo: vaiAoJogoPessoa(ev, l.nome) }));
-    const soJogo = Object.keys(ev.jogo || {})
-        .filter(n => !(ev.amigos || []).includes(n) && vaiAoJogoPessoa(ev, n))
+    const noSa = horasSaEvento(ev).map(l => ({
+        nome: l.nome, hora: l.hora, sa: true,
+        jogo: vaiAoJogoPessoa(ev, l.nome), box: gameboxDisponivelPessoa(ev, l.nome)
+    }));
+    const fora = new Set(Object.keys(ev.jogo || {}).concat(Object.keys(ev.gamebox || {})));
+    const outros = Array.from(fora)
+        .filter(n => !(ev.amigos || []).includes(n) && (vaiAoJogoPessoa(ev, n) || gameboxDisponivelPessoa(ev, n)))
         .sort((a, b) => a.localeCompare(b, 'pt'))
-        .map(nome => ({ nome, hora: '', sa: false, jogo: true }));
-    return noSa.concat(soJogo);
+        .map(nome => ({
+            nome, hora: '', sa: false,
+            jogo: vaiAoJogoPessoa(ev, nome), box: gameboxDisponivelPessoa(ev, nome)
+        }));
+    return noSa.concat(outros);
 }
 
 function _jfSN(sim) { return '<span class="' + (sim ? 'jf-sim' : 'jf-nao') + '">' + (sim ? '✓' : '✕') + '</span>'; }
 
-// Sem a migração db/sa-hora.sql não há horas nenhumas: a tabela fica com três
-// colunas em vez de quatro, e o resumo dos votos não chega a aparecer.
+// Cada migração em falta tira uma coluna: sem db/sa-hora.sql saem as horas
+// (.sem-horas), sem db/gamebox.sql não entra a box (.com-box). O resumo dos
+// votos também não chega a aparecer sem a primeira.
 function _jfTabelaHTML(linhas) {
     if (!linhas.length) return '<div class="jf-nomes">Ainda ninguém respondeu.</div>';
     const h = '<div class="jf-tr jf-th"><span class="jf-tn">Quem</span><span>Sá</span>'
-            + (SA_HORA_COL ? '<span>Horas</span>' : '') + '<span>Jogo</span></div>'
+            + (SA_HORA_COL ? '<span>Horas</span>' : '') + '<span>Jogo</span>'
+            + (GAMEBOX_COL ? '<span>Box</span>' : '') + '</div>'
             + linhas.map(l => '<div class="jf-tr"><span class="jf-tn">' + _calEsc(l.nome) + '</span>'
                 + _jfSN(l.sa)
                 + (SA_HORA_COL ? '<span class="jf-tht' + (l.hora ? '' : ' vazia') + '">' + (l.hora ? _calEsc(l.hora) : '—') + '</span>' : '')
-                + _jfSN(l.jogo) + '</div>').join('');
-    return '<div class="jf-tab' + (SA_HORA_COL ? '' : ' sem-horas') + '">' + h + '</div>';
+                + _jfSN(l.jogo)
+                + (GAMEBOX_COL ? _jfSN(l.box) : '') + '</div>').join('');
+    return '<div class="jf-tab' + (SA_HORA_COL ? '' : ' sem-horas') + (GAMEBOX_COL ? ' com-box' : '') + '">' + h + '</div>';
 }
 
 function _quemVaiHTML(ev) {
     const linhas = _quemVaiLinhas(ev);
     const nSa = linhas.filter(l => l.sa).length;
     const nJogo = linhas.filter(l => l.jogo).length;
-    // A linha fechada leva as duas contagens: é o que antes obrigava a duas
-    // listas separadas só para as ler.
-    const resumo = '<strong>' + nSa + '</strong> ' + _pluralVai(nSa) + ' ao Sá · <strong>' + nJogo + '</strong> ao jogo';
+    const nBox = linhas.filter(l => l.box).length;
+    // A linha fechada leva as contagens: é o que antes obrigava a duas listas
+    // separadas só para as ler. As boxes só aparecem quando há alguma — é a
+    // única das três que é notícia, e um "0 box" a cada jogo era ruído.
+    const resumo = '<strong>' + nSa + '</strong> ' + _pluralVai(nSa) + ' ao Sá · <strong>' + nJogo + '</strong> ao jogo'
+                 + (nBox ? ' · <strong>' + nBox + '</strong> box ' + (nBox === 1 ? 'livre' : 'livres') : '');
     return ((SA_HORA_COL || MESA_HORA_COL) ? _horasResumoHTML(ev) : '') + _jfFoldHTML('quem', resumo, _jfTabelaHTML(linhas));
 }
 
@@ -5005,11 +5110,12 @@ function _jfLinha(pergunta, controlo) {
     return '<div class="jf-row"><span class="jf-q">' + pergunta + '</span>' + controlo + '</div>';
 }
 // Botão duplo Vou/Não vou. `vai` pode ser null (conta sem nome associado), e
-// aí nenhum dos dois fica ligado.
-function _jfSeg(id, fn, vai) {
+// aí nenhum dos dois fica ligado. `sim`/`nao` trocam o texto para a pergunta
+// que não é de ir a lado nenhum (a da gamebox).
+function _jfSeg(id, fn, vai, sim, nao) {
     return '<span class="jf-seg">'
-         + '<button type="button" class="jf-sbtn vou' + (vai ? ' on' : '') + '" onclick="' + fn + '(' + id + ',true)">✓ Vou</button>'
-         + '<button type="button" class="jf-sbtn nao' + (vai === false ? ' on' : '') + '" onclick="' + fn + '(' + id + ',false)">✕ Não</button>'
+         + '<button type="button" class="jf-sbtn vou' + (vai ? ' on' : '') + '" onclick="' + fn + '(' + id + ',true)">' + (sim || '✓ Vou') + '</button>'
+         + '<button type="button" class="jf-sbtn nao' + (vai === false ? ' on' : '') + '" onclick="' + fn + '(' + id + ',false)">' + (nao || '✕ Não') + '</button>'
          + '</span>';
 }
 
@@ -5053,7 +5159,15 @@ function _jogoSheetHTML(ev) {
                 '<input type="time" class="jf-chip-hora' + (minha ? ' on' : '') + '" id="jf-hora-input" step="300"'
                 + ' value="' + _calEsc(minha) + '" onblur="jogoSheetHoraSa(' + ev.id + ')">');
         }
-        h += _jfLinha('Vais ao jogo?', _jfSeg(ev.id, 'jogoSheetPresencaJogo', vouAoJogoReal(ev))) + '</div>';
+        const vouJogo = vouAoJogoReal(ev);
+        h += _jfLinha('Vais ao jogo?', _jfSeg(ev.id, 'jogoSheetPresencaJogo', vouJogo));
+        // A box só se pergunta a quem já disse que NÃO vai — quem lá vai
+        // ocupa a própria. É esta resposta, e já não o "não vou", que avisa o
+        // grupo de que pode haver lugar (ver marcarGamebox).
+        if (vouJogo === false && GAMEBOX_COL) {
+            h += _jfLinha('Gamebox disponível?', _jfSeg(ev.id, 'jogoSheetGamebox', tenhoGameboxDisponivel(ev), '✓ Sim', '✕ Não'));
+        }
+        h += '</div>';
     }
     return h + _quemVaiHTML(ev);
 }
@@ -5078,6 +5192,17 @@ async function jogoSheetPresenca(id, vai) {
 // por isso não precisa de redesenhar a grelha de amigos nem o histórico.
 async function jogoSheetPresencaJogo(id, vai) {
     const ok = await marcarPresencaJogo(id, vai);
+    if (!ok) return;
+    const ev = historico.find(e => String(e.id) === String(id));
+    const box = document.getElementById('modal-msg');
+    if (ev && box) box.innerHTML = _jogoSheetHTML(ev);
+    try { if (typeof renderInicio === 'function') renderInicio(); } catch (e) {}
+}
+
+// Irmã das anteriores para a gamebox. Redesenha a folha (a resposta muda a
+// tabela e o resumo) e o ecrã inicial (o cartão conta as boxes livres).
+async function jogoSheetGamebox(id, disp) {
+    const ok = await marcarGamebox(id, disp);
     if (!ok) return;
     const ev = historico.find(e => String(e.id) === String(id));
     const box = document.getElementById('modal-msg');
@@ -5754,6 +5879,15 @@ let PRESENCA_RPC = true;
 let VAI_JOGO_COL = true;
 let PRESENCA_JOGO_RPC = true;
 
+/* Gamebox disponível (`eventos.gamebox`, migração db/gamebox.sql) — quem não
+   vai ao jogo pode deixar a sua livre, e é essa resposta que avisa o grupo.
+   Mesmo padrão de degradação: sem a coluna, GAMEBOX_COL fica false, a pergunta
+   esconde-se e a tabela de quem vai perde a coluna da box — e aí ninguém é
+   notificado por causa de boxes (o "não vou ao jogo" já não notifica).
+   `GAMEBOX_RPC` é a irmã para `marcar_gamebox`. */
+let GAMEBOX_COL = true;
+let GAMEBOX_RPC = true;
+
 /* Hora a partir da qual cada um pode estar no Sá (`eventos.sa_hora`, migração
    db/sa-hora.sql) — é o que o Barrona precisa para marcar a mesa, e a que
    interessa é a do último a chegar. Mesmo padrão de degradação: sem a coluna,
@@ -5808,6 +5942,7 @@ async function sbCarregarDados() {
             MENU_COL = tem('menu');
             ABERTO_COL = tem('aberto');
             VAI_JOGO_COL = tem('vai_jogo');
+            GAMEBOX_COL = tem('gamebox');
             SA_HORA_COL = tem('sa_hora');
             MESA_HORA_COL = tem('mesa_hora');
             JOGO_ID_COL = tem('jogo_id');
@@ -5815,6 +5950,7 @@ async function sbCarregarDados() {
         if (!JOGO_ID_COL) console.warn('[SplitBill] coluna eventos.jogo_id ausente — corre db/jogo-id.sql para os jogos virem sozinhos do calendário do Goals');
         if (!ABERTO_COL) console.warn('[SplitBill] coluna eventos.aberto ausente — corre db/jogo-aberto.sql para o jogo só abrir quando alguém o abrir');
         if (!VAI_JOGO_COL) console.warn('[SplitBill] coluna eventos.vai_jogo ausente — corre db/vai-jogo.sql para separar "vais ao jogo?" do Sá');
+        if (!GAMEBOX_COL) console.warn('[SplitBill] coluna eventos.gamebox ausente — corre db/gamebox.sql para quem não vai ao jogo poder disponibilizar a box');
         if (!SA_HORA_COL) console.warn('[SplitBill] coluna eventos.sa_hora ausente — corre db/sa-hora.sql para recolher a que horas cada um pode estar no Sá');
         if (!MESA_HORA_COL) console.warn('[SplitBill] coluna eventos.mesa_hora ausente — corre db/mesa-hora.sql para o gestor da mesa poder pôr a hora a que a marcou');
         if (!FATURA_COL) console.warn('[SplitBill] coluna eventos.fatura ausente — corre db/fatura-detalhe.sql para guardar o detalhe da fatura no servidor');
@@ -5859,13 +5995,14 @@ async function sbCarregarDados() {
         // O mesmo vale para os convocados e o menu enquanto db/convocados-menu.sql
         // não for corrida: sem as colunas, o servidor não os devolve e o histórico
         // reconstruído por cima levava-os à frente.
-        const faturasLocais = {}, amigosLocais = {}, menusLocais = {}, jogoLocais = {}, saHoraLocais = {}, mesaHoraLocais = {};
+        const faturasLocais = {}, amigosLocais = {}, menusLocais = {}, jogoLocais = {}, gameboxLocais = {}, saHoraLocais = {}, mesaHoraLocais = {};
         (historico || []).forEach(e => {
             if (!e) return;
             if (e.fatura) faturasLocais[e.id] = e.fatura;
             if (Array.isArray(e.amigos) && e.amigos.length) amigosLocais[e.id] = e.amigos;
             if (e.menu && Object.keys(e.menu).length) menusLocais[e.id] = e.menu;
             if (e.jogo && Object.keys(e.jogo).length) jogoLocais[e.id] = e.jogo;
+            if (e.gamebox && Object.keys(e.gamebox).length) gameboxLocais[e.id] = e.gamebox;
             if (e.saHora && Object.keys(e.saHora).length) saHoraLocais[e.id] = e.saHora;
             if (e.mesaHora) mesaHoraLocais[e.id] = e.mesaHora;
         });
@@ -5906,6 +6043,7 @@ async function sbCarregarDados() {
                     evOrdens, evOfertas, ev.pagador),
                 menu: (MENU_COL && ev.menu && typeof ev.menu === 'object') ? ev.menu : (menusLocais[ev.id] || {}),
                 jogo: (VAI_JOGO_COL && ev.vai_jogo && typeof ev.vai_jogo === 'object') ? ev.vai_jogo : (jogoLocais[ev.id] || {}),
+                gamebox: (GAMEBOX_COL && ev.gamebox && typeof ev.gamebox === 'object') ? ev.gamebox : (gameboxLocais[ev.id] || {}),
                 saHora: (SA_HORA_COL && ev.sa_hora && typeof ev.sa_hora === 'object') ? ev.sa_hora : (saHoraLocais[ev.id] || {}),
                 mesaHora: MESA_HORA_COL ? (ev.mesa_hora || '') : (mesaHoraLocais[ev.id] || ''),
                 dividas: evDividas,
@@ -6089,6 +6227,33 @@ async function sbMarcarPresencaJogo(eventoId, vai) {
     }
 }
 
+/* Irmã das anteriores para a GAMEBOX (migração db/gamebox.sql). `disp` a null
+   apaga a resposta — é o que corre quando alguém passa a ir ao jogo. Mesma
+   razão para SECURITY DEFINER do lado da BD, e é lá que se volta a confirmar
+   que quem vai ao jogo não a pode disponibilizar. */
+async function sbMarcarGamebox(eventoId, disp) {
+    if (!_sbSession) return false;
+    if (!GAMEBOX_RPC) { mostrarMensagem('⚠️ Falta a função marcar_gamebox — corre db/gamebox.sql no Supabase', false); return false; }
+    try {
+        const r = await sbFetch(`${SB_URL}/rest/v1/rpc/marcar_gamebox`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Accept': 'application/json' }),
+            body: JSON.stringify({ p_evento_id: eventoId, p_disp: disp === null ? null : !!disp })
+        });
+        if (r.status === 404) {
+            GAMEBOX_RPC = false;
+            mostrarMensagem('⚠️ Falta a função marcar_gamebox — corre db/gamebox.sql no Supabase', false);
+            return false;
+        }
+        await sbOk(r, 'marcar a gamebox');
+        return true;
+    } catch (e) {
+        console.error('Erro ao marcar a gamebox:', e);
+        mostrarMensagem('⚠️ Não gravado [' + (e.ctx || 'rede') + ']: ' + sbErroLegivel(e), false);
+        return false;
+    }
+}
+
 /* Terceira irmã: a HORA a partir da qual posso estar no Sá (migração
    db/sa-hora.sql). `hora` a null apaga a resposta — é o que corre quando
    alguém deixa de ir ao Sá. Mesma razão para SECURITY DEFINER do lado da BD. */
@@ -6198,6 +6363,7 @@ async function sbGuardarEvento(ev, opts) {
         if (AMIGOS_COL) campos.amigos = ev.amigos || [];
         if (MENU_COL) campos.menu = ev.menu || {};
         if (VAI_JOGO_COL) campos.vai_jogo = ev.jogo || {};
+        if (GAMEBOX_COL) campos.gamebox = ev.gamebox || {};
         if (SA_HORA_COL) campos.sa_hora = ev.saHora || {};
         // A coluna aceita NULL (mesa por marcar) mas não '' — o CHECK do
         // formato rejeitava a string vazia (ver db/mesa-hora.sql).
@@ -7257,12 +7423,17 @@ function sbNotificarPagamentoDeclarado(pessoa, eventoId, valor) {
     sbEnviarPush('pagamento_declarado', [{ amigo: ev.pagador, valor }], ev.descricao, pessoa);
 }
 
-/* 4) Fire-and-forget: alguém disse que NÃO vai a um jogo → o lugar dele na
-   gamebox fica potencialmente livre, e quem o quiser aproveitar tem de saber
-   ANTES do dia. Vai para toda a gente do grupo menos quem desistiu — não é
-   uma dívida de ninguém, é uma oportunidade para os outros. Só dispara quando
-   a resposta MUDA para "não vou" (ver marcarPresencaJogo): repetir o toque no
-   mesmo botão não volta a tocar os telemóveis todos. */
+/* 4) Fire-and-forget: alguém DISPONIBILIZOU a gamebox → há um lugar livre, e
+   quem o quiser aproveitar tem de saber ANTES do dia. Vai para toda a gente do
+   grupo menos quem a deu — não é uma dívida de ninguém, é uma oportunidade
+   para os outros. Só dispara quando a box PASSA a disponível (ver
+   marcarGamebox): repetir o toque no mesmo botão não volta a tocar os
+   telemóveis todos.
+
+   Quem disparava isto era o "não vou ao jogo", e avisava a mais: não ir ao
+   jogo e a box ficar livre são coisas diferentes — pode já estar dada, ou
+   ficar livre só até certa hora. O grupo era chamado por lugares que não
+   existiam, e um aviso que costuma não dar em nada deixa de se ler. */
 function sbNotificarGamebox(ev, quem) {
     const pessoas = _grupoParaAvisar(ev, meusAmigos()).map(amigo => ({ amigo, valor: 0 }));
     sbEnviarPush('gamebox', pessoas, ev.descricao, quem);
@@ -7301,6 +7472,7 @@ function _grupoParaAvisar(ev, excluir) {
     amigosPorDefeito().forEach(add);
     (ev.amigos || []).forEach(add);
     Object.keys(ev.jogo || {}).forEach(add);
+    Object.keys(ev.gamebox || {}).forEach(add);
     return lista;
 }
 

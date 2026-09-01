@@ -725,14 +725,21 @@ html,body{touch-action:pan-x pan-y}
         .jf-chev { color: #A9B2AC; font-size: 10px; transition: transform .15s; }
         .jf-fold.aberto .jf-chev { transform: rotate(180deg); }
         .jf-fold-corpo[hidden] { display: none; }
-        /* Tabela de quem vai: nome · Sá · horas · jogo. Sem a migração das
-           horas fica com três colunas (.sem-horas). */
+        /* Tabela de quem vai: nome · Sá · horas · jogo · box. Cada migração em
+           falta tira uma coluna — sem as horas fica .sem-horas, sem a gamebox
+           não entra o .com-box —, e por isso são quatro combinações e não uma
+           grelha só. O nome é o único 1fr: é o que encolhe (com reticências)
+           para as colunas de largura fixa ficarem sempre alinhadas. */
         .jf-tab { border: 1px solid #E6EAE4; border-top: none; border-radius: 0 0 10px 10px; overflow: hidden; }
         .jf-tr {
             display: grid; grid-template-columns: 1fr 26px 48px 30px; align-items: center; gap: 8px;
             padding: 6px 11px; font-size: 12.5px; color: #0B3B2B; text-align: center;
         }
         .jf-tab.sem-horas .jf-tr { grid-template-columns: 1fr 26px 30px; }
+        /* Com a box são cinco colunas: aperta-se o intervalo antes de apertar
+           o nome, que é a única coisa que não se lê pelo símbolo. */
+        .jf-tab.com-box .jf-tr { grid-template-columns: 1fr 26px 48px 30px 30px; gap: 6px; }
+        .jf-tab.com-box.sem-horas .jf-tr { grid-template-columns: 1fr 26px 30px 30px; }
         .jf-tr + .jf-tr { border-top: 1px solid #EFF2EE; }
         .jf-th {
             font-family: var(--mono, monospace); font-size: 9px; font-weight: 600; letter-spacing: .1em;

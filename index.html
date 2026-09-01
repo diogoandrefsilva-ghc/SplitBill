@@ -801,6 +801,9 @@ if ('serviceWorker' in navigator) {
 .sbi-pos{background:var(--verde-claro,#E2EFE8);color:var(--verde-tinta,#0E5C3F);}
 .sbi-neg{background:rgba(179,64,47,.12);color:var(--rubro,#B3402F);}
 .sbi-calm{background:#EEF1ED;color:var(--ink-soft,#5B6661);}
+/* Boxes livres: cor própria (a do cartão de agenda) porque não é mais uma
+   contagem de presenças — é a única das três em que há alguma coisa a fazer. */
+.sbi-box{background:#F6ECC9;color:#7A5E12;}
 .sbi-pill-stack{display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex:0 0 auto;}
 
 /* Botão voltar ao início (páginas internas) */
@@ -1215,9 +1218,10 @@ if ('serviceWorker' in navigator) {
      semana · escudo · adversário/competição · símbolo da competição) — é o
      mesmo calendário nas duas apps e não fazia sentido lê-lo de duas maneiras.
      Três diferenças de propósito: não há ícone casa/fora (aqui é sempre
-     Alvalade), não há resultado (é sempre jogo por acontecer) e as contagens de
-     presenças — quantos vão ao jogo, quantos vão ao Sá — ficam antes do símbolo
-     da competição, que é matéria só desta app (ver contagemPresencas()).
+     Alvalade), não há resultado (é sempre jogo por acontecer) e as contagens
+     desta app — quantos vão ao jogo, quantos vão ao Sá e quantas gameboxes
+     ficaram livres — ficam antes do símbolo da competição (ver
+     contagemPresencas()).
      Hora, competição, jornada e escudo vêm de `goals.jogos` (secção CALENDÁRIO
      PARTILHADO no app.js); o que faltar sai da descrição do evento e o cartão
      fica inteiro na mesma. */
@@ -1249,11 +1253,17 @@ if ('serviceWorker' in navigator) {
 
     var sub = [f.competicao, f.jornada].filter(Boolean).map(esc).join(' · ');
 
+    // A terceira pílula (boxes livres) SÓ aparece quando há alguma: é a única
+    // das três que é notícia — quem chega ao ecrã inicial e vê um 🎟️ sabe que
+    // há lugar para pedir. Um "0" a cada jogo era ruído e uma linha a mais na
+    // altura do cartão (.sbj-pres empilha).
     var pres = '';
     if (cont) {
+      var nBox = (cont.box || []).length;
       pres = '<span class="sbj-pres">'
         + '<span class="sbi-pill sbi-calm">⚽ '+cont.jogo.length+'</span>'
         + '<span class="sbi-pill sbi-calm">🍽 '+cont.sa.length+'</span>'
+        + (nBox ? '<span class="sbi-pill sbi-box">🎟️ '+nBox+'</span>' : '')
         + '</span>';
     }
 
