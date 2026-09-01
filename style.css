@@ -672,29 +672,26 @@ html,body{touch-action:pan-x pan-y}
         }
         .jf-chip-hora.on { color: #0E5C3F; background: #E2EFE8; border-color: #CBE1D5; }
 
-        .jf-conv { margin-top: 12px; font-size: 12px; color: #5B6661; line-height: 1.45; }
-        .jf-conv strong { color: #0B3B2B; }
         .jf-aviso { margin-top: 12px; font-size: 12px; color: #B3402F; line-height: 1.45; }
 
-        /* Resumo da mesa: a hora do último a poder chegar em destaque e, por
-           baixo, todas as horas com quanta gente há em cada uma — vão uns mais
-           cedo com frequência, e é isso que decide se a mesa se pede em dois
-           tempos. */
+        /* Resumo dos votos das horas: cada hora com quanta gente a votou. Sem
+           conclusão nenhuma — com uns a chegar às 16:00 e outros às 19:00, a
+           mesa não se pede a uma hora só e quem a marca lê melhor o mapa. */
         .jf-mesa { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: #E2EFE8; text-align: left; }
         .jf-mesa.vazia { font-size: 12px; color: #5B6661; line-height: 1.45; }
-        .jf-mesa-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
         .jf-mesa-lbl {
             display: block; font-family: var(--mono, monospace); font-size: 9.5px; font-weight: 600;
             letter-spacing: .11em; text-transform: uppercase; color: #4C7A64;
         }
-        .jf-mesa-top strong { font-family: var(--mono, monospace); font-size: 23px; font-weight: 700; color: #0E5C3F; line-height: 1.15; }
-        .jf-mesa-falta { font-size: 11px; color: #5B6661; text-align: right; line-height: 1.35; }
-        .jf-mesa-horas { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+        .jf-mesa-horas { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
         .jf-mesa-horas span {
-            font-family: var(--mono, monospace); font-size: 11px; font-weight: 600; color: #0E5C3F;
-            background: rgba(255,255,255,.75); border-radius: 20px; padding: 3px 9px; line-height: 1.3;
+            font-family: var(--mono, monospace); font-size: 12px; font-weight: 700; color: #0E5C3F;
+            background: rgba(255,255,255,.8); border-radius: 20px; padding: 4px 10px; line-height: 1.3;
         }
         .jf-mesa-horas em { font-style: normal; font-weight: 400; color: #5B6661; margin-left: 3px; }
+        .jf-mesa-horas .jf-sem-horas {
+            font-family: inherit; font-size: 11.5px; font-weight: 400; color: #5B6661; background: rgba(255,255,255,.45);
+        }
 
         /* Listas dobráveis (quem vai ao Sá / ao jogo): o resumo é a linha, o
            detalhe abre-se por baixo dela sem moldura repetida. */
@@ -709,14 +706,24 @@ html,body{touch-action:pan-x pan-y}
         .jf-chev { color: #A9B2AC; font-size: 10px; transition: transform .15s; }
         .jf-fold.aberto .jf-chev { transform: rotate(180deg); }
         .jf-fold-corpo[hidden] { display: none; }
-        .jf-horas { border: 1px solid #E6EAE4; border-top: none; border-radius: 0 0 10px 10px; overflow: hidden; }
-        .jf-hora-linha {
-            display: flex; justify-content: space-between; align-items: center; gap: 10px;
-            padding: 7px 11px; font-size: 12.5px; color: #0B3B2B; text-align: left;
+        /* Tabela de quem vai: nome · Sá · horas · jogo. Sem a migração das
+           horas fica com três colunas (.sem-horas). */
+        .jf-tab { border: 1px solid #E6EAE4; border-top: none; border-radius: 0 0 10px 10px; overflow: hidden; }
+        .jf-tr {
+            display: grid; grid-template-columns: 1fr 26px 48px 30px; align-items: center; gap: 8px;
+            padding: 6px 11px; font-size: 12.5px; color: #0B3B2B; text-align: center;
         }
-        .jf-hora-linha + .jf-hora-linha { border-top: 1px solid #EFF2EE; }
-        .jf-h-ok { font-family: var(--mono, monospace); font-weight: 700; color: #0E5C3F; }
-        .jf-h-falta { font-size: 11.5px; color: #A9B2AC; }
+        .jf-tab.sem-horas .jf-tr { grid-template-columns: 1fr 26px 30px; }
+        .jf-tr + .jf-tr { border-top: 1px solid #EFF2EE; }
+        .jf-th {
+            font-family: var(--mono, monospace); font-size: 9px; font-weight: 600; letter-spacing: .1em;
+            text-transform: uppercase; color: #A9B2AC; background: #FAFBF9; padding: 5px 11px;
+        }
+        .jf-tn { text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .jf-sim { color: #0E7A4F; font-weight: 700; }
+        .jf-nao { color: #C9D2CB; }
+        .jf-tht { font-family: var(--mono, monospace); font-size: 11.5px; font-weight: 700; color: #0E5C3F; }
+        .jf-tht.vazia { color: #C9D2CB; font-weight: 400; }
         .jf-nomes {
             border: 1px solid #E6EAE4; border-top: none; border-radius: 0 0 10px 10px;
             padding: 9px 11px; font-size: 12px; color: #5B6661; line-height: 1.45; text-align: left;

@@ -148,8 +148,11 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   (`jogoSheetMostrarData`) em vez de um campo sempre à vista, as três perguntas
   como três linhas de um cartão (`_jfLinha`/`_jfSeg`) em vez de três títulos com
   botões de largura inteira, a data e a hora a gravar no `onchange` em vez de um
-  botão Guardar cada, e as listas de quem vai dobradas (`_jfFoldHTML`, estado em
-  `_jfFold` para não fecharem a cada resposta). **Coisa nova na folha = ver o que
+  botão Guardar cada, e quem vai numa **tabela só** — nome · Sá · horas · jogo
+  (`_jfTabelaHTML`) — **dobrada** (`_jfFoldHTML`, estado em `_jfFold` para não
+  fechar a cada resposta). A tabela substituiu duas listas para as mesmas
+  pessoas: quem ia ao jogo sem ir ao Sá aparecia numa e faltava na outra, e
+  cruzá-las era de cabeça. **Coisa nova na folha = ver o que
   sai**, senão volta a crescer. As notas de rodapé (o que abrir o jogo faz, o que
   o Preparar faz) saíram por isso mesmo: os botões já o dizem.
 - Um evento criado à mão nasce aberto se a data for de hoje/passado; marcado para
@@ -181,12 +184,14 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
 - **A que horas podes estar no Sá** (`db/sa-hora.sql`, coluna
   `eventos.sa_hora`, jsonb `{"Nome": "HH:MM"}`): terceira pergunta da folha,
   só para quem já disse que **vai** ao Sá. Saber quem vai nunca chegou para
-  marcar a mesa — o que falta é a hora do **último a poder chegar**, e é essa
-  que `mesaSaEvento()` calcula e a folha mostra em destaque, com quantas
-  respostas ainda faltam (a hora ainda pode recuar). Por baixo vêm **todas** as
-  horas com quanta gente há em cada uma (`_horasAgrupadas`, "17:30 (2p)"): ir
-  uns mais cedo é frequente, e a hora do último sozinha não dizia isso. A lista
-  nome a nome (`_saHorasHTML`) está lá, mas **dobrada** — ver abaixo. Quem **desmarca** a ida ao Sá perde a hora
+  marcar a mesa — falta saber a que horas cada um lá pode estar. A folha mostra
+  o **resumo dos votos** e mais nada (`_horasResumoHTML`, `_horasAgrupadas`):
+  cada hora com quanta gente a votou, "17:30 (2p)", e quantos ainda não
+  responderam. **Não conclui hora nenhuma** — já concluiu (a do último a poder
+  chegar, `mesaSaEvento`, entretanto apagada) e dizia menos do que os votos:
+  com uns a chegar às 16:00 e outros às 19:00 a mesa não se pede a uma hora só,
+  e quem a marca lê melhor o mapa. O nome a nome está na tabela dobrada
+  (`_quemVaiHTML`) — ver abaixo. Quem **desmarca** a ida ao Sá perde a hora
   (`marcarPresenca`), senão a mesa ficava à espera de quem já disse que não ia.
   Cada resposta notifica **só** o `GESTOR_MESA_SA` (o Barrona, no `app.js`), que
   é quem trata da marcação — mandá-la ao grupo era ruído a cada resposta.

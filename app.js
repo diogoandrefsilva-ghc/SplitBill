@@ -4530,8 +4530,9 @@ function _jogoSincResumo(r) {
    convocados do evento (`ev.amigos`) — é o que sempre existiu, e é o que
    conta para o consumo (quem aparece na grelha de amigos). A HORA a partir da
    qual se pode lá estar (`ev.saHora`, migração db/sa-hora.sql) só se pergunta
-   a quem disse que vai: é o que falta para marcar a mesa, e a que decide é a
-   do último a chegar (mesaSaEvento). "Vais ao jogo?" é independente
+   a quem disse que vai: é o que falta para marcar a mesa, e a folha mostra os
+   votos todos sem concluir hora nenhuma (_horasResumoHTML). "Vais ao jogo?"
+   é independente
    (`ev.jogo`, migração db/vai-jogo.sql): por defeito segue o Sá
    (vaiAoJogoPessoa), mas cada um pode responder às duas de forma diferente —
    ir ao jogo sem ir ao Sá acontece com frequência, e é o que interessa para
@@ -4545,7 +4546,7 @@ function _jogoSincResumo(r) {
    a mais (sbNotificarGamebox), e uma hora do Sá avisa quem marca a mesa
    (sbNotificarHoraSa). O resto do grupo não precisa de saber a hora de cada
    um — vê-a na folha: o resumo traz as horas todas com quanta gente há em
-   cada uma, e a lista nome a nome abre-se a um toque (_saHorasHTML). */
+   cada uma, e a tabela de quem vai abre-se a um toque (_quemVaiHTML). */
 
 function _hojeInicio() { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); }
 
@@ -4625,15 +4626,6 @@ function horasSaEvento(ev) {
     return (ev.amigos || [])
         .map(nome => ({ nome, hora: horaSaPessoa(ev, nome) }))
         .sort((a, b) => (a.hora ? 0 : 1) - (b.hora ? 0 : 1) || a.hora.localeCompare(b.hora) || a.nome.localeCompare(b.nome, 'pt'));
-}
-
-// A hora a que a mesa pode ser marcada = a do ÚLTIMO a poder chegar (é a única
-// a que estão todos lá). `falta` é quanta gente ainda não respondeu — sem isso
-// a hora parecia definitiva quando ainda podia recuar.
-function mesaSaEvento(ev) {
-    const linhas = horasSaEvento(ev);
-    const horas = linhas.map(l => l.hora).filter(Boolean);
-    return { hora: horas.length ? horas[horas.length - 1] : '', falta: linhas.length - horas.length };
 }
 
 // Quem vai ao Sá e quem vai ao jogo neste evento — contagens agregadas (não a
@@ -4847,44 +4839,42 @@ function _dataPtParaIso(dataPt) {
     return m ? (m[3] + '-' + m[2] + '-' + m[1]) : _hojeIso();
 }
 
-/* Quem vai ao Sá e a que horas pode lá estar. O que fica À VISTA é o RESUMO:
-   a hora a que a mesa pode ser marcada (a do último a poder chegar), quantas
-   respostas ainda faltam para ela poder recuar, e TODAS as horas com quanta
-   gente há em cada uma — "17:30 (2p)". A hora do último não chegava: vão uns
-   mais cedo com frequência, e quem marca a mesa precisa de ver isso sem abrir
-   nada. A lista nome a nome fica atrás de um toque (_jfFold) — é detalhe, e
-   desdobrada empurrava o resumo e as perguntas para fora do ecrã. */
+/* Quem vai, à vista e em detalhe.
+
+   À VISTA fica só o RESUMO DOS VOTOS: as horas a que já há quem possa lá
+   estar, cada uma com quanta gente a votou — "17:30 (2p)". A folha já tentou
+   concluir daqui a hora de marcar a mesa (a do último a poder chegar) e a
+   conclusão dizia menos do que os votos: com uns a chegar às 16:00 e outros às
+   19:00, a mesa não se pede a uma hora só, e quem a marca decide melhor com o
+   mapa à frente.
+
+   O DETALHE é UMA tabela — nome, Sá, horas, jogo — atrás de um toque
+   (_jfFold). Eram três listas para as mesmas sete pessoas, e cruzá-las era de
+   cabeça: quem vai ao jogo mas não ao Sá aparecia numa e faltava na outra. */
 
 // As horas com gente, por ordem de chegada: [{hora:'17:30', n:2}, …]. Quem
-// ainda não respondeu fica de fora — esses são o `falta` de mesaSaEvento().
+// ainda não respondeu fica de fora — vai na conta do "sem responder".
 function _horasAgrupadas(ev) {
     const conta = new Map();
     horasSaEvento(ev).forEach(l => { if (l.hora) conta.set(l.hora, (conta.get(l.hora) || 0) + 1); });
     return Array.from(conta, ([hora, n]) => ({ hora, n })).sort((a, b) => a.hora.localeCompare(b.hora));
 }
 
-function _mesaHTML(ev) {
-    const mesa = mesaSaEvento(ev);
-    if (!mesa.hora) return '<div class="jf-mesa vazia">Ainda ninguém disse a que horas pode chegar.</div>';
+function _horasResumoHTML(ev) {
     const grupos = _horasAgrupadas(ev);
-    let h = '<div class="jf-mesa"><div class="jf-mesa-top">'
-          + '<span><span class="jf-mesa-lbl">Mesa a partir das</span><strong>' + _calEsc(mesa.hora) + '</strong></span>'
-          + (mesa.falta ? '<span class="jf-mesa-falta">ainda ' + (mesa.falta === 1 ? 'falta 1 resposta' : 'faltam ' + mesa.falta + ' respostas') + '</span>' : '')
-          + '</div>';
-    // Só vale a pena repetir as horas quando há mais do que uma: com toda a
-    // gente à mesma hora, a linha de cima já disse tudo o que há para dizer.
-    if (grupos.length > 1) {
-        h += '<div class="jf-mesa-horas">' + grupos.map(g =>
-            '<span>' + _calEsc(g.hora) + (g.n > 1 ? '<em>(' + g.n + 'p)</em>' : '') + '</span>').join('') + '</div>';
-    }
-    return h + '</div>';
+    if (!grupos.length) return '<div class="jf-mesa vazia">Ainda ninguém disse a que horas pode chegar.</div>';
+    const semHora = horasSaEvento(ev).filter(l => !l.hora).length;
+    return '<div class="jf-mesa"><span class="jf-mesa-lbl">A partir de que horas</span>'
+         + '<div class="jf-mesa-horas">'
+         + grupos.map(g => '<span>' + _calEsc(g.hora) + (g.n > 1 ? '<em>(' + g.n + 'p)</em>' : '') + '</span>').join('')
+         + (semHora ? '<span class="jf-sem-horas">' + semHora + ' sem responder</span>' : '')
+         + '</div></div>';
 }
 
-/* As duas listas dobráveis da folha (quem vai ao Sá / ao jogo). O estado vive
-   FORA do HTML porque a folha se redesenha a cada resposta: sem isto, marcar
-   presença fechava a lista que se tinha acabado de abrir. Volta a zero a cada
-   abertura da folha (abrirFolhaJogo). */
-let _jfFold = { sa: false, jogo: false };
+/* A lista dobrável da folha. O estado vive FORA do HTML porque a folha se
+   redesenha a cada resposta: sem isto, marcar presença fechava a tabela que se
+   tinha acabado de abrir. Volta a zero a cada abertura (abrirFolhaJogo). */
+let _jfFold = { quem: false };
 
 function jogoSheetFold(qual) {
     _jfFold[qual] = !_jfFold[qual];
@@ -4906,20 +4896,41 @@ function _jfFoldHTML(qual, resumo, corpo) {
          + '<div class="jf-fold-corpo" id="jf-fold-' + qual + '"' + (aberto ? '' : ' hidden') + '>' + corpo + '</div>';
 }
 
-function _saHorasHTML(ev) {
-    const linhas = horasSaEvento(ev);
-    // Sem a migração não há horas nenhumas: fica a linha de nomes de sempre.
-    if (!SA_HORA_COL || !linhas.length) {
-        return '<div class="jf-conv"><strong>' + linhas.length + '</strong> ' + _pluralVai(linhas.length) + ' ao Sá'
-             + (linhas.length ? ': ' + _calEsc(linhas.map(l => l.nome).join(', ')) : '') + '</div>';
-    }
-    const comHora = linhas.filter(l => l.hora).length;
-    const corpo = '<div class="jf-horas">' + linhas.map(l =>
-        '<div class="jf-hora-linha"><span>' + _calEsc(l.nome) + '</span>'
-        + '<span class="' + (l.hora ? 'jf-h-ok' : 'jf-h-falta') + '">' + (l.hora ? _calEsc(l.hora) : 'sem horas') + '</span></div>'
-    ).join('') + '</div>';
-    return _mesaHTML(ev) + _jfFoldHTML('sa',
-        '<strong>' + linhas.length + '</strong> ' + _pluralVai(linhas.length) + ' ao Sá · ' + comHora + ' com horas', corpo);
+// Uma linha da tabela por pessoa: os convocados do Sá pela hora a que podem
+// chegar (horasSaEvento), e a seguir quem vai ao jogo sem ir ao Sá — esses não
+// estão em ev.amigos e de outra forma não apareciam em lado nenhum.
+function _quemVaiLinhas(ev) {
+    const noSa = horasSaEvento(ev).map(l => ({ nome: l.nome, hora: l.hora, sa: true, jogo: vaiAoJogoPessoa(ev, l.nome) }));
+    const soJogo = Object.keys(ev.jogo || {})
+        .filter(n => !(ev.amigos || []).includes(n) && vaiAoJogoPessoa(ev, n))
+        .sort((a, b) => a.localeCompare(b, 'pt'))
+        .map(nome => ({ nome, hora: '', sa: false, jogo: true }));
+    return noSa.concat(soJogo);
+}
+
+function _jfSN(sim) { return '<span class="' + (sim ? 'jf-sim' : 'jf-nao') + '">' + (sim ? '✓' : '✕') + '</span>'; }
+
+// Sem a migração db/sa-hora.sql não há horas nenhumas: a tabela fica com três
+// colunas em vez de quatro, e o resumo dos votos não chega a aparecer.
+function _jfTabelaHTML(linhas) {
+    if (!linhas.length) return '<div class="jf-nomes">Ainda ninguém respondeu.</div>';
+    const h = '<div class="jf-tr jf-th"><span class="jf-tn">Quem</span><span>Sá</span>'
+            + (SA_HORA_COL ? '<span>Horas</span>' : '') + '<span>Jogo</span></div>'
+            + linhas.map(l => '<div class="jf-tr"><span class="jf-tn">' + _calEsc(l.nome) + '</span>'
+                + _jfSN(l.sa)
+                + (SA_HORA_COL ? '<span class="jf-tht' + (l.hora ? '' : ' vazia') + '">' + (l.hora ? _calEsc(l.hora) : '—') + '</span>' : '')
+                + _jfSN(l.jogo) + '</div>').join('');
+    return '<div class="jf-tab' + (SA_HORA_COL ? '' : ' sem-horas') + '">' + h + '</div>';
+}
+
+function _quemVaiHTML(ev) {
+    const linhas = _quemVaiLinhas(ev);
+    const nSa = linhas.filter(l => l.sa).length;
+    const nJogo = linhas.filter(l => l.jogo).length;
+    // A linha fechada leva as duas contagens: é o que antes obrigava a duas
+    // listas separadas só para as ler.
+    const resumo = '<strong>' + nSa + '</strong> ' + _pluralVai(nSa) + ' ao Sá · <strong>' + nJogo + '</strong> ao jogo';
+    return (SA_HORA_COL ? _horasResumoHTML(ev) : '') + _jfFoldHTML('quem', resumo, _jfTabelaHTML(linhas));
 }
 
 // Uma linha do cartão de respostas: pergunta à esquerda, resposta à direita.
@@ -4967,7 +4978,7 @@ function _jogoSheetHTML(ev) {
     } else {
         h += '<div class="jf-card">' + _jfLinha('Vais ao Sá?', _jfSeg(ev.id, 'jogoSheetPresenca', vouSa));
         // A hora só se pergunta a quem já disse que vai — e é a resposta do
-        // último a chegar que decide a marcação da mesa (ver mesaSaEvento).
+        // último a chegar, e por isso mostram-se todas (ver _horasResumoHTML).
         if (vouSa && SA_HORA_COL) {
             const minha = minhaHoraSa(ev);
             h += _jfLinha('Podes estar às',
@@ -4976,11 +4987,7 @@ function _jogoSheetHTML(ev) {
         }
         h += _jfLinha('Vais ao jogo?', _jfSeg(ev.id, 'jogoSheetPresencaJogo', vouAoJogoReal(ev))) + '</div>';
     }
-    h += _saHorasHTML(ev);
-    const contagem = contagemPresencas(ev);
-    h += _jfFoldHTML('jogo', '<strong>' + contagem.jogo.length + '</strong> ' + _pluralVai(contagem.jogo.length) + ' ao jogo',
-        '<div class="jf-nomes">' + (contagem.jogo.length ? _calEsc(contagem.jogo.join(', ')) : 'Ainda ninguém.') + '</div>');
-    return h;
+    return h + _quemVaiHTML(ev);
 }
 
 /* Desde que o histórico só mostra o que já aconteceu, esta folha é a única porta
@@ -5062,7 +5069,7 @@ async function abrirFolhaJogo(id) {
     const podeAbrir = podeAbrirJogo(ev);
     // Cada abertura da folha começa com as listas fechadas: o resumo (as
     // perguntas e a hora da mesa) é o que tem de caber no primeiro ecrã.
-    _jfFold = { sa: false, jogo: false };
+    _jfFold = { quem: false };
     const r = await mostrarModal({
         icon: '⚽',
         title: ev.descricao || 'Jogo',
