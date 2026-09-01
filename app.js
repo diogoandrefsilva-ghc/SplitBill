@@ -4964,13 +4964,14 @@ function _jogoSheetHTML(ev) {
     let h = '<div class="jf-sub">' + _calEsc(ev.data || '—') + (ficha.hora ? ' · ' + _calEsc(ficha.hora) : '')
           + (gere ? '<button type="button" class="jf-pencil" onclick="jogoSheetMostrarData()" aria-label="Mudar a data">✎</button>' : '')
           + '</div>';
-    // Grava ao escolher a data (onchange): o botão Guardar era mais uma linha
-    // para uma acção que o calendário do sistema já confirma. Fica sempre
+    // Grava ao SAIR do campo (onblur): o botão Guardar era mais uma linha para
+    // uma acção que o seletor do sistema já confirma, mas o `change` dispara
+    // a cada roda que se mexe (ver jogoSheetHoraSa). Fica sempre
     // dataManual=true depois de editada, para não ser recalculada a partir
     // das ordens (ver salvarNoLocalStorage()).
     if (gere) {
         h += '<div class="jf-data-edit" id="jf-data-edit" hidden>'
-           + '<input type="date" id="jf-data-input" value="' + _dataPtParaIso(ev.data) + '" onchange="jogoSheetEditarData(' + ev.id + ')">'
+           + '<input type="date" id="jf-data-input" value="' + _dataPtParaIso(ev.data) + '" onblur="jogoSheetEditarData(' + ev.id + ')">'
            + '</div>';
     }
     if (vouSa === null) {
@@ -4983,7 +4984,7 @@ function _jogoSheetHTML(ev) {
             const minha = minhaHoraSa(ev);
             h += _jfLinha('Podes estar às',
                 '<input type="time" class="jf-chip-hora' + (minha ? ' on' : '') + '" id="jf-hora-input" step="300"'
-                + ' value="' + _calEsc(minha) + '" onchange="jogoSheetHoraSa(' + ev.id + ')">');
+                + ' value="' + _calEsc(minha) + '" onblur="jogoSheetHoraSa(' + ev.id + ')">');
         }
         h += _jfLinha('Vais ao jogo?', _jfSeg(ev.id, 'jogoSheetPresencaJogo', vouAoJogoReal(ev))) + '</div>';
     }
@@ -5018,16 +5019,23 @@ async function jogoSheetPresencaJogo(id, vai) {
 }
 
 // Irmã das anteriores para a hora do Sá (input#jf-hora-input). Redesenha a
-// folha para a lista de horas e a linha da mesa acompanharem logo a resposta.
+// folha para o resumo dos votos e a tabela acompanharem logo a resposta.
 async function jogoSheetHoraSa(id) {
     const input = document.getElementById('jf-hora-input');
-    if (!input) return;
-    const ok = await marcarHoraSa(id, input.value || '');
-    if (!ok) return;
     const ev = historico.find(e => String(e.id) === String(id));
+    if (!input || !ev) return;
+    // O seletor de horas dispara um evento por cada roda que se mexe — hora,
+    // minutos, e outra vez se se voltar atrás. Gravar aí era um PATCH e uma
+    // notificação ao Barrona por volta, e o redesenho da folha fechava o
+    // seletor na cara de quem o estava a usar. Por isso se grava ao SAIR do
+    // campo, e só quando a hora mudou mesmo — abrir e fechar não é resposta.
+    const valor = input.value || '';
+    if (valor === minhaHoraSa(ev)) return;
+    const ok = await marcarHoraSa(id, valor);
+    if (!ok) return;
     const box = document.getElementById('modal-msg');
-    if (ev && box) box.innerHTML = _jogoSheetHTML(ev);
-    mostrarMensagem(input.value ? '✓ Horas guardadas' : '✓ Horas apagadas', true);
+    if (box) box.innerHTML = _jogoSheetHTML(ev);
+    mostrarMensagem(valor ? '✓ Horas guardadas' : '✓ Horas apagadas', true);
 }
 
 // Muda a data de um jogo por abrir, direto na folha (input#jf-data-input).
@@ -5039,6 +5047,9 @@ async function jogoSheetEditarData(id) {
     if (!podeEditarEvento(ev)) { mostrarMensagem('⚠️ Só o administrador (ou o substituto do evento) pode mudar a data', false); return false; }
     const input = document.getElementById('jf-data-input');
     if (!input || !input.value) return false;
+    // Mesma razão da hora: o seletor dispara a cada roda, e sair do campo sem
+    // ter mexido não é uma mudança de data.
+    if (_isoParaDataPt(input.value) === ev.data) return false;
 
     const antes = ev.data;
     const antesManual = ev.dataManual;

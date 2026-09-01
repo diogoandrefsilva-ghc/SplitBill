@@ -147,8 +147,10 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   Daí o desenho actual — a data numa linha de leitura com um lápis
   (`jogoSheetMostrarData`) em vez de um campo sempre à vista, as três perguntas
   como três linhas de um cartão (`_jfLinha`/`_jfSeg`) em vez de três títulos com
-  botões de largura inteira, a data e a hora a gravar no `onchange` em vez de um
-  botão Guardar cada, e quem vai numa **tabela só** — nome · Sá · horas · jogo
+  botões de largura inteira, a data e a hora a gravar **ao sair do campo**
+  (`onblur`) em vez de um botão Guardar cada — o `change` do seletor dispara a
+  cada roda que se mexe, e gravar aí era um PATCH e uma notificação por volta,
+  com o redesenho a fechar o seletor na cara de quem o estava a usar; e quem vai numa **tabela só** — nome · Sá · horas · jogo
   (`_jfTabelaHTML`) — **dobrada** (`_jfFoldHTML`, estado em `_jfFold` para não
   fechar a cada resposta). A tabela substituiu duas listas para as mesmas
   pessoas: quem ia ao jogo sem ir ao Sá aparecia numa e faltava na outra, e
