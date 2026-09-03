@@ -294,160 +294,246 @@ window.sbEsconderSplash = function(){
 
 <div id="page-eventos">
 
-<!-- ADICIONAR ORDEM -->
-<div class="section" id="section-adicionar">
-    <div class="eyebrow">Pedidos</div>
-    <h2 class="h2-toggle" onclick="toggleSection('adicionar')"><span>Adiciona uma ordem</span><span class="sec-arrow">▼</span></h2>
-    <div class="section-body">
-
-    <div class="form-row">
-        <select id="item" style="flex: 2;">
-            <option value="">-- Seleciona um item --</option>
-        </select>
-        <select id="quantidade" style="flex:1;max-width:80px;" onchange="atualizarBotaoOrdem()"><option value="0" selected>0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>
-    </div>
-
+<!-- ═══ TOTAL DA MESA ═══ -->
+<div class="ev-mesa">
     <div>
-        <label style="font-size: 13px; color: #5B6661; margin-bottom: 8px; display: block;">Quem comeu/bebeu?</label>
-        <div class="amigos-grid" id="amigos-grid"></div>
+        <span class="ev-mesa-lab">Total da mesa</span>
+        <span class="ev-mesa-val" id="total-mesa">€0.00</span>
     </div>
-
-    <button id="btn-adicionar-ordem" onclick="adicionarOrdem()" style="width: 100%;" disabled>✓ Adicionar Ordem</button>
-    <div id="mensagem"></div>
-    </div>
-</div>
-
-<!-- ORDENS REGISTADAS -->
-<div class="section">
-    <div class="eyebrow">Mesa</div>
-    <h2>Ordens registadas</h2>
-    <div id="lista-ordens"></div>
-    <p style="color: #5B6661; font-size: 12px; margin-top: 10px;">Total de ordens: <strong id="total-ordens">0</strong></p>
-</div>
-
-
-<!-- OFERTAS -->
-<div class="section" id="section-ofertas">
-    <div class="eyebrow">Rodadas</div>
-    <h2 class="h2-toggle" onclick="toggleSection('ofertas')"><span>🎁 Ofertas</span><span class="sec-arrow">▼</span></h2>
-    <div class="section-body">
-    <div id="oferta-form">
-    <div class="form-row" style="flex-wrap:wrap; gap:8px; margin-bottom:10px;">
-        <select id="oferta-quem" style="flex:1; min-width:100px;">
-            <option value="">Amigo</option>
-        </select>
-        <select id="oferta-item" style="flex:2; min-width:120px;">
-            <option value="">-- Item --</option>
-        </select>
-        <select id="oferta-qtd" style="flex:0 0 70px;" onchange="atualizarBotaoOferta()"><option value="0" selected>0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>
-    </div>
-
-    <div>
-        <label style="font-size: 13px; color: #5B6661; margin-bottom: 8px; display: block;">Oferece a quem?</label>
-        <div class="amigos-grid" id="oferta-amigos-grid"></div>
-    </div>
-
-    <button id="btn-adicionar-oferta" onclick="adicionarOferta()" style="width:100%; background:#B8911F;" disabled>🎁 Adicionar Oferta</button>
-    <div id="mensagem-oferta" style="margin-top:8px;"></div>
-    </div>
-
-    <div id="lista-ofertas" style="margin-top:12px;"></div>
+    <div class="ev-pills">
+        <span class="ev-pill ev-pill-pos"><span id="num-pessoas">0</span> pessoas</span>
+        <span class="ev-pill ev-pill-calm"><span id="total-ordens">0</span> registos</span>
     </div>
 </div>
 
-<!-- RESUMO DA CONTA -->
-<div class="section">
-    <div class="eyebrow">Fecho</div>
-    <h2>Resumo da conta</h2>
-
-    <div class="resumo">
-        <div class="resumo-linha">
-            <span>Total da mesa:</span>
-            <span id="total-mesa" style="color: #0E7A4F; font-weight: 700;">€0.00</span>
-        </div>
-        <div class="resumo-linha">
-            <span>Número de pessoas:</span>
-            <span id="num-pessoas">0</span>
-        </div>
+<!-- ═══ OS QUADRANTES ═══
+     Ordens ocupa a linha de cima inteira; a coluna das Rodadas só nasce quando
+     houver alguma (senão ficava sempre um quadrante vazio à espera). -->
+<div class="ev-grid" id="ev-grid">
+    <div class="ev-q ev-a-ord" id="ev-q-ord">
+        <div class="ev-qhead"><span class="ev-eye">Ordens</span><span class="ev-qn" id="ev-n-ordens">0</span></div>
+        <div class="ev-rows" id="lista-ordens"></div>
     </div>
-
-    <div>
-        <label style="font-size: 13px; color: #5B6661; margin-bottom: 8px; display: block;">💸 Conta por pessoa:</label>
-        <div id="conta-pessoas"></div>
+    <div class="ev-q ev-a-rod" id="ev-q-rod" style="display:none;">
+        <div class="ev-qhead"><span class="ev-eye">Rodadas</span><span class="ev-qn" id="ev-n-ofertas">0</span></div>
+        <div class="ev-rows" id="lista-ofertas"></div>
     </div>
-
-    <div style="margin-top: 16px;">
-        <label style="font-size: 13px; color: #5B6661; margin-bottom: 8px; display: block;">🧾 Total por item:</label>
-        <div id="total-itens"></div>
+    <div class="ev-q ev-a-itens">
+        <div class="ev-qhead"><span class="ev-eye">Por item</span><span class="ev-qn" id="ev-n-itens">0</span></div>
+        <div class="ev-rows" id="total-itens"></div>
     </div>
-
-    <div id="fatura-section" class="talao">
-        <div class="carimbo" id="talao-carimbo" style="display:none;">Fechado</div>
-        <div class="talao-head"><b>FATURA DO RESTAURANTE</b>conferência da conta</div>
-        <hr class="talao-hr">
-        <button id="btn-fatura-ocr" class="fatura-ocr-btn" onclick="faturaPick()">📷 Importar fatura (foto ou PDF)<span>compara artigo a artigo com o consumo marcado</span></button>
-        <input type="file" id="fatura-file" accept="image/*,application/pdf" style="display:none" onchange="faturaChosen(this)">
-        <div id="fatura-recon" class="fatura-recon" style="display:none;"></div>
-        <div class="pagador-selector">
-            <label>💳 Quem pagou:</label>
-            <select id="pagador-select" onchange="atualizarPagador()">
-                <option value="">-- Seleciona --</option>
-            </select>
-        </div>
-        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px;">
-            <input type="number" id="total-fatura" placeholder="Total (€)" min="0" step="0.01"
-                style="flex: 1; padding: 10px; border: 1px solid #DDE3DD; border-radius: 4px; font-size: 14px;">
-            <button id="btn-fechar-evento" onclick="fecharComFatura()" style="flex: 1; padding: 10px 14px; font-size: 13px; background:#0E7A4F;">🔒 Fechar Conta</button>
-            <button id="btn-reabrir-evento" onclick="reabrirEvento()" style="flex: 1; padding: 10px 14px; font-size: 13px; display:none;" class="secondary">🔓 Reabrir Conta</button>
-        </div>
-        <div id="ajuste-info" style="display:none;">
-            <div id="ajuste-racio" style="font-size: 13px; color: #4A534E; margin-bottom: 8px;"></div>
-            <div id="conta-pessoas-ajustada"></div>
-        </div>
-    </div>
-
-    <!-- PDFs no final do bloco 3 -->
-    <div style="margin-top:16px;border-top:1px solid #E2E7E0;padding-top:12px;display:flex;gap:8px;">
-        <button onclick="exportarPDFConta()" style="flex:1;">📋 PDF Conta</button>
-        <button onclick="exportarPDFDivisao()" style="flex:1;">💸 PDF Divisão</button>
+    <div class="ev-q ev-a-pess">
+        <div class="ev-qhead"><span class="ev-eye">Por pessoa</span><span class="ev-qn" id="ev-n-pessoas">0</span></div>
+        <div class="ev-rows" id="conta-pessoas"></div>
     </div>
 </div>
 
-<!-- CONFIGURAÇÕES DO EVENTO (amigos + menu) -->
-<div class="section" id="section-config">
-    <div class="config-toggle" onclick="toggleConfig()">
-        <h2 style="border-bottom:none;margin-bottom:0;">⚙️ Configurações do Evento</h2>
-        <span id="config-arrow" style="font-size:18px;color:#7C8782;">▼</span>
+<!-- ═══ BARRA INFERIOR: Gerir · + · Fechar conta ═══ -->
+<div class="ev-bar" id="ev-bar">
+    <button class="ev-barbtn" onclick="evAbrirGerir()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.1"/><path d="M19.4 14.2a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5v.2a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1h.2a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>
+        Gerir
+    </button>
+    <div class="ev-barmid">
+        <button class="ev-fab" id="ev-fab" onclick="evAbrirNova()" aria-label="Nova ordem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
     </div>
-    <div class="config-body" id="config-body" style="display:none;">
-        <div id="substituto-box"></div>
-        <div class="config-section-label">👥 Amigos</div>
-        <div id="config-amigos-lista"></div>
-        <div class="config-add-row">
-            <input type="text" id="novo-amigo" placeholder="Nome do amigo" list="amigos-sugeridos" autocomplete="off">
-            <datalist id="amigos-sugeridos"></datalist>
-            <button onclick="adicionarAmigo()">+ Adicionar</button>
+    <button class="ev-barbtn ev-gold" id="ev-btn-fecho" onclick="evAbrirFecho()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.8a4 4 0 0 1 8 0v2.7"/></svg>
+        <span id="ev-btn-fecho-txt">Fechar conta</span>
+    </button>
+</div>
+
+<!-- ═══ FOLHAS ═══ -->
+<div class="ev-scrim" id="ev-scrim" onclick="evFecharSheet()"></div>
+
+<!-- Folha da linha tocada (uma ordem, uma rodada, um item, uma pessoa) -->
+<div class="ev-sheet ev-sheet-mini" id="ev-sheet-linha">
+    <div class="ev-shhead">
+        <div class="ev-sht"><strong id="ev-linha-titulo"></strong><span id="ev-linha-sub"></span></div>
+        <button class="ev-icb" onclick="evFecharSheet()" aria-label="Fechar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+        </button>
+    </div>
+    <div class="ev-shbody" id="ev-linha-body"></div>
+    <div class="ev-shfoot" id="ev-linha-foot" style="display:none;"></div>
+</div>
+
+<!-- Nova ordem / nova rodada, em dois passos -->
+<div class="ev-sheet" id="ev-sheet-nova">
+    <div class="ev-shhead">
+        <button class="ev-icb" id="ev-nova-voltar" onclick="evPasso(1)" style="visibility:hidden;" aria-label="Trocar de artigo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 5 8 12 15 19"/></svg>
+        </button>
+        <div class="ev-sht"><strong id="ev-nova-titulo">Que artigo?</strong><span id="ev-nova-sub">passo 1 de 2 · toca para avançar</span></div>
+        <button class="ev-icb" onclick="evFecharSheet()" aria-label="Fechar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+        </button>
+    </div>
+    <div class="ev-shbody">
+
+        <!-- PASSO 1: escolher o artigo -->
+        <div id="ev-passo1"><div class="ev-igrid" id="ev-igrid"></div></div>
+
+        <!-- PASSO 2: quantidade, quem, e o total antes de registar -->
+        <div id="ev-passo2" style="display:none;">
+            <div class="ev-chosen">
+                <div class="ev-chosen-ic" id="ev-chosen-ic"></div>
+                <div class="ev-chosen-i">
+                    <b id="ev-chosen-nome">—</b>
+                    <span id="ev-chosen-preco"></span>
+                </div>
+                <div class="ev-step">
+                    <button type="button" onclick="evQtd(-1)" aria-label="Menos um">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="6" y1="12" x2="18" y2="12"/></svg>
+                    </button>
+                    <b id="ev-qtd">1</b>
+                    <button type="button" onclick="evQtd(1)" aria-label="Mais um">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="6" x2="12" y2="18"/><line x1="6" y1="12" x2="18" y2="12"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <span class="ev-lab">Quem paga</span>
+            <div class="ev-seg">
+                <button type="button" id="ev-seg-consumo" class="on" onclick="evModo(false)">Cada um o seu</button>
+                <button type="button" id="ev-seg-oferta" onclick="evModo(true)">É uma rodada</button>
+            </div>
+
+            <!-- ORDEM (consumo). Os selects ficam cá por baixo, escondidos: são
+                 eles que guardam o estado que o adicionarOrdem() vai ler. -->
+            <div class="section" id="section-adicionar">
+                <div class="section-body">
+                    <select id="item" style="display:none;"><option value="">-- Seleciona um item --</option></select>
+                    <select id="quantidade" style="display:none;" onchange="atualizarBotaoOrdem()"><option value="0" selected>0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option></select>
+                    <span class="ev-lab">Quem consumiu?</span>
+                    <div class="amigos-grid" id="amigos-grid"></div>
+                    <button id="btn-adicionar-ordem" onclick="adicionarOrdem()" style="display:none;" disabled>✓ Adicionar Ordem</button>
+                    <div id="mensagem"></div>
+                </div>
+            </div>
+
+            <!-- RODADA (oferta) -->
+            <div class="section" id="section-ofertas">
+                <div class="section-body">
+                    <div id="oferta-form">
+                        <div class="ev-oferece">
+                            <span>Rodada oferecida por</span>
+                            <select id="oferta-quem" onchange="evSyncNova()"><option value="">Amigo</option></select>
+                        </div>
+                        <select id="oferta-item" style="display:none;"><option value="">-- Item --</option></select>
+                        <select id="oferta-qtd" style="display:none;" onchange="atualizarBotaoOferta()"><option value="0" selected>0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option></select>
+                        <span class="ev-lab">Quem recebe a rodada?</span>
+                        <div class="amigos-grid" id="oferta-amigos-grid"></div>
+                        <button id="btn-adicionar-oferta" onclick="adicionarOferta()" style="display:none;" disabled>🎁 Adicionar Oferta</button>
+                        <div id="mensagem-oferta" style="margin-top:8px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <span class="ev-hint" id="ev-nova-nota">O valor divide-se em partes iguais por quem estiver marcado.</span>
         </div>
 
-        <div class="config-section-label" style="margin-top:18px;">🍽️ Menu</div>
-        <div id="config-menu-lista"></div>
-        <div class="config-add-row">
-            <input type="text" id="novo-item-nome" placeholder="Nome do item" style="flex:2;">
-            <input type="number" id="novo-item-preco" placeholder="€" min="0" step="0.10" style="flex:1;min-width:60px;">
-            <button onclick="adicionarItemMenu()">+ Adicionar</button>
+    </div>
+    <div class="ev-shfoot" id="ev-nova-foot" style="display:none;">
+        <div class="ev-tot">
+            <div class="ev-tot-l"><span>Total a registar</span><b id="ev-nova-total">€0.00</b></div>
+            <div class="ev-tot-r"><span id="ev-nova-linha1">ninguém marcado</span><br><span id="ev-nova-linha2">marca quem consumiu</span></div>
+        </div>
+    </div>
+    <div class="ev-shfoot ev-shfoot-btn" id="ev-nova-foot2" style="display:none;">
+        <button class="ev-btn" id="ev-btn-registar" onclick="evRegistar()" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 10 18 20 6"/></svg>
+            <span id="ev-btn-registar-txt">Registar</span>
+        </button>
+    </div>
+</div>
+
+<!-- Gerir evento -->
+<div class="ev-sheet" id="ev-sheet-gerir">
+    <div class="ev-shhead">
+        <div class="ev-sht"><strong>Gerir evento</strong><span id="ev-gerir-sub"></span></div>
+        <button class="ev-icb" onclick="evFecharSheet()" aria-label="Fechar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+        </button>
+    </div>
+    <div class="ev-shbody">
+        <div class="section" id="section-config">
+            <div class="config-body" id="config-body">
+                <div id="substituto-box"></div>
+                <div class="config-section-label">👥 Amigos</div>
+                <div id="config-amigos-lista"></div>
+                <div class="config-add-row">
+                    <input type="text" id="novo-amigo" placeholder="Nome do amigo" list="amigos-sugeridos" autocomplete="off">
+                    <datalist id="amigos-sugeridos"></datalist>
+                    <button onclick="adicionarAmigo()">+ Adicionar</button>
+                </div>
+
+                <div class="config-section-label" style="margin-top:18px;">🍽️ Menu</div>
+                <div id="config-menu-lista"></div>
+                <div class="config-add-row">
+                    <input type="text" id="novo-item-nome" placeholder="Nome do item" style="flex:2;">
+                    <input type="number" id="novo-item-preco" placeholder="€" min="0" step="0.10" style="flex:1;min-width:60px;">
+                    <button onclick="adicionarItemMenu()">+ Adicionar</button>
+                </div>
+
+                <div class="config-add-row" style="margin-top:14px;">
+                    <button onclick="document.getElementById('input-xlsx').click()" style="flex:1;">📥 Importar Excel</button>
+                    <button class="danger" onclick="limparConfigs()" style="flex:1;">🗑️ Limpar tudo</button>
+                </div>
+                <input type="file" id="input-xlsx" accept=".xlsx" style="display:none;" onchange="importarExcel()">
+            </div>
         </div>
 
         <div class="config-add-row" style="margin-top:14px;">
-            <button onclick="document.getElementById('input-xlsx').click()" style="flex:1;">📥 Importar Excel</button>
-            <button class="danger" onclick="limparConfigs()" style="flex:1;">🗑️ Limpar tudo</button>
+            <button onclick="exportarPDFConta()" style="flex:1;">📋 PDF Conta</button>
+            <button onclick="exportarPDFDivisao()" style="flex:1;">💸 PDF Divisão</button>
         </div>
-        <input type="file" id="input-xlsx" accept=".xlsx" style="display:none;" onchange="importarExcel()">
+
+        <button id="btn-reverter-abertura" onclick="reverterAberturaJogo(eventoAtualId)" style="display:none;width:100%;margin-top:10px;">↩️ Reverter Abertura</button>
+        <button id="btn-eliminar-evento" class="danger" onclick="apagarEventoAtual()" style="display:none;width:100%;margin-top:8px;">🗑️ Apagar Evento</button>
+
+        <span class="ev-hint">A fatura mudou-se para o Fechar conta, que é onde serve.</span>
     </div>
 </div>
 
-
-<button id="btn-reverter-abertura" onclick="reverterAberturaJogo(eventoAtualId)" style="display:none;">↩️ Reverter Abertura</button>
-<button id="btn-eliminar-evento" onclick="apagarEventoAtual()" style="display:none;">🗑️ Apagar Evento</button>
+<!-- Fechar conta -->
+<div class="ev-sheet" id="ev-sheet-fecho">
+    <div class="ev-shhead">
+        <div class="ev-sht"><strong id="ev-fecho-titulo">Fechar conta</strong><span id="ev-fecho-sub"></span></div>
+        <button class="ev-icb" onclick="evFecharSheet()" aria-label="Fechar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+        </button>
+    </div>
+    <div class="ev-shbody">
+        <div id="fatura-section" class="talao">
+            <div class="carimbo" id="talao-carimbo" style="display:none;">Fechado</div>
+            <div class="talao-head"><b>FATURA DO RESTAURANTE</b>conferência da conta</div>
+            <hr class="talao-hr">
+            <button id="btn-fatura-ocr" class="fatura-ocr-btn" onclick="faturaPick()">📷 Importar fatura (foto ou PDF)<span>compara artigo a artigo com o consumo marcado</span></button>
+            <input type="file" id="fatura-file" accept="image/*,application/pdf" style="display:none" onchange="faturaChosen(this)">
+            <div id="fatura-recon" class="fatura-recon" style="display:none;"></div>
+            <div class="pagador-selector">
+                <label>💳 Quem pagou:</label>
+                <select id="pagador-select" onchange="atualizarPagador()">
+                    <option value="">-- Seleciona --</option>
+                </select>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px;">
+                <input type="number" id="total-fatura" placeholder="Total (€)" min="0" step="0.01"
+                    style="flex: 1; padding: 10px; border: 1px solid #DDE3DD; border-radius: 4px; font-size: 14px;">
+                <button id="btn-fechar-evento" onclick="fecharComFatura()" style="flex: 1; padding: 10px 14px; font-size: 13px; background:#0E7A4F;">🔒 Fechar Conta</button>
+                <button id="btn-reabrir-evento" onclick="reabrirEvento()" style="flex: 1; padding: 10px 14px; font-size: 13px; display:none;" class="secondary">🔓 Reabrir Conta</button>
+            </div>
+            <div id="ajuste-info" style="display:none;">
+                <div id="ajuste-racio" style="font-size: 13px; color: #4A534E; margin-bottom: 8px;"></div>
+                <div id="conta-pessoas-ajustada"></div>
+            </div>
+        </div>
+        <span class="ev-hint">A fatura confere-se artigo a artigo contra o quadrante <b>Por item</b>; a diferença entre o marcado e o que a casa cobrou reparte-se na proporção do consumo de cada um.</span>
+    </div>
+</div>
 
 </div> <!-- end page-eventos -->
 

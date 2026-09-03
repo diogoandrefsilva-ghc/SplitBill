@@ -1884,3 +1884,290 @@ html,body{touch-action:pan-x pan-y}
    Aqui neutraliza-se o hover herdado nos botões destes painéis. */
 .sbi-mais, .sbi-mais:hover { background: transparent; color: var(--ink-soft, #5B6661); }
 .sbi-mais:active { background: rgba(11,59,43,.04); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ECRÃ DO EVENTO: quatro quadrantes num ecrã só
+   ---------------------------------------------------------------------------
+   O evento deixou de ser uma página comprida com scroll. O que se vê de uma
+   vez: total da mesa, ordens, rodadas (só quando existem), total por item e
+   total por pessoa. O que não cabe no quadrante desliza DENTRO dele — a página
+   não desliza, por isso não há confusão possível entre os dois scrolls.
+   Tudo o que era formulário (nova ordem, ofertas, configurações, fatura) passou
+   para folhas que sobem de baixo, e as secções antigas vivem lá dentro com os
+   mesmos ids — é o que mantém as permissões e o adicionarOrdem()/adicionarOferta()
+   a funcionar sem uma linha mudada.
+   Cuidado herdado: `button:hover{background:#0B6340}` ganha a qualquer classe
+   daqui e no telemóvel fica COLADO depois do toque. Botão novo = linha de
+   :hover própria, sempre.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+#page-eventos { padding-bottom: 88px; }
+
+/* ── Total da mesa ── */
+.ev-mesa {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    margin: 10px 0 9px; padding: 11px 14px 12px;
+    background: linear-gradient(180deg, #fff 0%, #F6FAF7 100%);
+    border: 1px solid #E6EDE6; border-radius: 16px;
+    box-shadow: 0 8px 20px -15px rgba(11,59,43,.55);
+}
+.ev-mesa-lab {
+    display: block; font-family: var(--display); font-weight: 700; font-size: 11px;
+    text-transform: uppercase; letter-spacing: .14em; color: var(--ink-soft);
+}
+.ev-mesa-val {
+    display: block; margin-top: 1px; font-family: var(--display); font-weight: 700;
+    font-size: 30px; line-height: 1; color: var(--verde-escuro);
+}
+.ev-pills { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+.ev-pill {
+    font-family: var(--mono); font-weight: 600; font-size: 10px; padding: 4px 9px; border-radius: 20px;
+    white-space: nowrap; letter-spacing: .04em; text-transform: uppercase;
+    box-shadow: inset 0 0 0 1px rgba(11,59,43,.06);
+}
+.ev-pill-pos { background: var(--verde-claro); color: var(--verde-tinta); }
+.ev-pill-calm { background: #EEF1ED; color: var(--ink-soft); }
+
+/* ── A grelha ──
+   Sem rodadas, as Ordens ficam com a linha de cima inteira (e aí cada ordem
+   cabe numa linha só, ver .ev-a-ord.ev-wide). Com rodadas, parte-se ao meio. */
+.ev-grid {
+    display: grid; gap: 9px; min-height: 380px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    grid-template-areas: "ord ord" "itens pess";
+}
+.ev-grid.ev-g4 { grid-template-areas: "ord rod" "itens pess"; }
+.ev-a-ord { grid-area: ord; } .ev-a-rod { grid-area: rod; }
+.ev-a-itens { grid-area: itens; } .ev-a-pess { grid-area: pess; }
+
+.ev-q {
+    display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden;
+    background: linear-gradient(180deg, #fff 0%, #F6FAF7 100%);
+    border: 1px solid #E6EDE6; border-radius: 16px; padding: 10px 4px 7px 12px;
+    box-shadow: 0 8px 20px -14px rgba(11,59,43,.55);
+}
+.ev-qhead { display: flex; align-items: center; gap: 7px; margin: 0 8px 6px 0; flex: 0 0 auto; }
+.ev-eye {
+    display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0;
+    font-family: var(--display); font-weight: 700; font-size: 11.5px;
+    text-transform: uppercase; letter-spacing: .13em; color: var(--ink-soft);
+}
+.ev-eye::before {
+    content: ""; flex: 0 0 auto; width: 13px; height: 3px; border-radius: 2px;
+    background: linear-gradient(90deg, var(--verde), var(--dourado));
+}
+.ev-qn {
+    font-family: var(--mono); font-weight: 600; font-size: 10px; color: var(--verde-tinta);
+    background: var(--verde-claro); border-radius: 20px; padding: 2px 7px;
+}
+
+/* O scroll vive aqui dentro. A máscara em baixo é o que diz "há mais". */
+.ev-rows {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+    padding-right: 8px; -webkit-overflow-scrolling: touch;
+    -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 18px), transparent 100%);
+    mask-image: linear-gradient(180deg, #000 calc(100% - 18px), transparent 100%);
+}
+.ev-rows::-webkit-scrollbar { width: 3px; }
+.ev-rows::-webkit-scrollbar-thumb { background: #CBD6CC; border-radius: 3px; }
+.ev-rows::-webkit-scrollbar-track { background: transparent; }
+.ev-vazio { color: #7C8782; font-size: 12px; text-align: center; padding: 14px 4px; }
+
+.ev-row {
+    /* O `button` global da app é UPPERCASE com letter-spacing: aqui dentro são
+       nomes de artigos e de pessoas, e assim truncavam a meio. */
+    text-transform: none; letter-spacing: normal;
+    display: grid; width: 100%; text-align: left; gap: 0 8px; cursor: pointer;
+    background: transparent; border: 0; border-bottom: 1px solid #EDF1EC;
+    padding: 7px 2px 8px; color: var(--ink); border-radius: 0;
+    grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t v" "s s";
+}
+.ev-row:hover { background: rgba(14,122,79,.05); }
+.ev-row:last-child { border-bottom: 0; }
+.ev-row-t {
+    grid-area: t; font-family: var(--display); font-weight: 600; font-size: 16px; line-height: 1.15;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.ev-row-v { grid-area: v; font-family: var(--mono); font-weight: 600; font-size: 12px; color: var(--verde-tinta); }
+.ev-row-s {
+    grid-area: s; font-size: 10.5px; color: #7C8782; margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.ev-row-s:empty { display: none; }
+/* Linha inteira: item, quem e valor cabem todos na mesma linha. */
+.ev-wide .ev-row { display: flex; align-items: baseline; gap: 8px; padding: 8px 2px 9px; }
+.ev-wide .ev-row-t { flex: 0 0 auto; font-size: 17px; }
+.ev-wide .ev-row-s { flex: 1 1 auto; margin-top: 0; }
+.ev-wide .ev-row-v { flex: 0 0 auto; font-size: 12.5px; }
+
+/* ── Barra inferior ── */
+.ev-bar {
+    position: fixed; left: 50%; transform: translateX(-50%); bottom: 0; width: 100%; max-width: 600px;
+    height: 74px; display: none; grid-template-columns: 1fr 84px 1fr; align-items: center;
+    background: #fff; border-top: 1px solid #E2E7E0; padding: 0 8px 0; z-index: 90;
+    box-shadow: 0 -10px 24px -20px rgba(11,59,43,.8);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.ev-barbtn, .ev-barbtn:hover {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    min-height: 58px; border: 0; background: transparent; cursor: pointer; color: var(--verde-tinta);
+    font-family: var(--display); font-weight: 600; font-size: 13.5px;
+    text-transform: uppercase; letter-spacing: .07em;
+}
+.ev-barbtn:active { transform: scale(.96); }
+.ev-barbtn svg { width: 21px; height: 21px; }
+.ev-barbtn.ev-gold, .ev-barbtn.ev-gold:hover { color: #8A6D14; }
+.ev-barbtn:disabled { opacity: .4; }
+.ev-barmid { display: flex; align-items: center; justify-content: center; }
+.ev-fab, .ev-fab:hover {
+    width: 62px; height: 62px; border: 0; border-radius: 50%; margin-top: -28px; cursor: pointer; color: #fff;
+    background: linear-gradient(135deg, #13A56E 0%, #0E7A4F 55%, #0B5238 100%);
+    display: flex; align-items: center; justify-content: center; padding: 0;
+    box-shadow: 0 14px 26px -8px rgba(11,59,43,.75), inset 0 1px 0 rgba(255,255,255,.22), 0 0 0 5px #fff;
+}
+.ev-fab:active { transform: scale(.95); }
+.ev-fab svg { width: 29px; height: 29px; }
+
+/* ── Folhas ── */
+.ev-scrim {
+    display: none; position: fixed; inset: 0; background: rgba(11,59,43,.45); z-index: 100;
+    animation: evFade .18s ease-out;
+}
+@keyframes evFade { from { opacity: 0; } }
+.ev-sheet {
+    display: none; position: fixed; left: 50%; transform: translateX(-50%);
+    width: calc(100% - 16px); max-width: 584px; top: 10px; bottom: 10px; z-index: 101;
+    background: #F7F9F5; border-radius: 20px; overflow: hidden;
+    flex-direction: column; box-shadow: 0 30px 60px -20px rgba(11,59,43,.7);
+}
+.ev-sheet.open { display: flex; animation: evUp .26s cubic-bezier(.2,.9,.3,1.2); }
+/* Folha pequena: a linha tocada não precisa do ecrã todo. */
+.ev-sheet-mini { top: auto; max-height: 66%; bottom: 8px; }
+@keyframes evUp { from { opacity: 0; transform: translate(-50%, 60px); } }
+.ev-shhead {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 12px 12px 11px;
+    background: repeating-linear-gradient(0deg, rgba(255,255,255,.045) 0 7px, transparent 7px 14px), var(--verde-escuro);
+    color: #fff;
+}
+.ev-sht { flex: 1 1 auto; min-width: 0; }
+.ev-sht strong {
+    display: block; font-family: var(--display); font-weight: 700; font-size: 21px; line-height: 1.05;
+    text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ev-sht span { display: block; font-family: var(--mono); font-size: 10px; color: #9CC4AF; margin-top: 3px; }
+.ev-icb, .ev-icb:hover {
+    flex: 0 0 auto; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center;
+    border: 0; padding: 0; border-radius: 12px; background: rgba(255,255,255,.10); color: #fff; cursor: pointer;
+}
+.ev-icb:active { transform: scale(.94); }
+.ev-icb svg { width: 20px; height: 20px; }
+.ev-shbody { flex: 1 1 auto; overflow-y: auto; padding: 12px; -webkit-overflow-scrolling: touch; }
+.ev-shfoot { flex: 0 0 auto; padding: 10px 12px 12px; background: #fff; border-top: 1px solid #E6EDE6; display: flex; gap: 8px; }
+.ev-shfoot-btn { padding-top: 0; border-top: 0; }
+.ev-btn, .ev-btn:hover {
+    flex: 1 1 auto; min-height: 48px; border: 0; border-radius: 12px; background: var(--verde); color: #fff; cursor: pointer;
+    font-family: var(--display); font-weight: 700; font-size: 17px; text-transform: uppercase; letter-spacing: .06em;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.ev-btn:active { transform: scale(.98); }
+.ev-btn svg { width: 18px; height: 18px; }
+.ev-btn:disabled, .ev-btn:disabled:hover { background: #DDE3DD; color: #98A29C; cursor: default; }
+.ev-btn-red, .ev-btn-red:hover { background: #fff; color: var(--rubro); box-shadow: inset 0 0 0 1.6px rgba(179,64,47,.55); flex: 0 0 auto; width: 60px; }
+.ev-btn-ghost, .ev-btn-ghost:hover { background: #fff; color: var(--verde-tinta); box-shadow: inset 0 0 0 1.6px var(--verde); }
+.ev-hint { display: block; font-size: 11.5px; color: #7C8782; margin: 12px 4px 0; line-height: 1.45; }
+.ev-card { background: #fff; border: 1px solid #E6EDE6; border-radius: 14px; padding: 4px 12px; }
+.ev-drow { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #EDF1EC; }
+.ev-drow:last-child { border-bottom: 0; }
+.ev-drow-i { flex: 1 1 auto; min-width: 0; }
+.ev-drow-t { display: block; font-family: var(--display); font-weight: 600; font-size: 17px; line-height: 1.1; }
+.ev-drow-s { display: block; font-size: 11.5px; color: #7C8782; margin-top: 2px; }
+.ev-drow-s:empty { display: none; }
+.ev-drow-v { flex: 0 0 auto; font-family: var(--mono); font-weight: 600; font-size: 13px; color: var(--verde-tinta); }
+
+/* ── Passo 1: escolher o artigo ── */
+.ev-igrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.ev-itile, .ev-itile:hover {
+    text-transform: none; letter-spacing: normal;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center;
+    min-height: 94px; padding: 10px 6px; cursor: pointer; color: var(--ink);
+    background: linear-gradient(180deg, #fff 0%, #F6FAF7 100%); border: 1px solid #E6EDE6; border-radius: 15px;
+    box-shadow: 0 6px 16px -14px rgba(11,59,43,.55);
+}
+.ev-itile:active { transform: scale(.96); }
+.ev-itile svg { width: 30px; height: 30px; color: var(--verde); }
+.ev-itile b { font-family: var(--display); font-weight: 600; font-size: 14.5px; line-height: 1.05; overflow-wrap: anywhere; }
+.ev-itile span { font-family: var(--mono); font-size: 9.5px; color: #7C8782; }
+.ev-itile-ini {
+    width: 30px; height: 30px; border-radius: 9px; background: var(--verde-claro); color: var(--verde-tinta);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--display); font-weight: 700; font-size: 14px; letter-spacing: .02em;
+}
+
+/* ── Passo 2 ── */
+.ev-chosen { display: flex; align-items: center; gap: 11px; background: #fff; border: 1px solid #E6EDE6; border-radius: 15px; padding: 11px 12px; }
+.ev-chosen-ic { flex: 0 0 auto; width: 46px; height: 46px; border-radius: 13px; background: var(--verde-claro); color: var(--verde); display: flex; align-items: center; justify-content: center; }
+.ev-chosen-ic svg { width: 26px; height: 26px; }
+.ev-chosen-ic .ev-itile-ini { width: 46px; height: 46px; border-radius: 13px; font-size: 19px; }
+.ev-chosen-i { flex: 1 1 auto; min-width: 0; }
+.ev-chosen-i b { display: block; font-family: var(--display); font-weight: 700; font-size: 20px; line-height: 1.05; }
+.ev-chosen-i span { display: block; font-family: var(--mono); font-size: 10.5px; color: #7C8782; margin-top: 2px; }
+.ev-step { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.ev-step button, .ev-step button:hover {
+    width: 38px; height: 38px; border: 1.5px solid var(--linha); background: #fff; border-radius: 11px; cursor: pointer;
+    color: var(--verde-tinta); display: flex; align-items: center; justify-content: center; padding: 0;
+}
+.ev-step button:active { transform: scale(.94); }
+.ev-step svg { width: 16px; height: 16px; }
+.ev-step b { font-family: var(--mono); font-weight: 600; font-size: 16px; min-width: 22px; text-align: center; }
+.ev-lab {
+    display: block; font-family: var(--display); font-weight: 700; font-size: 11.5px;
+    text-transform: uppercase; letter-spacing: .13em; color: var(--ink-soft); margin: 15px 2px 8px;
+}
+.ev-seg { display: flex; gap: 6px; background: #E7ECE7; border-radius: 12px; padding: 4px; }
+.ev-seg button, .ev-seg button:hover {
+    flex: 1 1 0; min-height: 40px; border: 0; border-radius: 9px; background: transparent; cursor: pointer; color: var(--ink-soft);
+    font-family: var(--display); font-weight: 600; font-size: 15px; text-transform: uppercase; letter-spacing: .05em;
+}
+.ev-seg button.on, .ev-seg button.on:hover { background: #fff; color: var(--verde-escuro); box-shadow: 0 2px 6px -3px rgba(11,59,43,.5); }
+.ev-oferece {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px;
+    background: var(--dourado-claro); border: 1px solid #EADFB6; border-radius: 12px; padding: 9px 12px;
+}
+.ev-oferece span { font-size: 12px; color: #7A5E12; flex: 0 0 auto; }
+.ev-oferece select { flex: 1 1 auto; max-width: 55%; }
+.ev-tot { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--verde-escuro); color: #fff; border-radius: 14px; padding: 11px 14px; flex: 1 1 auto; }
+.ev-tot-l span { display: block; font-family: var(--display); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .14em; color: #9CC4AF; }
+.ev-tot-l b { display: block; font-family: var(--display); font-weight: 700; font-size: 26px; line-height: 1.05; margin-top: 1px; }
+.ev-tot-r { text-align: right; font-family: var(--mono); font-size: 10.5px; color: #C9DFD2; line-height: 1.5; }
+
+/* As secções antigas vivem dentro das folhas: perdem a moldura e o colapso,
+   mas mantêm ids e classes (é por elas que passam as permissões). */
+.ev-sheet .section { border: 0; padding: 0; margin: 0; background: transparent; box-shadow: none; }
+.ev-sheet .section.collapsed .section-body { display: block; }
+.ev-sheet .section h2 { display: none; }
+.ev-sheet #section-config { margin-top: 2px; }
+.ev-sheet .talao { margin: 0; }
+
+@media (max-width: 380px) {
+    .ev-mesa-val { font-size: 26px; }
+    .ev-row-t { font-size: 15px; }
+    .ev-wide .ev-row-t { font-size: 16px; }
+    .ev-igrid { gap: 7px; }
+    .ev-itile { min-height: 86px; }
+    .ev-seg button { font-size: 13.5px; }
+}
+
+/* Quantidade dentro do título da linha (Por item): é um dado, não é nome. */
+.ev-row-t i { font-style: normal; font-family: var(--mono); font-size: 11px; color: #7C8782; font-weight: 400; }
+
+/* Aviso flutuante (ver evToast no app.js) */
+.ev-toast {
+    position: fixed; left: 50%; transform: translateX(-50%) translateY(12px); bottom: 92px;
+    max-width: 92%; z-index: 200; padding: 11px 16px; border-radius: 12px;
+    background: var(--verde-escuro); color: #fff; font-size: 13.5px; font-weight: 600;
+    box-shadow: 0 16px 30px -12px rgba(11,59,43,.85);
+    opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
+}
+.ev-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.ev-toast.warn { background: var(--rubro); }

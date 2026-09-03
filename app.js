@@ -274,6 +274,7 @@ function atualizarBotaoOrdem() {
     const temAmigos = estado.amigosSelecionados.size > 0;
     const btn = document.getElementById('btn-adicionar-ordem');
     btn.disabled = qtd <= 0 || !temAmigos;
+    if (typeof evSyncNova === 'function') evSyncNova();
 }
 
 function atualizarBotaoOferta() {
@@ -281,6 +282,7 @@ function atualizarBotaoOferta() {
     const temAmigos = estado.ofertaAmigos.size > 0;
     const btn = document.getElementById('btn-adicionar-oferta');
     btn.disabled = qtd <= 0 || !temAmigos;
+    if (typeof evSyncNova === 'function') evSyncNova();
 }
 
 // Atualiza só o espelho local do historico com as ordens atuais, sem disparar
@@ -406,141 +408,476 @@ function atualizarUI() {
     if(typeof faturaRenderRecon==='function' && estado.fatura) faturaRenderRecon();
 }
 function _atualizarUIInner() {
-    // Lista de ordens
-    const lista = document.getElementById('lista-ordens');
-    if (estado.ordens.length === 0) {
-        lista.innerHTML = '<p style="color: #7C8782; font-size: 13px; text-align: center;">Nenhuma ordem registada ainda</p>';
-    } else {
-        const _evAtual = historico.find(h => h.id === eventoAtualId);
-        const _podeTudo = podeEditarEventoAtual();
-        lista.innerHTML = estado.ordens.map(ordem => {
-            const podeEditarEsta = !modoReadOnly && (_podeTudo || ehOrdemPropria(ordem, _evAtual));
-            return `
-            <div class="ordem" id="ordem-${ordem.id}" style="flex-wrap:wrap;">
-                <div class="ordem-info">
-                    <div class="ordem-item">${ordem.item} (${ordem.quantidade}x €${ordem.precoUnitario.toFixed(2)})</div>
-                    <div class="ordem-amigos">${ordem.amigos.join(', ')}</div>
-                    <div class="ordem-hora">${ordem.hora || ''}</div>
-                </div>
-                <div class="ordem-preco">€${ordem.precoTotal.toFixed(2)}</div>
-                ${podeEditarEsta ? `<button class="secondary" style="width:28px;height:28px;padding:0;font-size:14px;border-radius:50%;margin-right:4px;" onclick="toggleEditOrdem(${ordem.id})">✏️</button><button class="ordem-delete" onclick="removerOrdem(${ordem.id})">×</button>` : ''}
-            </div>
-        `;
-        }).join('');
-    }
+    const _evAtual = historico.find(h => h.id === eventoAtualId);
 
-    // Cálculos
+    // ── Cálculos (os de sempre) ─────────────────────────────────────────────
     const totalMesa = estado.ordens.reduce((sum, o) => sum + o.precoTotal, 0);
-    document.getElementById('total-mesa').textContent = '€' + totalMesa.toFixed(2);
 
-    // Contar pessoas
     const setPessoas = new Set();
-    estado.ordens.forEach(ordem => {
-        ordem.amigos.forEach(amigo => setPessoas.add(amigo));
-    });
+    estado.ordens.forEach(ordem => ordem.amigos.forEach(amigo => setPessoas.add(amigo)));
 
-    document.getElementById('num-pessoas').textContent = setPessoas.size;
-    document.getElementById('total-ordens').textContent = estado.ordens.length;
-
-    // Conta por pessoa
     const contaPorPessoa = {};
     setPessoas.forEach(pessoa => contaPorPessoa[pessoa] = 0);
-
     estado.ordens.forEach(ordem => {
         const precoParaCadaUm = ordem.precoTotal / ordem.amigos.length;
-        ordem.amigos.forEach(amigo => {
-            contaPorPessoa[amigo] += precoParaCadaUm;
-        });
+        ordem.amigos.forEach(amigo => { contaPorPessoa[amigo] += precoParaCadaUm; });
     });
 
-    // Render lista ofertas
-    const listaOfertas = document.getElementById('lista-ofertas');
-    if (estado.ofertas.length === 0) {
-        listaOfertas.innerHTML = '<p style="color:#7C8782;font-size:13px;text-align:center;">Nenhuma oferta ainda</p>';
-    } else {
-        listaOfertas.innerHTML = estado.ofertas.map(o => `
-            <div class="oferta">
-                <div class="oferta-info">
-                    <div class="oferta-desc">🎁 ${o.quem} oferece ${o.quantidade}x ${o.item}</div>
-                    <div class="oferta-detalhe">A: ${o.para.join(', ')} · ${o.hora || ''}</div>
-                </div>
-                <div class="oferta-valor">€${o.precoTotal.toFixed(2)}</div>
-                ${modoReadOnly ? '' : `<button class="ordem-delete" onclick="removerOferta(${o.id})">×</button>`}
-            </div>
-        `).join('');
-    }
-
-    // Conta por pessoa com saldo ofertas
     const saldoOfertas = calcularSaldoOfertas();
-    // Merge all people from ordens + ofertas
     const todasPessoas = new Set([...setPessoas]);
-    estado.ofertas.forEach(o => {
-        todasPessoas.add(o.quem);
-        o.para.forEach(p => todasPessoas.add(p));
-    });
+    estado.ofertas.forEach(o => { todasPessoas.add(o.quem); o.para.forEach(p => todasPessoas.add(p)); });
 
-    const contaDiv = document.getElementById('conta-pessoas');
-    if (todasPessoas.size === 0) {
-        contaDiv.innerHTML = '<p style="color: #7C8782; font-size: 13px; text-align: center;">Sem dados ainda</p>';
-    } else {
-        const pessoas = Array.from(todasPessoas).sort();
-        contaDiv.innerHTML = pessoas.map(pessoa => {
-            const base = contaPorPessoa[pessoa] || 0;
-            const delta = saldoOfertas[pessoa] || 0;
-            const total = base + delta;
-            const deltaStr = delta !== 0
-                ? `<div class="detalhe-oferta">${delta > 0 ? '🎁 oferece' : '🎁 recebe'} ${delta > 0 ? '+' : ''}€${delta.toFixed(2)}</div>`
-                : '';
-
-            // Build consumo detail
-            const consumos = {};
-            estado.ordens.forEach(o => {
-                if (o.amigos.includes(pessoa)) {
-                    const share = o.quantidade / o.amigos.length;
-                    consumos[o.item] = (consumos[o.item] || 0) + share;
-                }
-            });
-            const consumoStr = Object.keys(consumos).sort().map(item => {
-                const qtd = consumos[item];
-                const qtdStr = Number.isInteger(qtd) ? qtd : qtd.toFixed(1);
-                return `${qtdStr}× ${item}`;
-            }).join(', ');
-
-            return `
-            <div class="pessoa-conta-final">
-                <div class="linha-principal">
-                    <span class="pessoa-nome">${pessoa}</span>
-                    <span class="pessoa-valor-final">€${total.toFixed(2)}</span>
-                </div>
-                ${consumoStr ? `<div class="detalhe-consumo">${consumoStr}</div>` : ''}
-                ${deltaStr}
-            </div>`;
-        }).join('');
-    }
-
-    // Total por item
-    const totalPorItem = {};
-    const qtdPorItem = {};
+    const totalPorItem = {}, qtdPorItem = {};
     estado.ordens.forEach(ordem => {
         if (!totalPorItem[ordem.item]) { totalPorItem[ordem.item] = 0; qtdPorItem[ordem.item] = 0; }
         totalPorItem[ordem.item] += ordem.precoTotal;
         qtdPorItem[ordem.item] += ordem.quantidade;
     });
-    const itensDiv = document.getElementById('total-itens');
+
+    // ── Total da mesa ───────────────────────────────────────────────────────
+    document.getElementById('total-mesa').textContent = '€' + totalMesa.toFixed(2);
+    document.getElementById('num-pessoas').textContent = todasPessoas.size;
+    document.getElementById('total-ordens').textContent = estado.ordens.length + estado.ofertas.length;
+
+    // ── Quadrante ORDENS ────────────────────────────────────────────────────
+    const lista = document.getElementById('lista-ordens');
     if (estado.ordens.length === 0) {
-        itensDiv.innerHTML = '<p style="color: #7C8782; font-size: 13px; text-align: center;">Sem dados ainda</p>';
+        lista.innerHTML = '<p class="ev-vazio">Sem ordens ainda.<br>Toca no + para lançar a primeira.</p>';
     } else {
-        const itens = Object.keys(totalPorItem).sort();
-        itensDiv.innerHTML = itens.map(item => `
-            <div class="pessoa-conta">
-                <span class="pessoa-nome">${item} <span style="font-weight:400;color:#7C8782;font-size:12px;">(${qtdPorItem[item]}x)</span></span>
-                <span class="pessoa-valor">€${totalPorItem[item].toFixed(2)}</span>
-            </div>
-        `).join('');
+        // A última lançada em cima: é a que se confere ou se corrige.
+        lista.innerHTML = estado.ordens.slice().reverse().map(o => _evRow(
+            "evAbrirLinha('ordem'," + o.id + ")",
+            o.quantidade + '× ' + _evEsc(o.item),
+            _evNomes(o.amigos),
+            '€' + o.precoTotal.toFixed(2)
+        )).join('');
     }
+    document.getElementById('ev-n-ordens').textContent = estado.ordens.length;
+
+    // ── Quadrante RODADAS (só existe quando há alguma) ──────────────────────
+    const listaOfertas = document.getElementById('lista-ofertas');
+    listaOfertas.innerHTML = estado.ofertas.slice().reverse().map(o => _evRow(
+        "evAbrirLinha('oferta'," + o.id + ")",
+        _evEsc(o.quem),
+        o.quantidade + '× ' + _evEsc(o.item) + ' a ' + o.para.length + (o.para.length === 1 ? ' pessoa' : ' pessoas'),
+        '€' + o.precoTotal.toFixed(2)
+    )).join('');
+    document.getElementById('ev-n-ofertas').textContent = estado.ofertas.length;
+
+    const temOfertas = estado.ofertas.length > 0;
+    const qRod = document.getElementById('ev-q-rod');
+    const grid = document.getElementById('ev-grid');
+    const qOrd = document.getElementById('ev-q-ord');
+    if (qRod) qRod.style.display = temOfertas ? '' : 'none';
+    if (grid) grid.classList.toggle('ev-g4', temOfertas);
+    // Sem rodadas, as Ordens ficam com a linha toda — e aí cada uma cabe numa
+    // linha só (item · quem · valor) em vez de duas.
+    if (qOrd) qOrd.classList.toggle('ev-wide', !temOfertas);
+
+    // ── Quadrante POR ITEM ──────────────────────────────────────────────────
+    const itensDiv = document.getElementById('total-itens');
+    _evItensKeys = Object.keys(totalPorItem).sort((a, b) => totalPorItem[b] - totalPorItem[a]);
+    if (_evItensKeys.length === 0) {
+        itensDiv.innerHTML = '<p class="ev-vazio">Sem dados ainda</p>';
+    } else {
+        itensDiv.innerHTML = _evItensKeys.map((item, i) => _evRow(
+            "evAbrirLinha('item'," + i + ")",
+            _evEsc(item) + ' <i>' + qtdPorItem[item] + '×</i>',
+            '',
+            '€' + totalPorItem[item].toFixed(2)
+        )).join('');
+    }
+    document.getElementById('ev-n-itens').textContent = _evItensKeys.length;
+
+    // ── Quadrante POR PESSOA ────────────────────────────────────────────────
+    const contaDiv = document.getElementById('conta-pessoas');
+    const totaisPessoa = {};
+    todasPessoas.forEach(p => { totaisPessoa[p] = (contaPorPessoa[p] || 0) + (saldoOfertas[p] || 0); });
+    _evPessoasKeys = Array.from(todasPessoas).sort((a, b) => totaisPessoa[b] - totaisPessoa[a]);
+    if (_evPessoasKeys.length === 0) {
+        contaDiv.innerHTML = '<p class="ev-vazio">Sem dados ainda</p>';
+    } else {
+        contaDiv.innerHTML = _evPessoasKeys.map((pessoa, i) => {
+            const delta = saldoOfertas[pessoa] || 0;
+            const sub = delta === 0 ? ''
+                : (delta > 0 ? '🎁 oferece +€' : '🎁 recebe −€') + Math.abs(delta).toFixed(2);
+            return _evRow("evAbrirLinha('pessoa'," + i + ")", _evEsc(pessoa), sub, '€' + totaisPessoa[pessoa].toFixed(2));
+        }).join('');
+    }
+    document.getElementById('ev-n-pessoas').textContent = _evPessoasKeys.length;
+
     // Re-render configs so delete buttons always reflect current orders
     renderConfigAmigos();
     renderConfigMenu();
+    evSyncPermissoes();
+    evAjustarAltura();
+}
+
+/* ── ECRÃ DO EVENTO: quadrantes, folhas e o + em dois passos ───────────────
+   O evento cabe num ecrã: total da mesa + quatro quadrantes (Ordens, Rodadas,
+   Por item, Por pessoa). O que não cabe num quadrante desliza DENTRO dele — a
+   página não desliza, por isso não há dois scrolls a disputar o mesmo dedo.
+   Tocar numa LINHA (e já não no quadrante) abre uma folha pequena com o
+   detalhe dessa linha; era isso que o ecrã de detalhe servia, sem a viagem.
+   O + abre a folha da nova ordem em dois passos: artigo → quem consome. As
+   RODADAS entram pelo mesmo sítio (segmento "É uma rodada"), em vez do
+   formulário separado de antes.
+   Nada disto reimplementa regras: os formulários antigos continuam no DOM
+   dentro da folha, com os mesmos ids, e é `adicionarOrdem()`/`adicionarOferta()`
+   que grava. É o que mantém as permissões e o Supabase a funcionar na mesma. */
+
+let _evItensKeys = [];
+let _evPessoasKeys = [];
+let _evMenuKeys = [];
+let _evSheetAberta = null;
+let _evNovaModo = 'ordem';   // 'ordem' | 'oferta'
+let _evArtigo = '';
+let _evPassoAtual = 1;
+
+function _evEsc(t) {
+    return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function _evRow(onclick, titulo, sub, valor) {
+    return '<button class="ev-row" onclick="' + onclick + '">'
+        + '<span class="ev-row-t">' + titulo + '</span>'
+        + '<span class="ev-row-s">' + sub + '</span>'
+        + '<span class="ev-row-v">' + valor + '</span></button>';
+}
+
+function _evDrow(titulo, sub, valor) {
+    return '<div class="ev-drow"><div class="ev-drow-i"><span class="ev-drow-t">' + titulo + '</span>'
+        + '<span class="ev-drow-s">' + (sub || '') + '</span></div>'
+        + '<span class="ev-drow-v">' + (valor || '') + '</span></div>';
+}
+
+function _evNomes(arr, max) {
+    max = max || 3;
+    const nomes = (arr || []).map(n => _evEsc(n));
+    if (nomes.length <= max) return nomes.join(', ');
+    return nomes.slice(0, max).join(', ') + ' +' + (nomes.length - max);
+}
+
+// A grelha fica com o que sobra do ecrã: assim cabe sempre, seja qual for a
+// altura da barra do topo (que muda com o banner de leitura, o "ver como", etc.).
+function evAjustarAltura() {
+    const grid = document.getElementById('ev-grid');
+    if (!grid || _paginaAtual !== 'eventos') return;
+    const topo = grid.getBoundingClientRect().top + (window.scrollY || 0);
+    const barra = 74 + 14;
+    const h = Math.max(320, Math.round(window.innerHeight - topo - barra));
+    grid.style.height = h + 'px';
+    // O que sobra depois de medir é o padding de baixo do body e da página, que
+    // muda com o safe-area do telemóvel. Tirá-lo aqui é o que garante que não
+    // fica NADA por deslizar — que é o ponto do ecrã todo.
+    const excesso = document.documentElement.scrollHeight - window.innerHeight;
+    if (excesso > 0) grid.style.height = Math.max(320, h - excesso) + 'px';
+}
+window.addEventListener('resize', evAjustarAltura);
+
+/* Símbolo do artigo. Os artigos são escritos à mão em cada evento, por isso o
+   símbolo vem do NOME e não de uma lista fixa; o que não reconhece fica com as
+   iniciais, que é melhor do que um ícone errado. */
+const _EV_ICO = [
+    { re: /(imperial|cerveja|caneca|fino|bock|sagres|cristal|mini|panach)/i, svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 9h9v11a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1z"/><path d="M16 11h2a2 2 0 0 1 0 4h-2"/><path d="M7 9c0-2 1.2-3 2.6-3 .3-1.2 1.3-2 2.6-2 1.4 0 2.4.9 2.6 2.1C16.1 6.3 17 7.4 17 9"/></svg>' },
+    { re: /(caf[ée]|bica|abatanado|gal[ãa]o|carioca|descaf|\bch[áa]|\bcha\b|chocolate|meia de leite)/i, svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h11v6a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4z"/><path d="M16 11h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 6V4"/><path d="M12 6V4"/></svg>' },
+    { re: /([áa]gua\b|pedras|luso)/i, svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3h4v2.5l1.6 2.2A4 4 0 0 1 16.3 10v8a3 3 0 0 1-3 3h-2.6a3 3 0 0 1-3-3v-8a4 4 0 0 1 .7-2.3L10 5.5z"/><path d="M7.7 13h8.6"/></svg>' },
+    { re: /(coca|\bcola\b|\bsumo|refrig|ice ?tea|fanta|sprite|7up|pepsi|guaran|laranjada)/i, svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 7h12l-1.4 12.2a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.8z"/><path d="M6.6 11.5h10.8"/><path d="M13 7 15.5 3"/></svg>' },
+    { re: /(vinho|tinto|branco|sangria|porto|espumante|verde|ros[ée])/i, svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-.6 6a4.4 4.4 0 0 1-8.8 0z"/><path d="M12 13v6"/><path d="M8.5 21h7"/></svg>' },
+    { re: /(bifana|prego|sandes|tosta|hamb|burger|cachorro|francesinha|p[ãa]o|torrada)/i, svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13a9 4.5 0 0 1 18 0"/><path d="M3 13h18v2a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z"/><path d="M6.5 10.5c1.5-1 3.5-1 5 0s3.5 1 5 0"/></svg>' },
+    { re: /(pastel|rissol|croquete|bolinho|trem[oó]|amendo|petisco|azeiton|chouri|queijo|presunto)/i, svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11h17a8.5 8.5 0 0 1-17 0z"/><circle cx="9" cy="8" r="1.9"/><circle cx="14" cy="7" r="1.9"/><circle cx="12" cy="10.4" r="1.4"/></svg>' },
+    { re: /(\bgin\b|ginj|whisk|vodka|\bshot|licor|caipir|\brum\b|cocktail|tequila|aguardente|bagac)/i, svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16l-8 8z"/><path d="M12 12v7"/><path d="M8.5 19h7"/></svg>' },
+    { re: /(bolo|gelado|sobremesa|mousse|tarte|pudim|doce|nata)/i, svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16v-6a8 8 0 0 0-16 0z"/><path d="M12 6V3"/><circle cx="12" cy="7" r="1.4"/></svg>' },
+    { re: /(sopa|prato|dose|frango|bacalhau|arroz|carne|peixe|salada|feijoada|pica|bitoque|omelete)/i, svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4"/></svg>' }
+];
+
+function evIconeArtigo(nome) {
+    for (let i = 0; i < _EV_ICO.length; i++) {
+        if (_EV_ICO[i].re.test(nome)) return _EV_ICO[i].svg;
+    }
+    const partes = String(nome || '?').trim().split(/\s+/);
+    const ini = (partes[0] || '?').charAt(0) + (partes.length > 1 ? partes[1].charAt(0) : '');
+    return '<span class="ev-itile-ini">' + _evEsc(ini.toUpperCase()) + '</span>';
+}
+
+// ── Folhas ─────────────────────────────────────────────────────────────────
+const _EV_SHEETS = ['ev-sheet-linha', 'ev-sheet-nova', 'ev-sheet-gerir', 'ev-sheet-fecho'];
+
+function evAbrirSheet(id) {
+    _EV_SHEETS.forEach(s => { const el = document.getElementById(s); if (el) el.classList.remove('open'); });
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.add('open');
+    const scrim = document.getElementById('ev-scrim');
+    if (scrim) scrim.style.display = 'block';
+    _evSheetAberta = id;
+}
+
+function evFecharSheet() {
+    _EV_SHEETS.forEach(s => { const el = document.getElementById(s); if (el) el.classList.remove('open'); });
+    const scrim = document.getElementById('ev-scrim');
+    if (scrim) scrim.style.display = 'none';
+    _evSheetAberta = null;
+}
+
+// ── A folha de uma linha ───────────────────────────────────────────────────
+function evAbrirLinha(tipo, chave) {
+    const tit = document.getElementById('ev-linha-titulo');
+    const sub = document.getElementById('ev-linha-sub');
+    const body = document.getElementById('ev-linha-body');
+    const foot = document.getElementById('ev-linha-foot');
+    if (!tit || !body) return;
+    foot.innerHTML = '';
+    foot.style.display = 'none';
+
+    if (tipo === 'ordem') {
+        const o = estado.ordens.find(x => x.id === chave);
+        if (!o) return;
+        const quota = o.precoTotal / o.amigos.length;
+        tit.textContent = o.quantidade + '× ' + o.item;
+        sub.textContent = '€' + o.precoTotal.toFixed(2) + (o.hora ? ' · ' + o.hora : '');
+        body.innerHTML = '<div class="ev-card">'
+            + o.amigos.map(n => _evDrow(_evEsc(n), '', '€' + quota.toFixed(2))).join('')
+            + '</div><div id="ordem-' + o.id + '"></div>';
+        const ev = historico.find(h => h.id === eventoAtualId);
+        if (!modoReadOnly && (podeEditarEventoAtual() || ehOrdemPropria(o, ev))) {
+            foot.style.display = 'flex';
+            foot.innerHTML = '<button class="ev-btn ev-btn-red" onclick="evApagarLinha(\'ordem\',' + o.id + ')" aria-label="Apagar">'
+                + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h15"/><path d="M9 6.5V4.4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2.1"/><path d="M6.5 6.5 7.4 20a1 1 0 0 0 1 .9h7.2a1 1 0 0 0 1-.9l.9-13.5"/></svg></button>'
+                + '<button class="ev-btn" onclick="toggleEditOrdem(' + o.id + ')">Editar</button>';
+        }
+    } else if (tipo === 'oferta') {
+        const o = estado.ofertas.find(x => x.id === chave);
+        if (!o) return;
+        tit.textContent = 'Rodada do ' + o.quem;
+        sub.textContent = o.quantidade + '× ' + o.item + ' · €' + o.precoTotal.toFixed(2) + (o.hora ? ' · ' + o.hora : '');
+        body.innerHTML = '<div class="ev-card">'
+            + o.para.map(n => _evDrow(_evEsc(n), 'não paga este artigo', 'oferecido')).join('')
+            + '</div><span class="ev-hint">Quem oferece leva a rodada inteira para a sua conta.</span>';
+        if (!modoReadOnly && podeEditarEventoAtual()) {
+            foot.style.display = 'flex';
+            foot.innerHTML = '<button class="ev-btn ev-btn-red" onclick="evApagarLinha(\'oferta\',' + o.id + ')" aria-label="Apagar">'
+                + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h15"/><path d="M9 6.5V4.4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2.1"/><path d="M6.5 6.5 7.4 20a1 1 0 0 0 1 .9h7.2a1 1 0 0 0 1-.9l.9-13.5"/></svg></button>'
+                + '<button class="ev-btn ev-btn-ghost" onclick="evFecharSheet()">Fechar</button>';
+        }
+    } else if (tipo === 'item') {
+        const item = _evItensKeys[chave];
+        if (!item) return;
+        const linhas = estado.ordens.filter(o => o.item === item);
+        const qtd = linhas.reduce((s, o) => s + o.quantidade, 0);
+        const tot = linhas.reduce((s, o) => s + o.precoTotal, 0);
+        tit.textContent = item;
+        sub.textContent = qtd + (qtd === 1 ? ' unidade' : ' unidades') + ' · €' + tot.toFixed(2);
+        body.innerHTML = '<div class="ev-card">'
+            + linhas.slice().reverse().map(o => _evDrow(o.quantidade + '× ' + _evNomes(o.amigos, 2), o.hora || '', '€' + o.precoTotal.toFixed(2))).join('')
+            + '</div><span class="ev-hint">É esta lista que a fatura confere, artigo a artigo.</span>';
+    } else if (tipo === 'pessoa') {
+        const pessoa = _evPessoasKeys[chave];
+        if (!pessoa) return;
+        const saldo = calcularSaldoOfertas();
+        let base = 0;
+        const linhas = [];
+        estado.ordens.forEach(o => {
+            if (o.amigos.indexOf(pessoa) < 0) return;
+            const quota = o.precoTotal / o.amigos.length;
+            base += quota;
+            const q = o.quantidade / o.amigos.length;
+            linhas.push(_evDrow((Number.isInteger(q) ? q : q.toFixed(1)) + '× ' + _evEsc(o.item),
+                o.amigos.length > 1 ? 'a dividir por ' + o.amigos.length : '', '€' + quota.toFixed(2)));
+        });
+        estado.ofertas.forEach(o => {
+            if (o.quem === pessoa) linhas.push(_evDrow('Rodada de ' + o.quantidade + '× ' + _evEsc(o.item), 'a ' + o.para.length + ' pessoas', '+€' + o.precoTotal.toFixed(2)));
+            else if (o.para.indexOf(pessoa) >= 0) linhas.push(_evDrow('Oferta do ' + _evEsc(o.quem), o.quantidade + '× ' + _evEsc(o.item), '−€' + (o.precoTotal / o.para.length).toFixed(2)));
+        });
+        const total = base + (saldo[pessoa] || 0);
+        tit.textContent = pessoa;
+        sub.textContent = '€' + total.toFixed(2) + (estado.totalFatura ? ' (antes do acerto da fatura)' : ' por confirmar');
+        body.innerHTML = '<div class="ev-card">' + (linhas.length ? linhas.join('') : _evDrow('Sem consumo marcado', '', '')) + '</div>';
+    }
+
+    evAbrirSheet('ev-sheet-linha');
+}
+
+function evApagarLinha(tipo, id) {
+    if (tipo === 'ordem') {
+        const antes = estado.ordens.length;
+        removerOrdem(id);
+        if (estado.ordens.length < antes) evFecharSheet();
+    } else {
+        removerOferta(id);
+        evFecharSheet();
+    }
+}
+
+// ── Nova ordem / nova rodada ───────────────────────────────────────────────
+function evPodeRegistar() {
+    if (modoReadOnly) return false;
+    const ev = historico.find(h => h.id === eventoAtualId);
+    return podeEditarEventoAtual() || podeAdicionarOrdemPropria(ev);
+}
+
+function evAbrirNova() {
+    if (!evPodeRegistar()) return;
+    _evArtigo = '';
+    document.getElementById('item').value = '';
+    document.getElementById('quantidade').value = '0';
+    document.getElementById('oferta-item').value = '';
+    document.getElementById('oferta-qtd').value = '0';
+    document.getElementById('oferta-quem').value = '';
+    estado.amigosSelecionados.clear();
+    estado.ofertaAmigos.clear();
+    evAbrirSheet('ev-sheet-nova');
+    // Os botões dos amigos só medem bem a largura com a folha já aberta —
+    // senão o nome sai abreviado sem precisar (ver nomeBotaoAmigo).
+    renderAmigosBotoes();
+    renderOfertaAmigos();
+    atualizarBotaoOrdem();
+    atualizarBotaoOferta();
+    evModo(false);
+    evPasso(1);
+}
+
+function evPasso(n) {
+    _evPassoAtual = n;
+    const p1 = document.getElementById('ev-passo1');
+    const p2 = document.getElementById('ev-passo2');
+    const foot = document.getElementById('ev-nova-foot');
+    const foot2 = document.getElementById('ev-nova-foot2');
+    const voltar = document.getElementById('ev-nova-voltar');
+    if (n === 1) {
+        evRenderIgrid();
+        p1.style.display = '';
+        p2.style.display = 'none';
+        foot.style.display = 'none';
+        foot2.style.display = 'none';
+        voltar.style.visibility = 'hidden';
+        document.getElementById('ev-nova-titulo').textContent = 'Que artigo?';
+        document.getElementById('ev-nova-sub').textContent = 'passo 1 de 2 · toca para avançar';
+    } else {
+        p1.style.display = 'none';
+        p2.style.display = '';
+        foot.style.display = 'flex';
+        foot2.style.display = 'flex';
+        voltar.style.visibility = 'visible';
+        document.getElementById('ev-nova-titulo').textContent = _evNovaModo === 'oferta' ? 'Quem recebe?' : 'Quem consome?';
+        document.getElementById('ev-nova-sub').textContent = 'passo 2 de 2 · confirma e regista';
+        evSyncNova();
+    }
+}
+
+function evRenderIgrid() {
+    const grid = document.getElementById('ev-igrid');
+    if (!grid) return;
+    _evMenuKeys = Object.keys(menu).sort();
+    if (_evMenuKeys.length === 0) {
+        grid.innerHTML = '<p class="ev-vazio">O menu deste evento está vazio.<br>Acrescenta artigos em Gerir › Menu.</p>';
+        return;
+    }
+    grid.innerHTML = _evMenuKeys.map((item, i) =>
+        '<button type="button" class="ev-itile" onclick="evEscolherArtigo(' + i + ')">'
+        + evIconeArtigo(item)
+        + '<b>' + _evEsc(item) + '</b><span>' + menu[item].toFixed(2) + '</span></button>'
+    ).join('');
+}
+
+function evEscolherArtigo(i) {
+    const nome = _evMenuKeys[i];
+    if (!nome) return;
+    _evArtigo = nome;
+    document.getElementById('item').value = nome;
+    document.getElementById('oferta-item').value = nome;
+    evPasso(2);
+}
+
+function evQtd(d) {
+    const oferta = _evNovaModo === 'oferta';
+    const sel = document.getElementById(oferta ? 'oferta-qtd' : 'quantidade');
+    let v = parseInt(sel.value || '0', 10) + d;
+    if (v < 1) v = 1;
+    if (v > 20) v = 20;
+    sel.value = String(v);
+    if (oferta) atualizarBotaoOferta(); else atualizarBotaoOrdem();
+}
+
+function evModo(oferta) {
+    _evNovaModo = oferta ? 'oferta' : 'ordem';
+    document.getElementById('ev-seg-consumo').classList.toggle('on', !oferta);
+    document.getElementById('ev-seg-oferta').classList.toggle('on', oferta);
+    document.getElementById('section-adicionar').style.display = oferta ? 'none' : '';
+    document.getElementById('section-ofertas').style.display = oferta ? '' : 'none';
+    document.getElementById('ev-nova-nota').textContent = oferta
+        ? 'Quem oferece leva a rodada inteira para a sua conta. Só se pode oferecer um artigo que a pessoa já tenha marcado no consumo.'
+        : 'O valor divide-se em partes iguais por quem estiver marcado.';
+    if (_evPassoAtual === 2) evPasso(2); else evSyncNova();
+}
+
+function evSyncNova() {
+    const nome = _evArtigo;
+    if (!nome || menu[nome] === undefined) return;
+    const oferta = _evNovaModo === 'oferta';
+    const preco = menu[nome];
+    const qtd = parseInt(document.getElementById(oferta ? 'oferta-qtd' : 'quantidade').value || '0', 10);
+    const n = oferta ? estado.ofertaAmigos.size : estado.amigosSelecionados.size;
+    const total = preco * (qtd || 0);
+
+    const ic = document.getElementById('ev-chosen-ic');
+    if (ic) ic.innerHTML = evIconeArtigo(nome);
+    document.getElementById('ev-chosen-nome').textContent = nome;
+    document.getElementById('ev-chosen-preco').textContent = '€' + preco.toFixed(2) + ' cada';
+    document.getElementById('ev-qtd').textContent = qtd || 0;
+    document.getElementById('ev-nova-total').textContent = '€' + total.toFixed(2);
+    document.getElementById('ev-nova-linha1').textContent = n > 0
+        ? n + (n === 1 ? ' pessoa marcada' : ' pessoas marcadas')
+        : 'ninguém marcado';
+    document.getElementById('ev-nova-linha2').textContent = n > 0 && qtd > 0
+        ? '€' + (total / n).toFixed(2) + ' cada'
+        : (oferta ? 'marca quem recebe' : 'marca quem consumiu');
+
+    const src = document.getElementById(oferta ? 'btn-adicionar-oferta' : 'btn-adicionar-ordem');
+    const btn = document.getElementById('ev-btn-registar');
+    if (src && btn) {
+        btn.disabled = src.disabled || (oferta && !document.getElementById('oferta-quem').value);
+    }
+    const txt = document.getElementById('ev-btn-registar-txt');
+    if (txt) txt.textContent = oferta ? 'Registar rodada' : 'Registar';
+}
+
+function evRegistar() {
+    if (!evPodeRegistar()) return;
+    if (_evNovaModo === 'oferta') {
+        const antes = estado.ofertas.length;
+        adicionarOferta();
+        if (estado.ofertas.length > antes) evFecharSheet();
+    } else {
+        const antes = estado.ordens.length;
+        adicionarOrdem();
+        if (estado.ordens.length > antes) evFecharSheet();
+    }
+}
+
+// ── Gerir · Fechar conta ───────────────────────────────────────────────────
+function evAbrirGerir() { evSyncPermissoes(); evAbrirSheet('ev-sheet-gerir'); }
+function evAbrirFecho() { evSyncPermissoes(); evAbrirSheet('ev-sheet-fecho'); }
+
+// O que muda com as permissões e com o estado da conta.
+function evSyncPermissoes() {
+    const ev = historico.find(h => h.id === eventoAtualId);
+    const fab = document.getElementById('ev-fab');
+    if (fab) fab.style.display = evPodeRegistar() ? '' : 'none';
+    // Uma rodada mexe na conta de terceiros: só quem edita o evento a pode lançar.
+    const segOf = document.getElementById('ev-seg-oferta');
+    if (segOf) segOf.style.display = (!modoReadOnly && podeEditarEventoAtual()) ? '' : 'none';
+    const fechoTxt = document.getElementById('ev-btn-fecho-txt');
+    if (fechoTxt) fechoTxt.textContent = estado.totalFatura ? 'Conta fechada' : 'Fechar conta';
+    const gsub = document.getElementById('ev-gerir-sub');
+    if (gsub) gsub.textContent = (estado.descricaoEvento || 'Evento') + (ev && ev.data ? ' · ' + ev.data : '');
+    const fsub = document.getElementById('ev-fecho-sub');
+    if (fsub) {
+        const totalMesa = estado.ordens.reduce((s, o) => s + o.precoTotal, 0);
+        fsub.textContent = '€' + totalMesa.toFixed(2) + ' marcados na mesa';
+    }
+    const ftit = document.getElementById('ev-fecho-titulo');
+    if (ftit) ftit.textContent = estado.totalFatura ? 'Conta fechada' : 'Fechar conta';
 }
 
 
@@ -1150,8 +1487,22 @@ async function limparTudo() {
     }
 }
 
+// Aviso flutuante. O #mensagem de sempre vive agora dentro da folha da nova
+// ordem: com a folha fechada (apagar uma ordem, fechar a conta) a mensagem
+// aparecia e desaparecia sem ninguém a ver.
+let _evToastT = null;
+function evToast(msg, sucesso) {
+    let el = document.getElementById('ev-toast');
+    if (!el) { el = document.createElement('div'); el.id = 'ev-toast'; document.body.appendChild(el); }
+    el.className = 'ev-toast' + (sucesso ? ' ok' : ' warn') + ' show';
+    el.textContent = msg;
+    clearTimeout(_evToastT);
+    _evToastT = setTimeout(() => { el.classList.remove('show'); }, 3200);
+}
+
 function mostrarMensagem(msg, sucesso) {
     const div = document.getElementById('mensagem');
+    if (!div || div.offsetParent === null) { evToast(msg, sucesso); return; }
     div.className = sucesso ? 'sucesso' : 'aviso';
     div.textContent = msg;
     // #mensagem fica perto do topo, mas há ações em blocos lá mais em baixo
@@ -2348,6 +2699,7 @@ function atualizarReadOnly() {
     }
     aplicarColapsosSecoes();
     aplicarPermissoesEdicao();
+    if (typeof evSyncPermissoes === 'function') evSyncPermissoes();
 }
 
 // Devolve a etiqueta da época (ex.: "25/26") para uma data dd/mm/aaaa, com corte a 15/jul.
@@ -2598,8 +2950,13 @@ function mudarPagina(pagina) {
     // FAB Novo Evento: só no ecrã inicial + admin
     const fabNovo = document.getElementById('fab-novo');
     if (fabNovo) fabNovo.style.display = (pagina === 'inicio' && isAdmin()) ? 'inline-flex' : 'none';
+    // Barra do evento (Gerir · + · Fechar conta) e folhas: só na página do evento
+    const _evBar = document.getElementById('ev-bar');
+    if (_evBar) _evBar.style.display = pagina === 'eventos' ? 'grid' : 'none';
+    if (pagina !== 'eventos') evFecharSheet();
     if (pagina === 'pagamentos') renderContas();
     aplicarPermissoesEdicao();
+    if (pagina === 'eventos') { evSyncPermissoes(); setTimeout(evAjustarAltura, 0); }
 }
 
 function atualizarNavBadge() {
@@ -3762,6 +4119,7 @@ function toggleEditOrdem(id) {
             sbAtualizarOrdemPropria(estado.ordens[idx]);
         }
         atualizarUI();
+        if (typeof evFecharSheet === 'function') evFecharSheet();
         mostrarMensagem('✓ Ordem atualizada!', true);
     };
 
@@ -3783,7 +4141,7 @@ function toggleConfig() {
     const arrow = document.getElementById('config-arrow');
     const visible = body.style.display !== 'none';
     body.style.display = visible ? 'none' : 'block';
-    arrow.textContent = visible ? '▼' : '▲';
+    if (arrow) arrow.textContent = visible ? '▼' : '▲';
 }
 
 function toggleGuardar() {
