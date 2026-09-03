@@ -260,11 +260,11 @@ sozinho conforme quem faltasse e ninguém percebia porquê.
 O evento era uma página comprida: adicionar ordem, ordens registadas, ofertas,
 resumo da conta, configurações. Para saber quanto ia a mesa e quem devia o quê
 andava-se para baixo e para cima. Agora cabe tudo num ecrã.
-- **Total da mesa** em cima, e por baixo a grelha: **Ordens · Rodadas · Por item
+- **Total da mesa** em cima, e por baixo a grelha: **Ordens · Ofertas · Por item
   · Por pessoa**. As Ordens ocupam a **linha de cima inteira** e a coluna das
-  **Rodadas só nasce quando existe alguma** (`ev-g4` no `#ev-grid`) — na maior
-  parte dos jogos não há rodadas, e um quadrante permanentemente vazio é pior do
-  que não o ter. Sem rodadas, a linha inteira dá para pôr cada ordem numa linha
+  **Ofertas só nasce quando existe alguma** (`ev-g4` no `#ev-grid`) — na maior
+  parte dos jogos não há ofertas, e um quadrante permanentemente vazio é pior do
+  que não o ter. Sem ofertas, a linha inteira dá para pôr cada ordem numa linha
   só (`.ev-wide`: item · quem · valor) em vez de duas.
 - **O scroll vive DENTRO de cada quadrante** (`.ev-rows`), nunca na página: a
   altura da grelha é calculada em `evAjustarAltura()` a partir do que sobra do
@@ -279,8 +279,25 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
   — a folha cria o `#ordem-<id>` onde o painel de edição se desenha.
 - **O + abre em dois passos**: artigo (grelha de símbolos) → quem consome. O
   artigo escolhido **avança sozinho** para o passo 2, onde estão a quantidade,
-  as pessoas e o total antes de registar. As **rodadas entram por aqui**
-  (segmento "É uma rodada"), e já não por um formulário à parte.
+  as pessoas e o total antes de registar. Só serve para **consumo**: a oferta
+  tem caminho próprio (a seguir).
+- **A oferta não entra pelo +.** O + lança consumo; uma oferta **não acrescenta
+  nada à mesa — atua sobre o que lá está**, e misturar as duas coisas no mesmo
+  botão confundia. Tem botão próprio (`#ev-fab-of`, dourado e mais pequeno, ao
+  lado do +, e só aparece com ordens já lançadas), que abre a lista do que foi
+  pedido **por pessoa**: escolhe-se quem oferece e **pica-se** o que essa pessoa
+  assume. Tocar outra vez devolve a linha.
+  Cada linha picada é UM registo em `estado.ofertas` com **`ordemId`** e **um só
+  nome** em `para` — assim o valor deduzido é exatamente a quota daquela pessoa
+  naquela ordem, e não uma média. As ofertas **antigas** (sem `ordemId`, com
+  vários nomes em `para`) continuam a valer: o `calcularSaldoOfertas()` é o
+  mesmo para as duas, e na lista as linhas que elas cobrem aparecem bloqueadas.
+  **`_evRepararOfertas()`** corre a seguir a apagar e a editar uma ordem: uma
+  oferta que aponte para uma ordem que desapareceu, ou de que a pessoa saiu, vai
+  atrás dela; se a ordem mudou de preço ou de gente, o valor é refeito. Sem isso
+  ficava a deduzir um valor que já não existe. O quadrante mostra **uma linha
+  por quem oferece** (`_evOferentesKeys`), não uma por artigo picado: quem lê
+  quer saber quanto o Barrona assumiu, não a lista das dezoito imperiais.
 - **Símbolos dos artigos** (`evIconeArtigo`): o menu é escrito à mão em cada
   evento, por isso o símbolo vem do NOME (`_EV_ICO`, uma lista de padrões) e o
   que não é reconhecido fica com as **iniciais** — melhor do que um ícone

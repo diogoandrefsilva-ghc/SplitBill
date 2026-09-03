@@ -315,7 +315,7 @@ window.sbEsconderSplash = function(){
         <div class="ev-rows" id="lista-ordens"></div>
     </div>
     <div class="ev-q ev-a-rod" id="ev-q-rod" style="display:none;">
-        <div class="ev-qhead"><span class="ev-eye">Rodadas</span><span class="ev-qn" id="ev-n-ofertas">0</span></div>
+        <div class="ev-qhead"><span class="ev-eye">Ofertas</span><span class="ev-qn" id="ev-n-ofertas">0</span></div>
         <div class="ev-rows" id="lista-ofertas"></div>
     </div>
     <div class="ev-q ev-a-itens">
@@ -335,6 +335,9 @@ window.sbEsconderSplash = function(){
         Gerir
     </button>
     <div class="ev-barmid">
+        <button class="ev-fab-of" id="ev-fab-of" onclick="evAbrirOferta()" aria-label="Oferecer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="10.5" width="17.6" height="9.8" rx="1.4"/><path d="M2 7.2h20v3.3H2z"/><path d="M12 7.2v13.1"/><path d="M12 7.2S11.2 3 8.6 3a2.1 2.1 0 0 0 0 4.2z"/><path d="M12 7.2S12.8 3 15.4 3a2.1 2.1 0 0 1 0 4.2z"/></svg>
+        </button>
         <button class="ev-fab" id="ev-fab" onclick="evAbrirNova()" aria-label="Nova ordem">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
@@ -395,12 +398,6 @@ window.sbEsconderSplash = function(){
                 </div>
             </div>
 
-            <span class="ev-lab">Quem paga</span>
-            <div class="ev-seg">
-                <button type="button" id="ev-seg-consumo" class="on" onclick="evModo(false)">Cada um o seu</button>
-                <button type="button" id="ev-seg-oferta" onclick="evModo(true)">É uma rodada</button>
-            </div>
-
             <!-- ORDEM (consumo). Os selects ficam cá por baixo, escondidos: são
                  eles que guardam o estado que o adicionarOrdem() vai ler. -->
             <div class="section" id="section-adicionar">
@@ -411,24 +408,6 @@ window.sbEsconderSplash = function(){
                     <div class="amigos-grid" id="amigos-grid"></div>
                     <button id="btn-adicionar-ordem" onclick="adicionarOrdem()" style="display:none;" disabled>✓ Adicionar Ordem</button>
                     <div id="mensagem"></div>
-                </div>
-            </div>
-
-            <!-- RODADA (oferta) -->
-            <div class="section" id="section-ofertas">
-                <div class="section-body">
-                    <div id="oferta-form">
-                        <div class="ev-oferece">
-                            <span>Rodada oferecida por</span>
-                            <select id="oferta-quem" onchange="evSyncNova()"><option value="">Amigo</option></select>
-                        </div>
-                        <select id="oferta-item" style="display:none;"><option value="">-- Item --</option></select>
-                        <select id="oferta-qtd" style="display:none;" onchange="atualizarBotaoOferta()"><option value="0" selected>0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option></select>
-                        <span class="ev-lab">Quem recebe a rodada?</span>
-                        <div class="amigos-grid" id="oferta-amigos-grid"></div>
-                        <button id="btn-adicionar-oferta" onclick="adicionarOferta()" style="display:none;" disabled>🎁 Adicionar Oferta</button>
-                        <div id="mensagem-oferta" style="margin-top:8px;"></div>
-                    </div>
                 </div>
             </div>
 
@@ -447,6 +426,51 @@ window.sbEsconderSplash = function(){
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 10 18 20 6"/></svg>
             <span id="ev-btn-registar-txt">Registar</span>
         </button>
+    </div>
+</div>
+
+<!-- Oferecer: picar, do que já foi pedido, o que alguém assume -->
+<div class="ev-sheet" id="ev-sheet-oferta">
+    <div class="ev-shhead">
+        <div class="ev-sht"><strong>Oferecer</strong><span id="ev-of-sub">pica o que alguém assume</span></div>
+        <button class="ev-icb" onclick="evFecharSheet()" aria-label="Fechar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+        </button>
+    </div>
+    <div class="ev-shbody">
+        <span class="ev-lab">Quem oferece</span>
+        <div class="amigos-grid" id="ev-of-quem"></div>
+        <span class="ev-lab" id="ev-of-lab">O que assume</span>
+        <div id="ev-of-lista"></div>
+        <span class="ev-hint">A oferta não acrescenta nada à mesa: tira o valor a quem consumiu e põe-no em quem oferece. Toca outra vez numa linha picada para a devolver.</span>
+            <!-- O formulário antigo das ofertas fica no DOM, escondido: é por ele que
+             passam as permissões (section-ofertas) e é ele que o
+             renderOfertaAmigos()/renderOfertaDropdowns() continua a preencher. -->
+            <div class="section" id="section-ofertas" style="display:none;">
+                <div class="section-body">
+                    <div id="oferta-form">
+                        <div class="ev-oferece">
+                            <span>Rodada oferecida por</span>
+                            <select id="oferta-quem" onchange="evSyncNova()"><option value="">Amigo</option></select>
+                        </div>
+                        <select id="oferta-item" style="display:none;"><option value="">-- Item --</option></select>
+                        <select id="oferta-qtd" style="display:none;" onchange="atualizarBotaoOferta()"><option value="0" selected>0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option></select>
+                        <span class="ev-lab">Quem recebe a rodada?</span>
+                        <div class="amigos-grid" id="oferta-amigos-grid"></div>
+                        <button id="btn-adicionar-oferta" onclick="adicionarOferta()" style="display:none;" disabled>🎁 Adicionar Oferta</button>
+                        <div id="mensagem-oferta" style="margin-top:8px;"></div>
+                    </div>
+                </div>
+            </div>
+    </div>
+    <div class="ev-shfoot">
+        <div class="ev-tot">
+            <div class="ev-tot-l"><span>Vai assumir</span><b id="ev-of-total">€0.00</b></div>
+            <div class="ev-tot-r"><span id="ev-of-linha1">ninguém escolhido</span><br><span id="ev-of-linha2">escolhe quem oferece</span></div>
+        </div>
+    </div>
+    <div class="ev-shfoot ev-shfoot-btn">
+        <button class="ev-btn" onclick="evFecharSheet()">Concluído</button>
     </div>
 </div>
 

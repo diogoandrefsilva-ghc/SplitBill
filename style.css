@@ -2004,7 +2004,7 @@ html,body{touch-action:pan-x pan-y}
 /* ── Barra inferior ── */
 .ev-bar {
     position: fixed; left: 50%; transform: translateX(-50%); bottom: 0; width: 100%; max-width: 600px;
-    height: 74px; display: none; grid-template-columns: 1fr 84px 1fr; align-items: center;
+    height: 74px; display: none; grid-template-columns: 1fr 124px 1fr; align-items: center;
     background: #fff; border-top: 1px solid #E2E7E0; padding: 0 8px 0; z-index: 90;
     box-shadow: 0 -10px 24px -20px rgba(11,59,43,.8);
     padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -2012,14 +2012,17 @@ html,body{touch-action:pan-x pan-y}
 .ev-barbtn, .ev-barbtn:hover {
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
     min-height: 58px; border: 0; background: transparent; cursor: pointer; color: var(--verde-tinta);
-    font-family: var(--display); font-weight: 600; font-size: 13.5px;
-    text-transform: uppercase; letter-spacing: .07em;
+    font-family: var(--display); font-weight: 600; font-size: 12.5px; white-space: nowrap;
+    text-transform: uppercase; letter-spacing: .05em;
 }
 .ev-barbtn:active { transform: scale(.96); }
 .ev-barbtn svg { width: 21px; height: 21px; }
 .ev-barbtn.ev-gold, .ev-barbtn.ev-gold:hover { color: #8A6D14; }
 .ev-barbtn:disabled { opacity: .4; }
 .ev-barmid { display: flex; align-items: center; justify-content: center; }
+/* Os dois são redondos e não encolhem: sem o flex:0 0 auto o + e a oferta
+   ficavam elipses assim que passaram a partilhar a mesma célula. */
+.ev-barmid > button { flex: 0 0 auto; }
 .ev-fab, .ev-fab:hover {
     width: 62px; height: 62px; border: 0; border-radius: 50%; margin-top: -28px; cursor: pointer; color: #fff;
     background: linear-gradient(135deg, #13A56E 0%, #0E7A4F 55%, #0B5238 100%);
@@ -2171,3 +2174,53 @@ html,body{touch-action:pan-x pan-y}
 }
 .ev-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .ev-toast.warn { background: var(--rubro); }
+
+/* ── Oferecer: botão pequeno ao lado do +, e a lista de picar ──────────────
+   A oferta não acrescenta nada à mesa (atua sobre o que lá está), por isso não
+   entra pelo +: tem botão próprio, mais pequeno, ao lado dele. */
+.ev-barmid { gap: 9px; }
+.ev-fab-of, .ev-fab-of:hover {
+    width: 46px; height: 46px; border: 0; border-radius: 50%; margin-top: -14px; cursor: pointer;
+    color: #8A6D14; background: var(--dourado-claro); padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 18px -8px rgba(138,109,20,.6), inset 0 0 0 1.5px #EADFB6, 0 0 0 4px #fff;
+}
+.ev-fab-of:active { transform: scale(.94); }
+.ev-fab-of svg { width: 22px; height: 22px; }
+
+.ev-of-grupo { background: #fff; border: 1px solid #E6EDE6; border-radius: 14px; padding: 2px 12px 6px; margin-bottom: 9px; }
+.ev-of-cab {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+    padding: 9px 0 7px; border-bottom: 1px solid #EDF1EC; margin-bottom: 2px;
+}
+.ev-of-cab span:first-child { font-family: var(--display); font-weight: 700; font-size: 18px; }
+.ev-of-cab span:last-child { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); }
+.ev-of-linha, .ev-of-linha:hover {
+    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; cursor: pointer;
+    background: transparent; border: 0; border-bottom: 1px solid #F1F4F0; padding: 9px 0; color: var(--ink);
+    text-transform: none; letter-spacing: normal; border-radius: 0;
+}
+.ev-of-linha:last-child { border-bottom: 0; }
+.ev-of-linha:hover:not(:disabled) { background: rgba(184,145,31,.06); }
+.ev-of-tick {
+    flex: 0 0 auto; width: 26px; height: 26px; border-radius: 8px; border: 1.6px solid var(--linha);
+    display: flex; align-items: center; justify-content: center; color: #fff; background: #fff;
+}
+.ev-of-tick svg { width: 15px; height: 15px; }
+.ev-of-linha.on .ev-of-tick { background: var(--dourado); border-color: var(--dourado); }
+.ev-of-t {
+    flex: 1 1 auto; min-width: 0; font-family: var(--display); font-weight: 600; font-size: 16.5px; line-height: 1.15;
+}
+.ev-of-t i {
+    display: block; font-style: normal; font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 400; font-size: 10.5px; color: #9AA49E; margin-top: 1px;
+}
+.ev-of-v { flex: 0 0 auto; font-family: var(--mono); font-weight: 600; font-size: 12.5px; color: var(--verde-tinta); }
+.ev-of-linha.on .ev-of-v { color: #8A6D14; }
+.ev-of-linha.off, .ev-of-linha.off:hover { opacity: .45; cursor: default; }
+.ev-of-linha.on.off, .ev-of-linha.on.off:hover { opacity: .75; }
+.ev-of-x, .ev-of-x:hover {
+    flex: 0 0 auto; width: 32px; height: 32px; border-radius: 9px; border: 0; padding: 0; cursor: pointer;
+    background: rgba(179,64,47,.10); color: var(--rubro); display: flex; align-items: center; justify-content: center;
+}
+.ev-of-x svg { width: 15px; height: 15px; }

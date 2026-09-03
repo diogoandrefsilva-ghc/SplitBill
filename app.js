@@ -370,6 +370,9 @@ function removerOrdem(id) {
     // Verificar se alguma oferta ficaria inválida
     const problemasOferta = [];
     estado.ofertas.forEach(oferta => {
+        // As ofertas picadas nesta ordem vão-se embora com ela (ver
+        // _evRepararOfertas), por isso não são impedimento nenhum.
+        if (oferta.ordemId === id) return;
         if (oferta.item !== ordem.item) return;
         oferta.para.forEach(destinatario => {
             if (!ordem.amigos.includes(destinatario)) return;
@@ -390,6 +393,7 @@ function removerOrdem(id) {
     }
 
     estado.ordens = estado.ordens.filter(o => o.id !== id);
+    _evRepararOfertas();
     if (podeTudo) {
         salvarNoLocalStorage();
     } else {
@@ -455,14 +459,24 @@ function _atualizarUIInner() {
     document.getElementById('ev-n-ordens').textContent = estado.ordens.length;
 
     // ── Quadrante RODADAS (só existe quando há alguma) ──────────────────────
+    // Uma linha por quem oferece, e não uma por artigo picado: quem lê quer
+    // saber quanto é que o Barrona assumiu, não a lista das dezoito imperiais.
     const listaOfertas = document.getElementById('lista-ofertas');
-    listaOfertas.innerHTML = estado.ofertas.slice().reverse().map(o => _evRow(
-        "evAbrirLinha('oferta'," + o.id + ")",
-        _evEsc(o.quem),
-        o.quantidade + '× ' + _evEsc(o.item) + ' a ' + o.para.length + (o.para.length === 1 ? ' pessoa' : ' pessoas'),
-        '€' + o.precoTotal.toFixed(2)
-    )).join('');
-    document.getElementById('ev-n-ofertas').textContent = estado.ofertas.length;
+    const porOferente = {};
+    estado.ofertas.forEach(o => {
+        if (!porOferente[o.quem]) porOferente[o.quem] = { total: 0, artigos: 0, pessoas: new Set() };
+        porOferente[o.quem].total += o.precoTotal;
+        porOferente[o.quem].artigos += 1;
+        o.para.forEach(p => porOferente[o.quem].pessoas.add(p));
+    });
+    _evOferentesKeys = Object.keys(porOferente).sort((a, b) => porOferente[b].total - porOferente[a].total);
+    listaOfertas.innerHTML = _evOferentesKeys.map((q, i) => {
+        const g = porOferente[q];
+        return _evRow("evAbrirLinha('oferente'," + i + ")", _evEsc(q),
+            g.artigos + (g.artigos === 1 ? ' artigo a ' : ' artigos a ') + g.pessoas.size + (g.pessoas.size === 1 ? ' pessoa' : ' pessoas'),
+            '€' + g.total.toFixed(2));
+    }).join('');
+    document.getElementById('ev-n-ofertas').textContent = _evOferentesKeys.length;
 
     const temOfertas = estado.ofertas.length > 0;
     const qRod = document.getElementById('ev-q-rod');
@@ -530,8 +544,10 @@ let _evItensKeys = [];
 let _evPessoasKeys = [];
 let _evMenuKeys = [];
 let _evSheetAberta = null;
-let _evNovaModo = 'ordem';   // 'ordem' | 'oferta'
 let _evArtigo = '';
+let _evOfQuem = '';          // quem está a oferecer, na folha das ofertas
+let _evOfPessoas = [];       // ordem dos grupos dessa folha (para indexar os toques)
+let _evOferentesKeys = [];
 let _evPassoAtual = 1;
 
 function _evEsc(t) {
@@ -601,7 +617,7 @@ function evIconeArtigo(nome) {
 }
 
 // ── Folhas ─────────────────────────────────────────────────────────────────
-const _EV_SHEETS = ['ev-sheet-linha', 'ev-sheet-nova', 'ev-sheet-gerir', 'ev-sheet-fecho'];
+const _EV_SHEETS = ['ev-sheet-linha', 'ev-sheet-nova', 'ev-sheet-oferta', 'ev-sheet-gerir', 'ev-sheet-fecho'];
 
 function evAbrirSheet(id) {
     _EV_SHEETS.forEach(s => { const el = document.getElementById(s); if (el) el.classList.remove('open'); });
@@ -646,19 +662,25 @@ function evAbrirLinha(tipo, chave) {
                 + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h15"/><path d="M9 6.5V4.4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2.1"/><path d="M6.5 6.5 7.4 20a1 1 0 0 0 1 .9h7.2a1 1 0 0 0 1-.9l.9-13.5"/></svg></button>'
                 + '<button class="ev-btn" onclick="toggleEditOrdem(' + o.id + ')">Editar</button>';
         }
-    } else if (tipo === 'oferta') {
-        const o = estado.ofertas.find(x => x.id === chave);
-        if (!o) return;
-        tit.textContent = 'Rodada do ' + o.quem;
-        sub.textContent = o.quantidade + '× ' + o.item + ' · €' + o.precoTotal.toFixed(2) + (o.hora ? ' · ' + o.hora : '');
-        body.innerHTML = '<div class="ev-card">'
-            + o.para.map(n => _evDrow(_evEsc(n), 'não paga este artigo', 'oferecido')).join('')
-            + '</div><span class="ev-hint">Quem oferece leva a rodada inteira para a sua conta.</span>';
-        if (!modoReadOnly && podeEditarEventoAtual()) {
+    } else if (tipo === 'oferente') {
+        const quem = _evOferentesKeys[chave];
+        if (!quem) return;
+        const linhas = estado.ofertas.filter(o => o.quem === quem);
+        const tot = linhas.reduce((s, o) => s + o.precoTotal, 0);
+        const podeMexer = !modoReadOnly && podeEditarEventoAtual();
+        tit.textContent = quem + ' oferece';
+        sub.textContent = linhas.length + (linhas.length === 1 ? ' artigo · €' : ' artigos · €') + tot.toFixed(2);
+        body.innerHTML = '<div class="ev-card">' + linhas.map(o =>
+            '<div class="ev-drow"><div class="ev-drow-i">'
+            + '<span class="ev-drow-t">' + _evQtdStr(o.quantidade) + '× ' + _evEsc(o.item) + '</span>'
+            + '<span class="ev-drow-s">a ' + _evNomes(o.para, 3) + '</span></div>'
+            + '<span class="ev-drow-v">€' + o.precoTotal.toFixed(2) + '</span>'
+            + (podeMexer ? '<button class="ev-of-x" onclick="evApagarLinha(\'oferta\',' + o.id + ')" aria-label="Devolver">'
+                + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>' : '')
+            + '</div>').join('') + '</div>';
+        if (podeMexer) {
             foot.style.display = 'flex';
-            foot.innerHTML = '<button class="ev-btn ev-btn-red" onclick="evApagarLinha(\'oferta\',' + o.id + ')" aria-label="Apagar">'
-                + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h15"/><path d="M9 6.5V4.4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2.1"/><path d="M6.5 6.5 7.4 20a1 1 0 0 0 1 .9h7.2a1 1 0 0 0 1-.9l.9-13.5"/></svg></button>'
-                + '<button class="ev-btn ev-btn-ghost" onclick="evFecharSheet()">Fechar</button>';
+            foot.innerHTML = '<button class="ev-btn ev-btn-ghost" onclick="evAbrirOferta(' + JSON.stringify(quem) + ')">Picar mais</button>';
         }
     } else if (tipo === 'item') {
         const item = _evItensKeys[chave];
@@ -721,19 +743,12 @@ function evAbrirNova() {
     _evArtigo = '';
     document.getElementById('item').value = '';
     document.getElementById('quantidade').value = '0';
-    document.getElementById('oferta-item').value = '';
-    document.getElementById('oferta-qtd').value = '0';
-    document.getElementById('oferta-quem').value = '';
     estado.amigosSelecionados.clear();
-    estado.ofertaAmigos.clear();
     evAbrirSheet('ev-sheet-nova');
     // Os botões dos amigos só medem bem a largura com a folha já aberta —
     // senão o nome sai abreviado sem precisar (ver nomeBotaoAmigo).
     renderAmigosBotoes();
-    renderOfertaAmigos();
     atualizarBotaoOrdem();
-    atualizarBotaoOferta();
-    evModo(false);
     evPasso(1);
 }
 
@@ -759,7 +774,7 @@ function evPasso(n) {
         foot.style.display = 'flex';
         foot2.style.display = 'flex';
         voltar.style.visibility = 'visible';
-        document.getElementById('ev-nova-titulo').textContent = _evNovaModo === 'oferta' ? 'Quem recebe?' : 'Quem consome?';
+        document.getElementById('ev-nova-titulo').textContent = 'Quem consome?';
         document.getElementById('ev-nova-sub').textContent = 'passo 2 de 2 · confirma e regista';
         evSyncNova();
     }
@@ -790,34 +805,20 @@ function evEscolherArtigo(i) {
 }
 
 function evQtd(d) {
-    const oferta = _evNovaModo === 'oferta';
-    const sel = document.getElementById(oferta ? 'oferta-qtd' : 'quantidade');
+    const sel = document.getElementById('quantidade');
     let v = parseInt(sel.value || '0', 10) + d;
     if (v < 1) v = 1;
     if (v > 20) v = 20;
     sel.value = String(v);
-    if (oferta) atualizarBotaoOferta(); else atualizarBotaoOrdem();
-}
-
-function evModo(oferta) {
-    _evNovaModo = oferta ? 'oferta' : 'ordem';
-    document.getElementById('ev-seg-consumo').classList.toggle('on', !oferta);
-    document.getElementById('ev-seg-oferta').classList.toggle('on', oferta);
-    document.getElementById('section-adicionar').style.display = oferta ? 'none' : '';
-    document.getElementById('section-ofertas').style.display = oferta ? '' : 'none';
-    document.getElementById('ev-nova-nota').textContent = oferta
-        ? 'Quem oferece leva a rodada inteira para a sua conta. Só se pode oferecer um artigo que a pessoa já tenha marcado no consumo.'
-        : 'O valor divide-se em partes iguais por quem estiver marcado.';
-    if (_evPassoAtual === 2) evPasso(2); else evSyncNova();
+    atualizarBotaoOrdem();
 }
 
 function evSyncNova() {
     const nome = _evArtigo;
     if (!nome || menu[nome] === undefined) return;
-    const oferta = _evNovaModo === 'oferta';
     const preco = menu[nome];
-    const qtd = parseInt(document.getElementById(oferta ? 'oferta-qtd' : 'quantidade').value || '0', 10);
-    const n = oferta ? estado.ofertaAmigos.size : estado.amigosSelecionados.size;
+    const qtd = parseInt(document.getElementById('quantidade').value || '0', 10);
+    const n = estado.amigosSelecionados.size;
     const total = preco * (qtd || 0);
 
     const ic = document.getElementById('ev-chosen-ic');
@@ -831,28 +832,18 @@ function evSyncNova() {
         : 'ninguém marcado';
     document.getElementById('ev-nova-linha2').textContent = n > 0 && qtd > 0
         ? '€' + (total / n).toFixed(2) + ' cada'
-        : (oferta ? 'marca quem recebe' : 'marca quem consumiu');
+        : 'marca quem consumiu';
 
-    const src = document.getElementById(oferta ? 'btn-adicionar-oferta' : 'btn-adicionar-ordem');
+    const src = document.getElementById('btn-adicionar-ordem');
     const btn = document.getElementById('ev-btn-registar');
-    if (src && btn) {
-        btn.disabled = src.disabled || (oferta && !document.getElementById('oferta-quem').value);
-    }
-    const txt = document.getElementById('ev-btn-registar-txt');
-    if (txt) txt.textContent = oferta ? 'Registar rodada' : 'Registar';
+    if (src && btn) btn.disabled = src.disabled;
 }
 
 function evRegistar() {
     if (!evPodeRegistar()) return;
-    if (_evNovaModo === 'oferta') {
-        const antes = estado.ofertas.length;
-        adicionarOferta();
-        if (estado.ofertas.length > antes) evFecharSheet();
-    } else {
-        const antes = estado.ordens.length;
-        adicionarOrdem();
-        if (estado.ordens.length > antes) evFecharSheet();
-    }
+    const antes = estado.ordens.length;
+    adicionarOrdem();
+    if (estado.ordens.length > antes) evFecharSheet();
 }
 
 // ── Gerir · Fechar conta ───────────────────────────────────────────────────
@@ -864,9 +855,10 @@ function evSyncPermissoes() {
     const ev = historico.find(h => h.id === eventoAtualId);
     const fab = document.getElementById('ev-fab');
     if (fab) fab.style.display = evPodeRegistar() ? '' : 'none';
-    // Uma rodada mexe na conta de terceiros: só quem edita o evento a pode lançar.
-    const segOf = document.getElementById('ev-seg-oferta');
-    if (segOf) segOf.style.display = (!modoReadOnly && podeEditarEventoAtual()) ? '' : 'none';
+    // Oferecer mexe na conta de terceiros (e só faz sentido com algo pedido):
+    // só quem edita o evento, e só quando já há ordens.
+    const fabOf = document.getElementById('ev-fab-of');
+    if (fabOf) fabOf.style.display = (!modoReadOnly && podeEditarEventoAtual() && estado.ordens.length > 0) ? '' : 'none';
     const fechoTxt = document.getElementById('ev-btn-fecho-txt');
     if (fechoTxt) fechoTxt.textContent = estado.totalFatura ? 'Conta fechada' : 'Fechar conta';
     const gsub = document.getElementById('ev-gerir-sub');
@@ -878,6 +870,165 @@ function evSyncPermissoes() {
     }
     const ftit = document.getElementById('ev-fecho-titulo');
     if (ftit) ftit.textContent = estado.totalFatura ? 'Conta fechada' : 'Fechar conta';
+}
+
+/* ── OFERECER: picar o que já foi pedido ───────────────────────────────────
+   Uma oferta não acrescenta nada à mesa — atua sobre o que lá está: tira o
+   valor a quem consumiu e põe-no em quem oferece. Por isso não entra pelo +
+   (que é para lançar consumo) mas por um botão próprio, e não se escreve: pica-se
+   da lista do que já foi pedido, pessoa a pessoa.
+   Cada linha picada é UM registo em `estado.ofertas` com `ordemId` e um único
+   nome em `para` — assim o valor deduzido é exatamente a quota daquela pessoa
+   naquela ordem. (As ofertas antigas, sem `ordemId`, continuam a valer como
+   sempre: o cálculo em calcularSaldoOfertas() é o mesmo para as duas.) */
+
+function _evQtdStr(q) {
+    const n = Number(q) || 0;
+    return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100);
+}
+
+// A oferta desta pessoa nesta ordem, se existir (só as novas, com ordemId).
+function _evOfertaDe(ordemId, pessoa) {
+    return estado.ofertas.find(x => x.ordemId === ordemId && x.para.length === 1 && x.para[0] === pessoa);
+}
+
+/* Uma oferta nova aponta para uma ordem: se a ordem for apagada, mudar de
+   pessoas ou de preço, a oferta tem de acompanhar — senão ficava a deduzir um
+   valor que já não existe. Corre a seguir a apagar/editar uma ordem. */
+function _evRepararOfertas() {
+    let mexeu = false;
+    estado.ofertas = estado.ofertas.filter(o => {
+        if (!o.ordemId) return true;                       // ofertas antigas: não se tocam
+        const ordem = estado.ordens.find(x => x.id === o.ordemId);
+        const pessoa = o.para && o.para.length === 1 ? o.para[0] : null;
+        if (!ordem || !pessoa || ordem.amigos.indexOf(pessoa) < 0) { mexeu = true; return false; }
+        const valor = ordem.precoTotal / ordem.amigos.length;
+        if (Math.abs(valor - o.precoTotal) > 0.0001 || o.item !== ordem.item) {
+            o.item = ordem.item;
+            o.precoUnitario = ordem.precoUnitario;
+            o.quantidade = Math.round((ordem.quantidade / ordem.amigos.length) * 100) / 100;
+            o.precoTotal = valor;
+            mexeu = true;
+        }
+        return true;
+    });
+    return mexeu;
+}
+
+function evAbrirOferta(quem) {
+    if (modoReadOnly || !podeEditarEventoAtual()) return;
+    if (estado.ordens.length === 0) { evToast('Ainda não há nada pedido para oferecer', false); return; }
+    if (quem) _evOfQuem = quem;
+    if (amigos.indexOf(_evOfQuem) < 0) _evOfQuem = '';
+    evAbrirSheet('ev-sheet-oferta');
+    evRenderOferta();
+}
+
+function evOfEscolherQuem(i) {
+    const nome = amigos[i];
+    if (!nome) return;
+    _evOfQuem = (_evOfQuem === nome) ? '' : nome;
+    evRenderOferta();
+}
+
+function evRenderOferta() {
+    const grid = document.getElementById('ev-of-quem');
+    if (!grid) return;
+    grid.innerHTML = amigos.map((a, i) =>
+        '<button type="button" class="amigo-btn' + (a === _evOfQuem ? ' selected' : '') + '" onclick="evOfEscolherQuem(' + i + ')">'
+        + _evEsc(nomeBotaoAmigo(a, null)) + '</button>').join('');
+
+    // O que cada um consumiu, linha a linha (a quota dele naquela ordem).
+    const consumo = {};
+    estado.ordens.forEach(o => {
+        const valor = o.precoTotal / o.amigos.length;
+        o.amigos.forEach(p => {
+            if (!consumo[p]) consumo[p] = [];
+            consumo[p].push({ o: o, valor: valor });
+        });
+    });
+    // Quem oferece não aparece na lista: não se oferece a si próprio.
+    _evOfPessoas = Object.keys(consumo).filter(p => p !== _evOfQuem).sort();
+
+    const lista = document.getElementById('ev-of-lista');
+    if (_evOfPessoas.length === 0) {
+        lista.innerHTML = '<p class="ev-vazio">Sem consumo de outras pessoas para oferecer.</p>';
+    } else {
+        lista.innerHTML = _evOfPessoas.map((p, pi) => {
+            const linhas = consumo[p];
+            const tot = linhas.reduce((s, l) => s + l.valor, 0);
+            const corpo = linhas.map(l => {
+                const of = _evOfertaDe(l.o.id, p);
+                const legado = !of && estado.ofertas.some(x => !x.ordemId && x.item === l.o.item && x.para.indexOf(p) >= 0);
+                const minha = of && of.quem === _evOfQuem;
+                const doOutro = of && !minha;
+                const bloqueado = doOutro || legado || !_evOfQuem;
+                let nota = '';
+                if (doOutro) nota = 'oferecido por ' + _evEsc(of.quem);
+                else if (legado) nota = 'já coberto por uma oferta antiga';
+                const q = l.o.quantidade / l.o.amigos.length;
+                return '<button type="button" class="ev-of-linha' + (minha ? ' on' : '') + (bloqueado ? ' off' : '') + '"'
+                    + (bloqueado ? ' disabled' : '')
+                    + ' onclick="evToggleOferta(' + pi + ',' + l.o.id + ')">'
+                    + '<span class="ev-of-tick">' + (minha
+                        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 10 18 20 6"/></svg>'
+                        : '') + '</span>'
+                    + '<span class="ev-of-t">' + _evQtdStr(q) + '× ' + _evEsc(l.o.item)
+                    + (nota ? '<i>' + nota + '</i>' : '') + '</span>'
+                    + '<span class="ev-of-v">€' + l.valor.toFixed(2) + '</span></button>';
+            }).join('');
+            return '<div class="ev-of-grupo"><div class="ev-of-cab"><span>' + _evEsc(p) + '</span>'
+                + '<span>€' + tot.toFixed(2) + '</span></div>' + corpo + '</div>';
+        }).join('');
+    }
+
+    // Rodapé: o que este já assumiu.
+    const minhas = _evOfQuem ? estado.ofertas.filter(o => o.quem === _evOfQuem) : [];
+    const tot = minhas.reduce((s, o) => s + o.precoTotal, 0);
+    const alvos = new Set();
+    minhas.forEach(o => o.para.forEach(p => alvos.add(p)));
+    document.getElementById('ev-of-total').textContent = '€' + tot.toFixed(2);
+    document.getElementById('ev-of-linha1').textContent = _evOfQuem
+        ? minhas.length + (minhas.length === 1 ? ' artigo picado' : ' artigos picados')
+        : 'ninguém escolhido';
+    document.getElementById('ev-of-linha2').textContent = _evOfQuem
+        ? (alvos.size ? 'a ' + alvos.size + (alvos.size === 1 ? ' pessoa' : ' pessoas') : 'pica na lista')
+        : 'escolhe quem oferece';
+    const lab = document.getElementById('ev-of-lab');
+    if (lab) lab.textContent = _evOfQuem ? _evOfQuem + ' assume' : 'O que assume';
+    const sub = document.getElementById('ev-of-sub');
+    if (sub) sub.textContent = _evOfQuem ? 'pica o que o ' + _evOfQuem + ' paga' : 'pica o que alguém assume';
+}
+
+function evToggleOferta(pi, ordemId) {
+    if (modoReadOnly || !podeEditarEventoAtual()) return;
+    if (!_evOfQuem) { evToast('Escolhe primeiro quem oferece', false); return; }
+    const pessoa = _evOfPessoas[pi];
+    const ordem = estado.ordens.find(o => o.id === ordemId);
+    if (!pessoa || !ordem) return;
+
+    const existente = _evOfertaDe(ordemId, pessoa);
+    if (existente) {
+        if (existente.quem !== _evOfQuem) return;   // é oferta de outra pessoa
+        estado.ofertas = estado.ofertas.filter(x => x.id !== existente.id);
+    } else {
+        estado.ofertas.push({
+            id: nextId(),
+            quem: _evOfQuem,
+            item: ordem.item,
+            quantidade: Math.round((ordem.quantidade / ordem.amigos.length) * 100) / 100,
+            precoUnitario: ordem.precoUnitario,
+            // Sem arredondar: é exatamente a quota da pessoa naquela ordem, e é
+            // o que faz a conta dela ficar a zero neste artigo.
+            precoTotal: ordem.precoTotal / ordem.amigos.length,
+            para: [pessoa],
+            ordemId: ordem.id,
+            hora: new Date().toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        });
+    }
+    salvarNoLocalStorage();
+    atualizarUI();
+    evRenderOferta();
 }
 
 
@@ -4112,6 +4263,7 @@ function toggleEditOrdem(id) {
             precoTotal: menu[novoItem] * novaQtd,
             amigos: Array.from(selAmigos)
         };
+        _evRepararOfertas();
         if (podeTudo) {
             salvarNoLocalStorage();
         } else {
