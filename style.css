@@ -2016,6 +2016,9 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
 .ev-wide .ev-row { display: flex; align-items: baseline; gap: 8px; padding: 8px 2px 9px; }
 .ev-wide .ev-row-t { flex: 0 0 auto; font-size: 17px; }
 .ev-wide .ev-row-s { flex: 1 1 auto; margin-top: 0; }
+/* A hora, entre os nomes e o valor: só existe na linha larga, por isso não
+   precisa de `grid-area` nenhuma (a grelha a dois nunca a recebe). */
+.ev-row-h { flex: 0 0 auto; font-family: var(--mono); font-size: 10.5px; color: #9AA49E; }
 .ev-wide .ev-row-v { flex: 0 0 auto; font-size: 12.5px; }
 .ev-wide .ev-row-vs { flex: 0 0 auto; margin-top: 0; }
 
