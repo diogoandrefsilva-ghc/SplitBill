@@ -1905,7 +1905,7 @@ html,body{touch-action:pan-x pan-y}
 
 /* ── Total da mesa: uma linha só, com o valor à direita ── */
 .ev-mesa {
-    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
     margin: 9px 0 8px; padding: 9px 15px 10px;
     background: linear-gradient(180deg, #fff 0%, #F6FAF7 100%);
     border: 1px solid #E6EDE6; border-radius: 16px;
@@ -2022,8 +2022,11 @@ html,body{touch-action:pan-x pan-y}
 .ev-bar > * { position: relative; }
 .ev-bar > * + *::before {
     content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
-    width: 1px; height: 34px; background: rgba(11,59,43,.08); pointer-events: none;
+    width: 1px; height: 34px; background: rgba(11,59,43,.13); pointer-events: none;
 }
+/* O + não enche a coluna (é só o quadrado): a `left:0` o fio caía por cima do
+   verde e não se via. Vai para a margem, à mesma distância do fio do outro lado. */
+.ev-fab::before { left: -9px; }
 .ev-bar > :nth-child(1) { grid-column: 1; }
 .ev-bar > :nth-child(2) { grid-column: 2; }
 .ev-bar > :nth-child(3) { grid-column: 3; }

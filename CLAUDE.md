@@ -317,8 +317,9 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
   errado. Atenção ao `\b` do JS, que é ASCII: `\bchá\b` NÃO tem fronteira a
   seguir ao "á" e não casa nada (era o Chá verde a receber o copo de vinho).
 - **Barra inferior** (`.ev-bar`, fixa, só na página do evento): cinco lugares —
-  `Gerir · Oferecer · + · Conta · Relatórios` — todos com nome por baixo do
-  ícone, e o + ao centro. Já foram três círculos de tamanhos e desenhos
+  `Gerir · Relatórios · + · Oferecer · Conta` — todos com nome por baixo do
+  ícone, e o + ao centro. O "Relatórios" está por dentro de propósito: é a
+  palavra mais comprida e à ponta encostava à margem do ecrã. Já foram três círculos de tamanhos e desenhos
   diferentes com dois rótulos só nos de fora; ficava desarrumado e os do meio
   não se percebiam. Agora só o + é cheio (um quadrado de cantos redondos, da
   mesma família dos cartões) e **assenta na barra em vez de a romper** — não
@@ -327,7 +328,9 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
   Cada botão tem **`grid-column` fixo pela posição** (`:nth-child`): esconder um
   (o Oferecer sem ordens, o + em modo leitura) deixa a célula vazia em vez de
   arrastar os outros — sem isso o + saía do centro. Os lugares são separados por
-  um fio de `rgba(11,59,43,.08)`, e o `padding-bottom` da barra sobe os botões
+  um fio de `rgba(11,59,43,.13)` — o do **+** leva `left:-9px` porque esse botão
+  não enche a coluna e a `left:0` o fio caía por cima do verde —, e o
+  `padding-bottom` da barra sobe os botões
   dentro do mesmo branco: com `border-box` e altura fixa, o padding encolhe a
   caixa de conteúdo em vez de engordar a barra.
   O que se acerta antes do jogo (convocados, menu, substituto) está no
