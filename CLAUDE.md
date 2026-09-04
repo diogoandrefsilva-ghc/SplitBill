@@ -268,10 +268,15 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
   só (`.ev-wide`: item · quem · valor) em vez de duas.
 - **O cabeçalho do evento é uma linha só** (`.evh-line`): nome · data · chip do
   histórico. Eram três (nome centrado, data/época por baixo, botão de largura
-  inteira) e a altura que comiam saía toda à grelha. O que cede primeiro em
-  ecrãs estreitos é o **nome** (encolhe e trunca; por extenso no painel do
-  histórico), depois a **época** (≤430px) e por fim a **contagem** do chip
-  (≤400px, fica no `title`); a data e o botão nunca encolhem.
+  inteira) e a altura que comiam saía toda à grelha. Tudo ali é **curto de
+  propósito**, porque o que sobra vai para o nome do adversário: a data é
+  `22/set` (`_dataCurta`, sem ano — quem arruma o jogo na época é a etiqueta ao
+  lado, não o "2025"), a época é só `25/26` (sem a palavra "Época") e o chip é
+  `⚽ 20 ▼`. O nome não leva picotado por baixo: é um título, e o traço só
+  aparece com o campo em foco. O que cede primeiro em ecrãs estreitos é o
+  **nome** (encolhe e trunca; por extenso no painel do histórico), depois a
+  **contagem** do chip (≤360px, fica no `title`) e só num 320px a **época**;
+  a data e o botão nunca encolhem.
 - **Por baixo da grelha só há a barra e uma folga**: `#page-eventos` com
   `padding-bottom:88px` (78 da `.ev-bar` + 10) e o do `body` a zero enquanto a
   página está trancada — são estes que mandam na altura da grelha, porque a
@@ -428,6 +433,12 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
   caixa de imagem usa **`display:flex`** e dá à `img` **`width:100%;
   height:100%;object-fit:contain`** — assim a caixa manda sempre, seja qual for
   o ficheiro (ver `.sbj-logo`/`.sbj-cico`, que recebem SVG de terceiros).
+- **`button:disabled:hover { background:#0E7A4F }`** é o mesmo caso mas pior:
+  com dois pseudo-classes (0,2,1) ganha até ao teu `.a-tua-classe:hover` (0,2,0),
+  por isso um botão **trancado** acendia a verde ao ser tocado — e no telemóvel
+  o `:hover` fica lá colado. O que resolve de vez é `pointer-events:none` no
+  estado desativado (ver `.ev-barbtn:disabled`): sem ponteiro não há `:hover`,
+  `:active` nem realce de toque, e ao carregar não acontece mesmo nada.
 - **`button:hover { background:#0B6340 }`** ganha em especificidade a qualquer
   classe de botão que definas, e no telemóvel o `:hover` fica colado depois do
   toque — o botão fica verde escuro com o texto ilegível. Neutraliza sempre com

@@ -3221,6 +3221,17 @@ function atualizarReadOnly() {
     if (typeof evSyncPermissoes === 'function') evSyncPermissoes();
 }
 
+// Data curta para a linha do cabeçalho: "22/set" em vez de "22/09/2025". O ano
+// não faz falta ali porque a época vem logo a seguir — e é ela que arruma um
+// jogo de setembro no sítio certo, coisa que "2025" sozinho não faz.
+const _MESES_ABREV = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+function _dataCurta(dataStr) {
+    const m = String(dataStr || '').match(/^(\d{1,2})\/(\d{1,2})\//);
+    if (!m) return dataStr || '';
+    const mes = _MESES_ABREV[parseInt(m[2], 10) - 1];
+    return mes ? (parseInt(m[1], 10) + '/' + mes) : dataStr;
+}
+
 // Devolve a etiqueta da época (ex.: "25/26") para uma data dd/mm/aaaa, com corte a 15/jul.
 function _epocaLabel(dataStr) {
     const ts = (typeof _parsePgtoData === 'function') ? _parsePgtoData(dataStr) : 0;
@@ -3260,9 +3271,10 @@ function aplicarPermissoesEdicao() {
     const _meta = document.getElementById('evento-meta');
     if (_meta) {
         if (ev && ev.data) {
-            // Em duas peças: a época esconde-se sozinha em ecrãs estreitos (CSS).
-            _meta.innerHTML = '<span class="evm-d">' + _evEsc(ev.data) + '</span>'
-                + '<span class="evm-e">Época ' + _evEsc(_epocaLabel(ev.data)) + '</span>';
+            // Duas peças curtas: "22/set · 25/26". A palavra "Época" saiu — ao
+            // lado de uma data, "25/26" não se confunde com outra coisa.
+            _meta.innerHTML = '<span class="evm-d">' + _evEsc(_dataCurta(ev.data)) + '</span>'
+                + '<span class="evm-e">' + _evEsc(_epocaLabel(ev.data)) + '</span>';
             _meta.style.display = '';
         }
         else { _meta.style.display = 'none'; _meta.textContent = ''; }

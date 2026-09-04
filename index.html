@@ -210,7 +210,7 @@ window.sbEsconderSplash = function(){
         <div id="evento-meta" style="display:none;"></div>
         <button class="historico-toggle-btn" id="historico-toggle-btn" onclick="toggleHistoricoPanel()"
             title="Trocar de evento" aria-label="Trocar de evento" style="display:none;">
-            <span class="ht-ico" aria-hidden="true">📚</span>
+            <span class="ht-ico" aria-hidden="true">⚽</span>
             <span id="historico-toggle-label"></span>
             <span id="historico-toggle-arrow" aria-hidden="true">▼</span>
         </button>
@@ -1024,14 +1024,15 @@ if ('serviceWorker' in navigator) {
 
 
 /* Meta data/época do evento — segunda peça da linha do cabeçalho (fundo verde).
-   Em ecrãs estreitos a época sai (continua nos cartões do histórico); a data,
-   essa, fica sempre. */
+   Curta de propósito ("22/set · 25/26"): assim cabe inteira até num 320px e não
+   precisa de se esconder a meio. Só nos mais estreitos ainda é a época que sai
+   primeiro — continua nos cartões do histórico. */
 #evento-meta{flex:0 0 auto;display:flex;align-items:baseline;gap:6px;min-width:0;font-family:var(--mono,'IBM Plex Mono',monospace);font-size:11.5px;font-weight:500;color:rgba(255,255,255,0.72);letter-spacing:.03em;white-space:nowrap;}
 #evento-meta .evm-e::before{content:'·';margin-right:6px;opacity:.6;}
-@media (max-width:430px){ #evento-meta .evm-e{display:none;} }
-/* Abaixo dos 400 o nome do jogo é o que vale a linha: a contagem do chip
+@media (max-width:330px){ #evento-meta .evm-e{display:none;} }
+/* Abaixo dos 360 o nome do jogo é o que vale a linha: a contagem do chip
    sai (fica no title) para o adversário não truncar tão cedo. */
-@media (max-width:400px){ #historico-toggle-label{display:none;} }
+@media (max-width:360px){ #historico-toggle-label{display:none;} }
 /* Dropdown personalizada do histórico — chip no fim da linha do cabeçalho */
 #historico-toggle-btn{flex:0 0 auto;width:auto;margin:0;height:32px;padding:0 9px;gap:5px;border-radius:9px;font-size:13px;letter-spacing:.02em;}
 #historico-toggle-btn .ht-ico{font-size:13px;line-height:1;}

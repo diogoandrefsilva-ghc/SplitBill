@@ -1452,7 +1452,10 @@ html,body{touch-action:pan-x pan-y}
             width: auto;
             background: transparent;
             border: none;
-            border-bottom: 1px dashed rgba(255,255,255,0.4);
+            /* Sem picotado: o nome do jogo é um título, não um formulário. O
+               traço fica reservado (transparente) e só aparece com o campo em
+               foco — é aí que interessa dizer que se pode escrever. */
+            border-bottom: 1px solid transparent;
             border-radius: 0;
             color: #fff;
             font-family: var(--display);
@@ -2092,7 +2095,14 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
 /* O único a fugir do cinzento: oferecer é a ação que mexe na conta dos outros. */
 .ev-barbtn.ev-gold, .ev-barbtn.ev-gold:hover { color: #8A6D14; }
 .ev-barbtn.fechada, .ev-barbtn.fechada:hover { color: var(--verde-tinta); }
-.ev-barbtn:disabled { opacity: .4; }
+/* Trancado é trancado: o `button:disabled:hover` global (0,2,1) ganhava ao
+   `.ev-barbtn:hover` (0,2,0) e pintava-o de verde — e no telemóvel o :hover fica
+   colado depois do toque, por isso o Oferecer trancado acendia e ficava aceso.
+   Com pointer-events a zero não há :hover, nem :active, nem realce de toque:
+   ao tocar não acontece mesmo nada. */
+.ev-barbtn:disabled, .ev-barbtn:disabled:hover, .ev-barbtn:disabled:active {
+    opacity: .4; background: transparent; transform: none; pointer-events: none;
+}
 /* O + assenta na barra em vez de a romper: mesma família de cantos dos cartões,
    e é o único cheio — não precisa de subir para se ver que é o principal. */
 .ev-fab, .ev-fab:hover {
