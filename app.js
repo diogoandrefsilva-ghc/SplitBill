@@ -522,6 +522,9 @@ function _atualizarUIInner() {
     }
     document.getElementById('ev-n-pessoas').textContent = _evPessoasKeys.length;
 
+    // O zoom de um quadrante, se estiver aberto, acompanha a lista.
+    if (_evZoomTipo) evRenderZoom();
+
     // Re-render configs so delete buttons always reflect current orders
     renderConfigAmigos();
     renderConfigMenu();
@@ -551,6 +554,7 @@ let _evOfQuem = '';          // quem está a oferecer, na folha das ofertas
 let _evOfPessoas = [];       // ordem dos grupos dessa folha (para indexar os toques)
 let _evOferentesKeys = [];
 let _evPassoAtual = 1;
+let _evZoomTipo = null;       // quadrante em zoom ('ordens'|'ofertas'|'itens'|'pessoas'), ou null
 
 function _evEsc(t) {
     return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -594,36 +598,107 @@ function evAjustarAltura() {
 }
 window.addEventListener('resize', evAjustarAltura);
 
-/* Símbolo do artigo. Os artigos são escritos à mão em cada evento, por isso o
-   símbolo vem do NOME e não de uma lista fixa; o que não reconhece fica com as
-   iniciais, que é melhor do que um ícone errado. */
+/* Símbolo e CATEGORIA do artigo. Os artigos são escritos à mão em cada
+   evento, por isso o símbolo vem do NOME e não de uma lista fixa; o que não
+   reconhece fica com as iniciais, que é melhor do que um ícone errado. A
+   categoria é o que agrupa a grelha do passo 1 (Bebidas · Petiscos · Pratos ·
+   Doces) e dá a cor ao símbolo.
+   A ORDEM dos padrões conta: os específicos antes dos genéricos ("Chá verde"
+   é chá, não vinho; "Arroz doce" é doce, não arroz). E cuidado com o `\b`
+   do JS, que é ASCII: a seguir a um "á" não há fronteira, por isso as
+   palavras acentuadas levam `(?!\p{L})` com a flag `u` — foi assim que o
+   "Chamuça" andou a receber a chávena do chá. */
+function _evSvg(paths) {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + paths + '</svg>';
+}
+const _EV_CATS = { beb: 'Bebidas', pet: 'Petiscos', prato: 'Pratos', doce: 'Doces', outro: 'Outros' };
+const _EV_CAT_ORDEM = ['beb', 'pet', 'prato', 'doce', 'outro'];
 const _EV_ICO = [
-    { re: /(imperial|cerveja|caneca|fino|bock|sagres|cristal|mini|panach)/i, svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 9h9v11a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1z"/><path d="M16 11h2a2 2 0 0 1 0 4h-2"/><path d="M7 9c0-2 1.2-3 2.6-3 .3-1.2 1.3-2 2.6-2 1.4 0 2.4.9 2.6 2.1C16.1 6.3 17 7.4 17 9"/></svg>' },
-    { re: /(caf[ée]|bica|abatanado|gal[ãa]o|carioca|descaf|\bch[áa]|\bcha\b|chocolate|meia de leite)/i, svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h11v6a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4z"/><path d="M16 11h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 6V4"/><path d="M12 6V4"/></svg>' },
-    { re: /([áa]gua\b|pedras|luso)/i, svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3h4v2.5l1.6 2.2A4 4 0 0 1 16.3 10v8a3 3 0 0 1-3 3h-2.6a3 3 0 0 1-3-3v-8a4 4 0 0 1 .7-2.3L10 5.5z"/><path d="M7.7 13h8.6"/></svg>' },
-    { re: /(coca|\bcola\b|\bsumo|refrig|ice ?tea|fanta|sprite|7up|pepsi|guaran|laranjada)/i, svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 7h12l-1.4 12.2a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.8z"/><path d="M6.6 11.5h10.8"/><path d="M13 7 15.5 3"/></svg>' },
-    { re: /(vinho|tinto|branco|sangria|porto|espumante|verde|ros[ée])/i, svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-.6 6a4.4 4.4 0 0 1-8.8 0z"/><path d="M12 13v6"/><path d="M8.5 21h7"/></svg>' },
-    { re: /(bifana|prego|sandes|tosta|hamb|burger|cachorro|francesinha|p[ãa]o|torrada)/i, svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13a9 4.5 0 0 1 18 0"/><path d="M3 13h18v2a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z"/><path d="M6.5 10.5c1.5-1 3.5-1 5 0s3.5 1 5 0"/></svg>' },
-    { re: /(pastel|rissol|croquete|bolinho|trem[oó]|amendo|petisco|azeiton|chouri|queijo|presunto)/i, svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11h17a8.5 8.5 0 0 1-17 0z"/><circle cx="9" cy="8" r="1.9"/><circle cx="14" cy="7" r="1.9"/><circle cx="12" cy="10.4" r="1.4"/></svg>' },
-    { re: /(\bgin\b|ginj|whisk|vodka|\bshot|licor|caipir|\brum\b|cocktail|tequila|aguardente|bagac)/i, svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16l-8 8z"/><path d="M12 12v7"/><path d="M8.5 19h7"/></svg>' },
-    { re: /(bolo|gelado|sobremesa|mousse|tarte|pudim|doce|nata)/i, svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16v-6a8 8 0 0 0-16 0z"/><path d="M12 6V3"/><circle cx="12" cy="7" r="1.4"/></svg>' },
-    { re: /(sopa|prato|dose|frango|bacalhau|arroz|carne|peixe|salada|feijoada|pica|bitoque|omelete)/i, svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4"/></svg>' }
+    // ── Bebidas ──
+    { cat: 'beb', re: /(imperial|cerveja|caneca|\bfino\b|\bbock\b|super ?bock|sagres|cristal|\bmini\b|panach|heineken|corona|\bipa\b|stout|\bpint\b)/iu,
+      svg: _evSvg('<path d="M7 9h9v11a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1z"/><path d="M16 11h2a2 2 0 0 1 0 4h-2"/><path d="M7 9c0-2 1.2-3 2.6-3 .3-1.2 1.3-2 2.6-2 1.4 0 2.4.9 2.6 2.1C16.1 6.3 17 7.4 17 9"/>') },
+    { cat: 'beb', re: /(cidra|sidra|bandida|somersby|strongbow|garrafa|long ?neck)/iu,
+      svg: _evSvg('<path d="M10 3h4v3l1.5 2.4c.3.6.5 1.2.5 1.9V19a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-8.7c0-.7.2-1.3.5-1.9L10 6z"/><path d="M8 13.5h8"/><path d="M8 17h8"/>') },
+    { cat: 'beb', re: /(caf[ée]|\bbica\b|abatanado|gal[ãa]o|carioca|descaf|(^|[^\p{L}])ch[áa](?!\p{L})|chocolate quente|meia de leite|\bpingo\b|garoto|cappuc|latte|expresso|espresso)/iu,
+      svg: _evSvg('<path d="M5 9h11v6a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4z"/><path d="M16 11h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8.5 6c0-1 .8-1.3.8-2.3"/><path d="M12 6c0-1 .8-1.3.8-2.3"/>') },
+    { cat: 'beb', re: /([áa]gua(?!\p{L})|pedras|\bluso\b|castello|vitalis|\bwater\b)/iu,
+      svg: _evSvg('<path d="M6 4h12l-1.3 15.1a2 2 0 0 1-2 1.9H9.3a2 2 0 0 1-2-1.9z"/><path d="M12 9.5c-1.5 1.8-2.3 3-2.3 4a2.3 2.3 0 0 0 4.6 0c0-1-.8-2.2-2.3-4z"/>') },
+    { cat: 'beb', re: /(coca|\bcola\b|\bsumo|refrig|ice ?tea|fanta|sprite|7 ?up|pepsi|guaran|laranjada|limonada|nestea|compal|schweppes|t[óo]nica|\bsoda\b|red ?bull)/iu,
+      svg: _evSvg('<path d="M6 7h12l-1.4 12.2a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.8z"/><path d="M6.6 11.5h10.8"/><path d="M13 7 15.5 3"/>') },
+    { cat: 'beb', re: /(\bgin\b|ginj|whisk|vodka|\bshot|licor|caipir|\brum\b|cocktail|tequila|aguardente|bagac|mojito|amarguinha|medronho|j[äa]ger|absinto|brandy|conhaque|macieira)/iu,
+      svg: _evSvg('<path d="M4 4h16l-8 8z"/><path d="M12 12v7"/><path d="M8.5 19h7"/>') },
+    // ── Petiscos ──
+    { cat: 'pet', re: /(bifana|prego|sandes|sand[uw]|tosta|hamb|burger|cachorro|francesinha|p[ãa]o(?!\p{L})|p[ãa]ozinho|torrada|\bwrap\b|baguet|croissant)/iu,
+      svg: _evSvg('<path d="M3 13a9 4.5 0 0 1 18 0"/><path d="M3 13h18v2a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z"/><path d="M6.5 10.5c1.5-1 3.5-1 5 0s3.5 1 5 0"/>') },
+    { cat: 'pet', re: /(chamu[çc]a|samosa)/iu,
+      svg: _evSvg('<path d="M12 4 20.5 19h-17z"/><path d="M8.2 14.2c2.5-1 5.1-1 7.6 0"/>') },
+    { cat: 'pet', re: /(pastel|past[ée]is|rissol|riss[óo]is|croquete|bolinho|patanisca|peixinhos|nuggets|frito|tempura|empada)/iu,
+      svg: _evSvg('<rect x="3.5" y="8.5" width="9.5" height="4.6" rx="2.3" transform="rotate(-8 8.25 10.8)"/><rect x="11" y="12.4" width="9.5" height="4.6" rx="2.3" transform="rotate(6 15.75 14.7)"/><path d="M4 20.5h16"/>') },
+    { cat: 'pet', re: /(batata|fritas|\bchips\b)/iu,
+      svg: _evSvg('<path d="M5.5 11h13l-1.2 8.6a1.6 1.6 0 0 1-1.6 1.4H8.3a1.6 1.6 0 0 1-1.6-1.4z"/><path d="M8.2 11V5.5"/><path d="M11 11V3.5"/><path d="M13.8 11V4.5"/><path d="M16.3 11V6.5"/><path d="M6 14.5h12"/>') },
+    { cat: 'pet', re: /(queijo|cheese|requeij)/iu,
+      svg: _evSvg('<path d="M3.5 10 19.5 5.5V18h-16z"/><path d="M3.5 10h16"/><circle cx="8.5" cy="14" r="1.2"/><circle cx="14.5" cy="13.2" r="1.5"/>') },
+    { cat: 'pet', re: /(trem[oó]|amendo|petisco|azeiton|chouri|presunto|t[áa]bua|enchid|moelas|caracó|pipis)/iu,
+      svg: _evSvg('<path d="M3.5 11h17a8.5 8.5 0 0 1-17 0z"/><circle cx="9" cy="8" r="1.9"/><circle cx="14" cy="7" r="1.9"/><circle cx="12" cy="10.4" r="1.4"/>') },
+    // ── Pratos ──
+    { cat: 'prato', re: /(\bovos?\b|omelet|estrelado|mexidos)/iu,
+      svg: _evSvg('<circle cx="11.5" cy="12.5" r="3.5"/><path d="M3 8c0-3.5 2.5-6 6.5-6 5 0 4.83 3 7.5 5s5 2 5 6c0 4.5-2.5 6.5-7 6.5-2.5 0-2.5 2.5-6 2.5-3.5 0-6-2.5-6-5.5 0-3.5 2-3 2-6.5"/>') },
+    { cat: 'prato', re: /(bacalhau|peixe|sardinha|polvo|camar[ãa]o|lulas|\bchoco|marisco|atum|salm[ãa]o|dourada|robalo|carapau|pescada|am[êe]ijoa|gambas|lagost)/iu,
+      svg: _evSvg('<path d="M6.5 12c2-3.6 5-5.5 8-5.5 2.7 0 4.9 1.9 6.5 5.5-1.6 3.6-3.8 5.5-6.5 5.5-3 0-6-1.9-8-5.5z"/><path d="M6.5 12 2.5 8.5v7z"/><path d="M17.2 11h.01"/>') },
+    { cat: 'prato', re: /(costelet|lagartinh|bitoque|\bbife|picanha|pica-?pau|entrecosto|frango|febra|entremeada|secretos|alheira|carne|vazia|lombo|costela|leit[ãa]o|cordeiro|borrego|pernil|churrasco|espetada|naco|posta)/iu,
+      svg: _evSvg('<circle cx="12.5" cy="8.5" r="2.5"/><path d="M12.5 2a6.5 6.5 0 0 0-6.22 4.6c-1.1 3.13-.78 3.9-3.18 6.08A3 3 0 0 0 5 18c4 0 8.4-1.8 11.4-4.3A6.5 6.5 0 0 0 12.5 2Z"/><path d="m18.5 6 2.19 4.5a6.48 6.48 0 0 1 .31 2 6.49 6.49 0 0 1-2.6 5.2C15.4 20.2 11 22 7 22a3 3 0 0 1-2.68-1.66L2.4 16.5"/>') },
+    { cat: 'prato', re: /(sopa|caldo|creme de|salada|canja)/iu,
+      svg: _evSvg('<path d="M3.5 11.5h17a8.5 8.5 0 0 1-17 0z"/><path d="M8 20.5h8"/><path d="M9.5 8c0-1 .8-1.3.8-2.3"/><path d="M13.5 8c0-1 .8-1.3.8-2.3"/>') },
+    { cat: 'prato', re: /(pizza|piza)/iu,
+      svg: _evSvg('<path d="M12 3.5 21 18c-5.6 3.3-12.4 3.3-18 0z"/><path d="M6.2 16.2c3.7 1.6 7.9 1.6 11.6 0"/><circle cx="12" cy="11" r="1.3"/><circle cx="10" cy="15.5" r="1.1"/><circle cx="14" cy="15.5" r="1.1"/>') },
+    // ── Doces ──
+    { cat: 'doce', re: /(bolo|gelado|sobremesa|mousse|tarte|pudim|doce|\bnata|cheesecake|brownie|tiramis|fruta|serradura|leite creme|baba de camelo|molotof)/iu,
+      svg: _evSvg('<path d="M4 12.5 12 6l8 6.5"/><path d="M4 12.5V19h16v-6.5"/><path d="M4 15.5c2 1.5 4 1.5 6 0s4-1.5 6 0 2.7 1.3 4 0"/>') },
+    // ── Genéricos, no fim ──
+    { cat: 'beb', re: /(vinho|tinto|branco|sangria|porto|espumante|verde|ros[ée]|moscatel|champ|prosecco)/iu,
+      svg: _evSvg('<path d="M7 3h10l-.6 6a4.4 4.4 0 0 1-8.8 0z"/><path d="M12 13v6"/><path d="M8.5 21h7"/>') },
+    { cat: 'prato', re: /(prato|dose|arroz|feijoada|massa|esparguete|lasanha|risoto|migas|a[çc]orda|cozido|jardineira|comida|refei|menu|\bdiária)/iu,
+      svg: _evSvg('<path d="M7 3v18"/><path d="M4.5 3v4.5a2.5 2.5 0 0 0 5 0V3"/><path d="M17 3c-1.7.6-3 2.6-3 5.5 0 1.9 1 3 2 3.5V21"/><path d="M17 3v9"/>') }
 ];
 
-function evIconeArtigo(nome) {
-    for (let i = 0; i < _EV_ICO.length; i++) {
-        if (_EV_ICO[i].re.test(nome)) return _EV_ICO[i].svg;
-    }
+function _evIniciais(nome) {
     const partes = String(nome || '?').trim().split(/\s+/);
-    const ini = (partes[0] || '?').charAt(0) + (partes.length > 1 ? partes[1].charAt(0) : '');
-    return '<span class="ev-itile-ini">' + _evEsc(ini.toUpperCase()) + '</span>';
+    const ini = (partes[0] || '?').charAt(0) + (partes.length > 1 ? partes[partes.length - 1].charAt(0) : '');
+    return _evEsc(ini.toUpperCase());
+}
+
+// { cat, svg } — o svg é o símbolo, ou as iniciais quando não há símbolo.
+function evCatArtigo(nome) {
+    for (let i = 0; i < _EV_ICO.length; i++) {
+        if (_EV_ICO[i].re.test(nome)) return _EV_ICO[i];
+    }
+    return { cat: 'outro', svg: '<span class="ev-itile-ini">' + _evIniciais(nome) + '</span>' };
+}
+
+function evIconeArtigo(nome) {
+    return evCatArtigo(nome).svg;
 }
 
 // ── Folhas ─────────────────────────────────────────────────────────────────
-const _EV_SHEETS = ['ev-sheet-linha', 'ev-sheet-nova', 'ev-sheet-oferta', 'ev-sheet-gerir', 'ev-sheet-relatorios', 'ev-sheet-fecho'];
+const _EV_SHEETS = ['ev-sheet-linha', 'ev-sheet-zoom', 'ev-sheet-nova', 'ev-sheet-oferta', 'ev-sheet-gerir', 'ev-sheet-relatorios', 'ev-sheet-fecho'];
+
+// Só há uma excepção ao "uma folha de cada vez": a folha de uma LINHA abre por
+// cima do zoom de um quadrante, e fechá-la devolve o zoom — senão tocar numa
+// linha do zoom atirava a pessoa para fora do sítio onde estava a ler.
+function _evZoomAberto() {
+    const z = document.getElementById('ev-sheet-zoom');
+    return !!(z && z.classList.contains('open'));
+}
 
 function evAbrirSheet(id) {
-    _EV_SHEETS.forEach(s => { const el = document.getElementById(s); if (el) el.classList.remove('open'); });
+    const porCima = id === 'ev-sheet-linha' && _evZoomAberto();
+    _EV_SHEETS.forEach(s => {
+        if (porCima && s === 'ev-sheet-zoom') return;
+        const el = document.getElementById(s); if (el) el.classList.remove('open');
+    });
+    if (id !== 'ev-sheet-zoom' && !porCima) _evZoomTipo = null;
+    const zoom = document.getElementById('ev-sheet-zoom');
+    if (zoom) zoom.classList.toggle('ev-dim', porCima);
     const el = document.getElementById(id);
     if (!el) return;
     el.classList.add('open');
@@ -633,10 +708,20 @@ function evAbrirSheet(id) {
 }
 
 function evFecharSheet() {
+    const linha = document.getElementById('ev-sheet-linha');
+    const zoom = document.getElementById('ev-sheet-zoom');
+    if (linha && zoom && linha.classList.contains('open') && zoom.classList.contains('open')) {
+        linha.classList.remove('open');
+        zoom.classList.remove('ev-dim');
+        _evSheetAberta = 'ev-sheet-zoom';
+        return;
+    }
     _EV_SHEETS.forEach(s => { const el = document.getElementById(s); if (el) el.classList.remove('open'); });
+    if (zoom) zoom.classList.remove('ev-dim');
     const scrim = document.getElementById('ev-scrim');
     if (scrim) scrim.style.display = 'none';
     _evSheetAberta = null;
+    _evZoomTipo = null;
 }
 
 // ── A folha de uma linha ───────────────────────────────────────────────────
@@ -760,6 +845,167 @@ function evApagarLinha(tipo, id) {
     }
 }
 
+// ── Zoom de um quadrante ───────────────────────────────────────────────────
+/* Tocar no CABEÇALHO de um quadrante abre a mesma lista numa folha inteira,
+   com o espaço que o quadrante não tem: nomes por extenso em vez de "+2", a
+   hora e o valor por cabeça em cada ordem, quem levou cada artigo, o que cada
+   pessoa comeu. Tocar numa linha abre a folha da linha POR CIMA (ver
+   evAbrirSheet), e fechá-la volta aqui. Redesenha-se a cada atualizarUI(),
+   para apagar/editar uma ordem a partir daqui deixar a lista certa. */
+const _EV_ZOOM = {
+    ordens: { titulo: 'Ordens', vazio: 'Sem ordens ainda.' },
+    ofertas: { titulo: 'Ofertas', vazio: 'Sem ofertas.' },
+    itens: { titulo: 'Por item', vazio: 'Sem consumo ainda.' },
+    pessoas: { titulo: 'Por pessoa', vazio: 'Sem consumo ainda.' }
+};
+
+function evAbrirZoom(tipo) {
+    if (!_EV_ZOOM[tipo]) return;
+    _evZoomTipo = tipo;
+    evRenderZoom();
+    evAbrirSheet('ev-sheet-zoom');
+}
+
+// `cls` é da linha (ev-of, ev-zpess); `icoCls` só do símbolo (a cor da categoria).
+function _evZrow(onclick, ico, titulo, sub, valor, valorAntes, cls, icoCls) {
+    return '<button type="button" class="ev-zrow' + (cls ? ' ' + cls : '') + '" onclick="' + onclick + '">'
+        + '<span class="ev-zico' + (icoCls ? ' ' + icoCls : '') + '">' + ico + '</span>'
+        + '<span class="ev-zi"><span class="ev-zt">' + titulo + '</span><span class="ev-zs">' + (sub || '') + '</span></span>'
+        + '<span class="ev-zv"><b>' + valor + '</b>' + (valorAntes ? '<s>' + valorAntes + '</s>' : '') + '</span></button>';
+}
+
+function _evZlista(rows, vazio) {
+    return rows.length ? rows.join('') : '<p class="ev-vazio">' + vazio + '</p>';
+}
+
+// Um só rodapé para os quatro: o número grande à esquerda e duas linhas de
+// contexto à direita, no mesmo cartão verde do "Total a registar".
+function _evZfoot(lab, valor, l1, l2) {
+    return '<div class="ev-tot"><div class="ev-tot-l"><span>' + lab + '</span><b>' + valor + '</b></div>'
+        + '<div class="ev-tot-r"><span>' + l1 + '</span><br><span>' + (l2 || '') + '</span></div></div>';
+}
+
+function _evNum(n, sing, plur) { return n + ' ' + (n === 1 ? sing : plur); }
+
+function evRenderZoom() {
+    const tipo = _evZoomTipo;
+    const cfg = _EV_ZOOM[tipo];
+    const body = document.getElementById('ev-zoom-body');
+    const foot = document.getElementById('ev-zoom-foot');
+    const tit = document.getElementById('ev-zoom-titulo');
+    const sub = document.getElementById('ev-zoom-sub');
+    if (!cfg || !body || !foot || !tit || !sub) return;
+    const totalMesa = estado.ordens.reduce((s, o) => s + o.precoTotal, 0);
+    tit.textContent = cfg.titulo;
+
+    if (tipo === 'ordens') {
+        const rows = estado.ordens.slice().reverse().map(o => {
+            const quota = o.precoTotal / o.amigos.length;
+            const partes = [_evNomes(o.amigos, 99)];
+            if (o.amigos.length > 1) partes.push('€' + quota.toFixed(2) + ' cada');
+            if (o.hora) partes.push(o.hora);
+            return _evZrow("evAbrirLinha('ordem'," + o.id + ")", evIconeArtigo(o.item),
+                o.quantidade + '× ' + _evEsc(o.item), partes.join(' · '), '€' + o.precoTotal.toFixed(2), '', '', 'ev-c-' + evCatArtigo(o.item).cat);
+        });
+        sub.textContent = _evNum(estado.ordens.length, 'ordem', 'ordens') + ' · a última em cima';
+        body.innerHTML = _evZlista(rows, cfg.vazio);
+        foot.innerHTML = _evZfoot('Total da mesa', '€' + totalMesa.toFixed(2),
+            _evNum(estado.ordens.length, 'ordem', 'ordens'),
+            _evNum(estado.ordens.reduce((s, o) => s + o.quantidade, 0), 'unidade', 'unidades'));
+
+    } else if (tipo === 'ofertas') {
+        if (estado.ofertas.length === 0) {
+            // Sem ofertas não há quadrante, logo não há zoom: fecha tudo, mesmo
+            // que a folha de uma linha esteja por cima.
+            const linha = document.getElementById('ev-sheet-linha');
+            if (linha) linha.classList.remove('open');
+            evFecharSheet();
+            return;
+        }
+        const totOf = estado.ofertas.reduce((s, o) => s + o.precoTotal, 0);
+        const rows = estado.ofertas.slice().reverse().map(o => _evZrow(
+            "evAbrirLinha('oferente'," + _evOferentesKeys.indexOf(o.quem) + ")", evIconeArtigo(o.item),
+            _evQtdStr(o.quantidade) + '× ' + _evEsc(o.item),
+            _evEsc(o.quem) + ' oferece a ' + _evNomes(o.para, 99),
+            '€' + o.precoTotal.toFixed(2), '', 'ev-of'));
+        sub.textContent = _evNum(estado.ofertas.length, 'oferta', 'ofertas') + ' · ' + _evNum(_evOferentesKeys.length, 'pessoa a oferecer', 'pessoas a oferecer');
+        body.innerHTML = _evZlista(rows, cfg.vazio);
+        foot.innerHTML = _evZfoot('Oferecido', '€' + totOf.toFixed(2),
+            _evOferentesKeys.map(q => _evEsc(q)).join(', '), 'não muda o total da mesa');
+
+    } else if (tipo === 'itens') {
+        const porItem = {};
+        estado.ordens.forEach(o => {
+            const g = porItem[o.item] || (porItem[o.item] = { qtd: 0, total: 0, quem: {} });
+            g.qtd += o.quantidade;
+            g.total += o.precoTotal;
+            // Unidades inteiras contam-se ("Nuno 2×"); quem só partilhou fica
+            // com o nome — "0.33×" não é coisa que alguém tenha comido.
+            const q = o.quantidade / o.amigos.length;
+            o.amigos.forEach(a => { g.quem[a] = (g.quem[a] || 0) + (Number.isInteger(q) ? q : 0); });
+        });
+        const rows = _evItensKeys.map((item, i) => {
+            const g = porItem[item];
+            if (!g) return '';
+            const quem = Object.keys(g.quem).sort((a, b) => (g.quem[b] - g.quem[a]) || a.localeCompare(b, 'pt'))
+                .map(a => _evEsc(a) + (g.quem[a] ? ' <i>' + g.quem[a] + '×</i>' : '')).join(' · ');
+            return _evZrow("evAbrirLinha('item'," + i + ")", evIconeArtigo(item),
+                _evEsc(item) + ' <i>' + _evQtdStr(g.qtd) + '×</i>',
+                quem + (menu[item] !== undefined ? ' · €' + menu[item].toFixed(2) + ' cada' : ''),
+                '€' + g.total.toFixed(2), '', '', 'ev-c-' + evCatArtigo(item).cat);
+        });
+        const unidades = _evItensKeys.reduce((s, k) => s + (porItem[k] ? porItem[k].qtd : 0), 0);
+        sub.textContent = _evNum(_evItensKeys.length, 'artigo', 'artigos') + ' · o que pesa mais em cima';
+        body.innerHTML = _evZlista(rows, cfg.vazio);
+        foot.innerHTML = _evZfoot('Total da mesa', '€' + totalMesa.toFixed(2),
+            _evNum(_evItensKeys.length, 'artigo diferente', 'artigos diferentes'), _evNum(unidades, 'unidade', 'unidades'));
+
+    } else if (tipo === 'pessoas') {
+        const saldo = calcularSaldoOfertas();
+        const base = {}, itens = {};
+        estado.ordens.forEach(o => {
+            const quota = o.precoTotal / o.amigos.length;
+            o.amigos.forEach(a => {
+                base[a] = (base[a] || 0) + quota;
+                // Unidades inteiras contam-se ("1× Café"); o que foi partilhado
+                // mostra-se pela divisão ("Costeletão ÷3") — "0.33× Costeletão"
+                // não é coisa que alguém tenha comido.
+                const g = itens[a] || (itens[a] = {});
+                const q = o.quantidade / o.amigos.length;
+                const e = g[o.item] || (g[o.item] = { qtd: 0, div: [] });
+                if (Number.isInteger(q)) e.qtd += q;
+                else if (e.div.indexOf(o.amigos.length) < 0) e.div.push(o.amigos.length);
+            });
+        });
+        let soma = 0;
+        const rows = _evPessoasKeys.map((p, i) => {
+            const delta = saldo[p] || 0;
+            const total = (base[p] || 0) + delta;
+            soma += total;
+            const meus = itens[p] || {};
+            const lista = Object.keys(meus).sort((a, b) => (meus[b].qtd - meus[a].qtd) || a.localeCompare(b, 'pt'))
+                .map(it => {
+                    const e = meus[it];
+                    const partes = [];
+                    if (e.qtd) partes.push(e.qtd + '× ' + _evEsc(it));
+                    if (e.div.length) partes.push(_evEsc(it) + ' <i>÷' + e.div.sort((x, y) => x - y).join('/') + '</i>');
+                    return partes.join(', ');
+                }).join(', ');
+            const partes = [];
+            if (lista) partes.push(lista);
+            if (delta !== 0) partes.push('<em>' + (delta > 0 ? 'oferece +€' : 'recebe −€') + Math.abs(delta).toFixed(2) + '</em>');
+            return _evZrow("evAbrirLinha('pessoa'," + i + ")", '<b>' + _evIniciais(p) + '</b>', _evEsc(p),
+                partes.join(' · ') || 'sem consumo marcado', '€' + total.toFixed(2),
+                delta === 0 ? '' : '€' + (base[p] || 0).toFixed(2), 'ev-zpess');
+        });
+        const n = _evPessoasKeys.length;
+        sub.textContent = _evNum(n, 'pessoa', 'pessoas') + ' · quem deve mais em cima';
+        body.innerHTML = _evZlista(rows, cfg.vazio);
+        foot.innerHTML = _evZfoot('Total da mesa', '€' + soma.toFixed(2),
+            n ? '€' + (soma / n).toFixed(2) + ' por cabeça' : '', _evNum(n, 'pessoa', 'pessoas'));
+    }
+}
+
 // ── Nova ordem / nova rodada ───────────────────────────────────────────────
 function evPodeRegistar() {
     if (modoReadOnly) return false;
@@ -812,15 +1058,34 @@ function evPasso(n) {
 function evRenderIgrid() {
     const grid = document.getElementById('ev-igrid');
     if (!grid) return;
-    _evMenuKeys = Object.keys(menu).sort();
+    _evMenuKeys = Object.keys(menu).sort((a, b) => a.localeCompare(b, 'pt'));
     if (_evMenuKeys.length === 0) {
         grid.innerHTML = '<p class="ev-vazio">O menu deste evento está vazio.<br>Acrescenta artigos em Gerir › Menu.</p>';
         return;
     }
-    grid.innerHTML = _evMenuKeys.map((item, i) =>
-        '<button type="button" class="ev-itile" onclick="evEscolherArtigo(' + i + ')">'
-        + evIconeArtigo(item)
-        + '<b>' + _evEsc(item) + '</b><span>' + menu[item].toFixed(2) + '</span></button>'
+    // Agrupados por categoria (Bebidas · Petiscos · Pratos · Doces): com vinte
+    // artigos por ordem alfabética, achar a Imperial era ler a lista toda. A
+    // pílula "3×" diz quantos já foram pedidos nesta mesa — é o que se repete.
+    const pedidos = {};
+    estado.ordens.forEach(o => { pedidos[o.item] = (pedidos[o.item] || 0) + o.quantidade; });
+    const grupos = {};
+    _evMenuKeys.forEach((item, i) => {
+        const c = evCatArtigo(item).cat;
+        (grupos[c] || (grupos[c] = [])).push(i);
+    });
+    const cats = _EV_CAT_ORDEM.filter(c => grupos[c]);
+    const tile = i => {
+        const item = _evMenuKeys[i];
+        const a = evCatArtigo(item);
+        const n = pedidos[item] || 0;
+        return '<button type="button" class="ev-itile" onclick="evEscolherArtigo(' + i + ')">'
+            + '<span class="ev-ibadge ev-c-' + a.cat + '">' + a.svg + '</span>'
+            + (n ? '<span class="ev-icount">' + _evQtdStr(n) + '×</span>' : '')
+            + '<b>' + _evEsc(item) + '</b><span class="ev-iprice">€' + menu[item].toFixed(2) + '</span></button>';
+    };
+    grid.innerHTML = cats.map(c =>
+        (cats.length > 1 ? '<div class="ev-igroup"><span>' + _EV_CATS[c] + '</span><i>' + grupos[c].length + '</i></div>' : '')
+        + '<div class="ev-itiles">' + grupos[c].map(tile).join('') + '</div>'
     ).join('');
 }
 
@@ -851,7 +1116,11 @@ function evSyncNova() {
     const total = preco * (qtd || 0);
 
     const ic = document.getElementById('ev-chosen-ic');
-    if (ic) ic.innerHTML = evIconeArtigo(nome);
+    if (ic) {
+        const a = evCatArtigo(nome);
+        ic.className = 'ev-chosen-ic ev-c-' + a.cat;
+        ic.innerHTML = a.svg;
+    }
     document.getElementById('ev-chosen-nome').textContent = nome;
     document.getElementById('ev-chosen-preco').textContent = '€' + preco.toFixed(2) + ' cada';
     document.getElementById('ev-qtd').textContent = qtd || 0;

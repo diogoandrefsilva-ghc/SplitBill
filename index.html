@@ -302,22 +302,24 @@ window.sbEsconderSplash = function(){
 
 <!-- ═══ OS QUADRANTES ═══
      Ordens ocupa a linha de cima inteira; a coluna das Rodadas só nasce quando
-     houver alguma (senão ficava sempre um quadrante vazio à espera). -->
+     houver alguma (senão ficava sempre um quadrante vazio à espera).
+     O CABEÇALHO de cada um é um botão: abre a mesma lista em zoom
+     (#ev-sheet-zoom), com o espaço que o quadrante não tem. -->
 <div class="ev-grid" id="ev-grid">
     <div class="ev-q ev-a-ord" id="ev-q-ord">
-        <div class="ev-qhead"><span class="ev-eye">Ordens</span><span class="ev-qn" id="ev-n-ordens">0</span></div>
+        <button type="button" class="ev-qhead" onclick="evAbrirZoom('ordens')" aria-label="Ver ordens com mais espaço"><span class="ev-eye">Ordens</span><span class="ev-qn" id="ev-n-ordens">0</span><svg class="ev-qzoom" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4l-7 7"/><path d="M10 20H4v-6"/><path d="M4 20l7-7"/></svg></button>
         <div class="ev-rows" id="lista-ordens"></div>
     </div>
     <div class="ev-q ev-a-rod" id="ev-q-rod" style="display:none;">
-        <div class="ev-qhead"><span class="ev-eye">Ofertas</span><span class="ev-qn" id="ev-n-ofertas">0</span></div>
+        <button type="button" class="ev-qhead" onclick="evAbrirZoom('ofertas')" aria-label="Ver ofertas com mais espaço"><span class="ev-eye">Ofertas</span><span class="ev-qn" id="ev-n-ofertas">0</span><svg class="ev-qzoom" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4l-7 7"/><path d="M10 20H4v-6"/><path d="M4 20l7-7"/></svg></button>
         <div class="ev-rows" id="lista-ofertas"></div>
     </div>
     <div class="ev-q ev-a-itens">
-        <div class="ev-qhead"><span class="ev-eye">Por item</span><span class="ev-qn" id="ev-n-itens">0</span></div>
+        <button type="button" class="ev-qhead" onclick="evAbrirZoom('itens')" aria-label="Ver por item com mais espaço"><span class="ev-eye">Por item</span><span class="ev-qn" id="ev-n-itens">0</span><svg class="ev-qzoom" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4l-7 7"/><path d="M10 20H4v-6"/><path d="M4 20l7-7"/></svg></button>
         <div class="ev-rows" id="total-itens"></div>
     </div>
     <div class="ev-q ev-a-pess">
-        <div class="ev-qhead"><span class="ev-eye">Por pessoa</span><span class="ev-qn" id="ev-n-pessoas">0</span></div>
+        <button type="button" class="ev-qhead" onclick="evAbrirZoom('pessoas')" aria-label="Ver por pessoa com mais espaço"><span class="ev-eye">Por pessoa</span><span class="ev-qn" id="ev-n-pessoas">0</span><svg class="ev-qzoom" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4l-7 7"/><path d="M10 20H4v-6"/><path d="M4 20l7-7"/></svg></button>
         <div class="ev-rows" id="conta-pessoas"></div>
     </div>
 </div>
@@ -360,6 +362,18 @@ window.sbEsconderSplash = function(){
     </div>
     <div class="ev-shbody" id="ev-linha-body"></div>
     <div class="ev-shfoot" id="ev-linha-foot" style="display:none;"></div>
+</div>
+
+<!-- Zoom de um quadrante: a mesma lista, com espaço (evAbrirZoom) -->
+<div class="ev-sheet ev-sheet-zoom" id="ev-sheet-zoom">
+    <div class="ev-shhead">
+        <div class="ev-sht"><strong id="ev-zoom-titulo"></strong><span id="ev-zoom-sub"></span></div>
+        <button class="ev-icb" onclick="evFecharSheet()" aria-label="Fechar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+        </button>
+    </div>
+    <div class="ev-shbody" id="ev-zoom-body"></div>
+    <div class="ev-shfoot" id="ev-zoom-foot"></div>
 </div>
 
 <!-- Nova ordem / nova rodada, em dois passos -->

@@ -278,11 +278,21 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
   chegar. As folhas e os painéis são `position:fixed` com scroll próprio, e
   continuam a deslizar por dentro com a página trancada. **Coisa nova por cima da grelha = a grelha encolhe
   sozinha**, não é preciso mexer em contas.
-- **Toca-se na LINHA, não no quadrante.** Chegou a estar pensado um zoom por
-  quadrante; o que ele servia era o detalhe de UMA linha, e isso resolve-se numa
-  folha pequena (`#ev-sheet-linha`): quem consumiu e quanto lhe calha, com
+- **Toca-se na LINHA para o detalhe, no CABEÇALHO para o zoom.** A linha abre
+  uma folha pequena (`#ev-sheet-linha`): quem consumiu e quanto lhe calha, com
   Apagar/Editar nas ordens. O Editar reaproveita o `toggleEditOrdem()` de sempre
   — a folha cria o `#ordem-<id>` onde o painel de edição se desenha.
+  O cabeçalho de cada quadrante (`.ev-qhead`, um botão com o glifo ⤢) abre a
+  **mesma lista em zoom** (`#ev-sheet-zoom`, `evAbrirZoom`/`evRenderZoom`), com
+  o espaço que o quadrante não tem: nomes por extenso, hora e valor por cabeça
+  em cada ordem, quem levou cada artigo, o que cada pessoa comeu, e um rodapé
+  com o total. É a **única** folha que aceita outra por cima: tocar numa linha
+  do zoom abre a `#ev-sheet-linha` sobre ele (`evAbrirSheet` deixa o zoom
+  aberto e põe-lhe `.ev-dim`), e fechá-la volta ao zoom em vez de sair
+  (`evFecharSheet`). O zoom redesenha-se a cada `atualizarUI()`, para apagar ou
+  editar uma ordem a partir dele deixar a lista certa. Nos zooms **nunca** se
+  mostram fracções de unidade ("0.33×"): o que foi partilhado aparece como
+  "Costeletão ÷3" (Por pessoa) ou só com o nome de quem partilhou (Por item).
 - **O + abre em dois passos**: artigo (grelha de símbolos) → quem consome. O
   artigo escolhido **avança sozinho** para o passo 2, onde estão a quantidade,
   as pessoas e o total antes de registar. Só serve para **consumo**: a oferta
@@ -322,11 +332,22 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
   Mexer nas que já existem faz-se pelo quadrante (`evPicarMais`) — e o nome vai
   por ÍNDICE no `onclick`, nunca por `JSON.stringify`, que mete aspas duplas
   dentro de um atributo delimitado por aspas duplas e parte o clique num "Zé".
-- **Símbolos dos artigos** (`evIconeArtigo`): o menu é escrito à mão em cada
-  evento, por isso o símbolo vem do NOME (`_EV_ICO`, uma lista de padrões) e o
-  que não é reconhecido fica com as **iniciais** — melhor do que um ícone
-  errado. Atenção ao `\b` do JS, que é ASCII: `\bchá\b` NÃO tem fronteira a
-  seguir ao "á" e não casa nada (era o Chá verde a receber o copo de vinho).
+- **Símbolos e categorias dos artigos** (`evCatArtigo` → `{cat, svg}`,
+  `evIconeArtigo` devolve só o svg): o menu é escrito à mão em cada evento, por
+  isso símbolo e categoria vêm do NOME (`_EV_ICO`, uma lista de padrões com
+  `cat`) e o que não é reconhecido fica com as **iniciais** e em "Outros" —
+  melhor do que um ícone errado. A **ordem** dos padrões conta: os específicos
+  antes dos genéricos (vinho e "prato" são os últimos, senão "Chá verde" era
+  vinho e "Arroz doce" era arroz). Atenção ao `\b` do JS, que é ASCII: a seguir
+  a um "á" não há fronteira, por isso as palavras acentuadas levam
+  `(?!\p{L})` com a flag `u` — sem isso o "Chamuça" apanhava a chávena do chá.
+  **Nunca** uses lookbehind (`(?<!…)`) nestes regex: um Safari antigo rebenta
+  ao *ler* o ficheiro e a app inteira deixa de arrancar.
+  O passo 1 do + (`evRenderIgrid`) agrupa a grelha por categoria (Bebidas ·
+  Petiscos · Pratos · Doces · Outros, `_EV_CAT_ORDEM`), pinta a placa do
+  símbolo com a cor da categoria (`.ev-c-*`, as mesmas classes no artigo
+  escolhido do passo 2 e nas linhas do zoom) e põe uma pílula "3×" nos artigos
+  já pedidos nesta mesa. Com uma categoria só, o título do grupo não aparece.
 - **Barra inferior** (`.ev-bar`, fixa, só na página do evento): cinco lugares —
   `Gerir · Relatórios · + · Oferecer · Conta` — todos com nome por baixo do
   ícone, e o + ao centro. O "Relatórios" está por dentro de propósito: é a

@@ -1944,11 +1944,23 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
     border: 1px solid #E6EDE6; border-radius: 16px; padding: 10px 4px 7px 12px;
     box-shadow: 0 8px 20px -14px rgba(11,59,43,.55);
 }
-.ev-qhead { display: flex; align-items: center; gap: 7px; margin: 0 8px 6px 0; flex: 0 0 auto; }
+/* O cabeçalho é um botão (abre o zoom do quadrante): desfaz-se o `button`
+   global — fundo verde, uppercase, hover colado — e fica só a linha de sempre,
+   com o glifo de expandir à direita a dizer que se toca. */
+.ev-qhead, .ev-qhead:hover {
+    display: flex; align-items: center; gap: 6px; margin: 0 6px 6px 0; flex: 0 0 auto;
+    width: calc(100% - 6px); padding: 0 0 2px; background: transparent; border: 0; border-radius: 8px;
+    text-align: left; cursor: pointer; color: inherit; text-transform: none; letter-spacing: normal;
+    -webkit-tap-highlight-color: transparent;
+}
+.ev-qhead:active { transform: scale(.97); transform-origin: left center; }
+.ev-qzoom { flex: 0 0 auto; width: 13px; height: 13px; color: #A6B0A8; }
+.ev-qhead:active .ev-qzoom { color: var(--verde); }
 .ev-eye {
     display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0;
     font-family: var(--display); font-weight: 700; font-size: 11.5px;
-    text-transform: uppercase; letter-spacing: .13em; color: var(--ink-soft);
+    text-transform: uppercase; letter-spacing: .12em; color: var(--ink-soft);
+    white-space: nowrap; overflow: hidden;
 }
 .ev-eye::before {
     content: ""; flex: 0 0 auto; width: 13px; height: 3px; border-radius: 2px;
@@ -2076,6 +2088,51 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
     flex-direction: column; box-shadow: 0 30px 60px -20px rgba(11,59,43,.7);
 }
 .ev-sheet.open { display: flex; animation: evUp .26s cubic-bezier(.2,.9,.3,1.2); }
+/* O zoom de um quadrante CRESCE em vez de subir: é o quadrante a ficar do
+   tamanho do ecrã, não uma folha nova a chegar de baixo. */
+.ev-sheet-zoom.open { animation: evZoom .28s cubic-bezier(.2,.9,.3,1.15); }
+@keyframes evZoom { from { opacity: 0; transform: translateX(-50%) scale(.88); } }
+/* A folha da linha abre POR CIMA do zoom: fica acima e o zoom escurece por
+   trás dela, para se perceber que a linha é a que está a mandar. */
+#ev-sheet-linha { z-index: 102; }
+.ev-sheet-zoom.ev-dim::after {
+    content: ""; position: absolute; inset: 0; z-index: 5;
+    background: rgba(11,59,43,.38); animation: evFade .18s ease-out;
+}
+/* ── Linhas do zoom: as do quadrante, com o espaço todo ──
+   Um cartão por linha, com o símbolo do artigo (ou as iniciais da pessoa) à
+   esquerda, o detalhe a correr para a linha de baixo sem truncar, e o valor
+   à direita — com o "antes da oferta" rasurado por baixo, como no quadrante. */
+.ev-zrow, .ev-zrow:hover {
+    text-transform: none; letter-spacing: normal;
+    display: flex; align-items: center; gap: 11px; width: 100%; text-align: left; cursor: pointer;
+    background: #fff; border: 1px solid #E6EDE6; border-radius: 15px; padding: 10px 12px; margin-bottom: 8px;
+    color: var(--ink); box-shadow: 0 6px 16px -14px rgba(11,59,43,.55);
+}
+.ev-zrow:active { transform: scale(.985); }
+.ev-zico {
+    flex: 0 0 auto; width: 42px; height: 42px; border-radius: 13px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--verde-claro); color: var(--verde);
+}
+.ev-zico svg { width: 24px; height: 24px; }
+.ev-zico b, .ev-zico .ev-itile-ini { font-family: var(--display); font-weight: 700; font-size: 16px; letter-spacing: .02em; background: transparent; color: inherit; width: auto; height: auto; }
+.ev-zi { flex: 1 1 auto; min-width: 0; }
+.ev-zt { display: block; font-family: var(--display); font-weight: 600; font-size: 19px; line-height: 1.1; overflow-wrap: anywhere; }
+.ev-zt i { font-style: normal; font-family: var(--mono); font-size: 12px; color: #7C8782; font-weight: 400; margin-left: 2px; }
+.ev-zs { display: block; font-size: 12px; color: #7C8782; margin-top: 3px; line-height: 1.4; }
+.ev-zs:empty { display: none; }
+.ev-zs i { font-style: normal; font-family: var(--mono); font-size: 10.5px; color: #9AA49E; }
+.ev-zs em { font-style: normal; color: #8A6D14; font-weight: 600; }
+.ev-zv { flex: 0 0 auto; text-align: right; }
+.ev-zv b { display: block; font-family: var(--mono); font-weight: 600; font-size: 14px; color: var(--verde-tinta); }
+.ev-zv s { display: block; font-family: var(--mono); font-size: 11px; color: #9AA49E; margin-top: 2px; text-decoration-thickness: 1px; }
+.ev-zrow.ev-of .ev-zico { background: var(--dourado-claro); color: #8A6D14; }
+.ev-zrow.ev-of .ev-zv b { color: #8A6D14; }
+.ev-zrow.ev-zpess .ev-zico { background: var(--verde-escuro); color: #fff; }
+/* Pessoas em zoom: o rodapé é o mesmo cartão verde do "Total a registar". */
+#ev-zoom-foot .ev-tot-r { max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* Folha pequena: a linha tocada não precisa do ecrã todo. */
 .ev-sheet-mini { top: auto; max-height: 66%; bottom: 8px; }
 @keyframes evUp { from { opacity: 0; transform: translate(-50%, 60px); } }
@@ -2149,23 +2206,54 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
 }
 .ev-lrow > svg { width: 16px; height: 16px; color: #A6B0A8; flex: 0 0 auto; }
 
-/* ── Passo 1: escolher o artigo ── */
-.ev-igrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+/* ── Passo 1: escolher o artigo ──
+   Agrupado por categoria, com um título por grupo (o mesmo desenho dos
+   cabeçalhos dos quadrantes) e o símbolo de cada artigo numa placa com a cor
+   da categoria: verde bebidas, dourado petiscos, terracota pratos, ameixa
+   doces, cinzento o que não se reconheceu (iniciais). A pílula "3×" no canto é
+   quantos já foram pedidos nesta mesa. */
+.ev-igrid { display: block; }
+.ev-itiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.ev-igroup {
+    display: flex; align-items: center; gap: 7px; margin: 16px 2px 8px;
+    font-family: var(--display); font-weight: 700; font-size: 11.5px;
+    text-transform: uppercase; letter-spacing: .13em; color: var(--ink-soft);
+}
+.ev-igroup:first-child { margin-top: 2px; }
+.ev-igroup::before {
+    content: ""; flex: 0 0 auto; width: 13px; height: 3px; border-radius: 2px;
+    background: linear-gradient(90deg, var(--verde), var(--dourado));
+}
+.ev-igroup i {
+    font-style: normal; font-family: var(--mono); font-weight: 600; font-size: 10px; color: var(--verde-tinta);
+    background: var(--verde-claro); border-radius: 20px; padding: 2px 7px;
+}
 .ev-itile, .ev-itile:hover {
-    text-transform: none; letter-spacing: normal;
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center;
-    min-height: 94px; padding: 10px 6px; cursor: pointer; color: var(--ink);
-    background: linear-gradient(180deg, #fff 0%, #F6FAF7 100%); border: 1px solid #E6EDE6; border-radius: 15px;
+    text-transform: none; letter-spacing: normal; position: relative;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; text-align: center;
+    min-height: 106px; padding: 11px 6px 10px; cursor: pointer; color: var(--ink);
+    background: linear-gradient(180deg, #fff 0%, #F6FAF7 100%); border: 1px solid #E6EDE6; border-radius: 16px;
     box-shadow: 0 6px 16px -14px rgba(11,59,43,.55);
+    -webkit-tap-highlight-color: transparent;
 }
 .ev-itile:active { transform: scale(.96); }
-.ev-itile svg { width: 30px; height: 30px; color: var(--verde); }
-.ev-itile b { font-family: var(--display); font-weight: 600; font-size: 14.5px; line-height: 1.05; overflow-wrap: anywhere; }
-.ev-itile span { font-family: var(--mono); font-size: 9.5px; color: #7C8782; }
-.ev-itile-ini {
-    width: 30px; height: 30px; border-radius: 9px; background: var(--verde-claro); color: var(--verde-tinta);
+.ev-itile b { font-family: var(--display); font-weight: 600; font-size: 15px; line-height: 1.05; overflow-wrap: anywhere; }
+.ev-itile .ev-iprice { font-family: var(--mono); font-size: 10px; color: #7C8782; }
+.ev-ibadge {
+    flex: 0 0 auto; width: 44px; height: 44px; border-radius: 14px;
     display: flex; align-items: center; justify-content: center;
-    font-family: var(--display); font-weight: 700; font-size: 14px; letter-spacing: .02em;
+    background: var(--verde-claro); color: var(--verde);
+}
+.ev-ibadge svg { width: 26px; height: 26px; }
+.ev-itile-ini {
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: .02em;
+}
+.ev-icount {
+    position: absolute; top: 7px; right: 7px; line-height: 1.2;
+    font-family: var(--mono); font-weight: 600; font-size: 9.5px; color: #fff;
+    background: var(--verde); border-radius: 20px; padding: 2px 6px;
+    box-shadow: 0 2px 6px -2px rgba(11,59,43,.6);
 }
 
 /* ── Passo 2 ── */
@@ -2180,7 +2268,16 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
 .ev-chosen { display: flex; align-items: center; gap: 11px; background: #fff; border: 1px solid #E6EDE6; border-radius: 15px; padding: 11px 12px; }
 .ev-chosen-ic { flex: 0 0 auto; width: 46px; height: 46px; border-radius: 13px; background: var(--verde-claro); color: var(--verde); display: flex; align-items: center; justify-content: center; }
 .ev-chosen-ic svg { width: 26px; height: 26px; }
-.ev-chosen-ic .ev-itile-ini { width: 46px; height: 46px; border-radius: 13px; font-size: 19px; }
+.ev-chosen-ic .ev-itile-ini { font-size: 19px; background: transparent; color: inherit; }
+/* As cores por categoria valem para a placa do passo 1, o artigo escolhido do
+   passo 2 e o símbolo das linhas do zoom — é a mesma família nos três.
+   Ficam DEPOIS do .ev-chosen-ic e do .ev-zico de propósito: têm a mesma
+   especificidade, e é a ordem que decide quem pinta. */
+.ev-c-beb { background: #E2EFE8; color: #0E7A4F; }
+.ev-c-pet { background: #FBF1D6; color: #8A6D14; }
+.ev-c-prato { background: #F9E6DF; color: #A3442F; }
+.ev-c-doce { background: #F3E4EF; color: #8A3E7C; }
+.ev-c-outro { background: #E9ECE9; color: #5B6661; }
 .ev-chosen-i { flex: 1 1 auto; min-width: 0; }
 .ev-chosen-i b { display: block; font-family: var(--display); font-weight: 700; font-size: 20px; line-height: 1.05; }
 .ev-chosen-i span { display: block; font-family: var(--mono); font-size: 10.5px; color: #7C8782; margin-top: 2px; }
