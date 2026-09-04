@@ -296,14 +296,8 @@ window.sbEsconderSplash = function(){
 
 <!-- ═══ TOTAL DA MESA ═══ -->
 <div class="ev-mesa">
-    <div>
-        <span class="ev-mesa-lab">Total da mesa</span>
-        <span class="ev-mesa-val" id="total-mesa">€0.00</span>
-    </div>
-    <div class="ev-pills">
-        <span class="ev-pill ev-pill-pos"><span id="num-pessoas">0</span> pessoas</span>
-        <span class="ev-pill ev-pill-calm"><span id="total-ordens">0</span> registos</span>
-    </div>
+    <span class="ev-mesa-lab">Total da mesa</span>
+    <span class="ev-mesa-val" id="total-mesa">€0.00</span>
 </div>
 
 <!-- ═══ OS QUADRANTES ═══
@@ -328,7 +322,9 @@ window.sbEsconderSplash = function(){
     </div>
 </div>
 
-<!-- ═══ BARRA INFERIOR: Gerir · + · Fechar conta ═══ -->
+<!-- ═══ BARRA INFERIOR: Gerir · 🎁 · + · conta · Relatórios ═══
+     O + fica SEMPRE ao centro; os dois satélites (oferecer à esquerda, fechar
+     conta à direita) são simétricos em relação a ele. -->
 <div class="ev-bar" id="ev-bar">
     <button class="ev-barbtn" onclick="evAbrirGerir()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.1"/><path d="M19.4 14.2a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5v.2a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1h.2a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>
@@ -341,10 +337,13 @@ window.sbEsconderSplash = function(){
         <button class="ev-fab" id="ev-fab" onclick="evAbrirNova()" aria-label="Nova ordem">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
+        <button class="ev-fab-conta" id="ev-fab-conta" onclick="evAbrirFecho()" aria-label="Fechar conta" title="Fechar conta">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M13.4 3.5H6.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h5.2"/><path d="M8 8h7"/><path d="M8 12h4.5"/><path d="M20.4 12.9 15 18.3l-2.7.7.7-2.7 5.4-5.4a1.4 1.4 0 0 1 2 2z"/></svg>
+        </button>
     </div>
-    <button class="ev-barbtn ev-gold" id="ev-btn-fecho" onclick="evAbrirFecho()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.8a4 4 0 0 1 8 0v2.7"/></svg>
-        <span id="ev-btn-fecho-txt">Fechar conta</span>
+    <button class="ev-barbtn" id="ev-btn-relatorios" onclick="evAbrirRelatorios()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5z"/><path d="M14 3.5V8.5h5"/><path d="M9 13.5v3"/><path d="M12 11.5v5"/><path d="M15 14.5v2"/></svg>
+        Relatórios
     </button>
 </div>
 
@@ -405,7 +404,7 @@ window.sbEsconderSplash = function(){
                     <select id="item" style="display:none;"><option value="">-- Seleciona um item --</option></select>
                     <select id="quantidade" style="display:none;" onchange="atualizarBotaoOrdem()"><option value="0" selected>0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option></select>
                     <span class="ev-lab">Quem consumiu?</span>
-                    <div class="amigos-grid" id="amigos-grid"></div>
+                    <div class="amigos-grid ev-big" id="amigos-grid"></div>
                     <button id="btn-adicionar-ordem" onclick="adicionarOrdem()" style="display:none;" disabled>✓ Adicionar Ordem</button>
                     <div id="mensagem"></div>
                 </div>
@@ -510,15 +509,35 @@ window.sbEsconderSplash = function(){
             </div>
         </div>
 
-        <div class="config-add-row" style="margin-top:14px;">
-            <button onclick="exportarPDFConta()" style="flex:1;">📋 PDF Conta</button>
-            <button onclick="exportarPDFDivisao()" style="flex:1;">💸 PDF Divisão</button>
-        </div>
-
         <button id="btn-reverter-abertura" onclick="reverterAberturaJogo(eventoAtualId)" style="display:none;width:100%;margin-top:10px;">↩️ Reverter Abertura</button>
         <button id="btn-eliminar-evento" class="danger" onclick="apagarEventoAtual()" style="display:none;width:100%;margin-top:8px;">🗑️ Apagar Evento</button>
 
-        <span class="ev-hint">A fatura mudou-se para o Fechar conta, que é onde serve.</span>
+        <span class="ev-hint">A fatura está no Fechar conta e os PDFs em Relatórios, que é onde servem.</span>
+    </div>
+</div>
+
+<!-- Relatórios (os dois PDFs de sempre, que saíram do Gerir) -->
+<div class="ev-sheet" id="ev-sheet-relatorios">
+    <div class="ev-shhead">
+        <div class="ev-sht"><strong>Relatórios</strong><span id="ev-rel-sub"></span></div>
+        <button class="ev-icb" onclick="evFecharSheet()" aria-label="Fechar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+        </button>
+    </div>
+    <div class="ev-shbody">
+        <div class="ev-card">
+            <button class="grow-row" onclick="exportarPDFConta()">
+                <span class="grow-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5z"/><path d="M14 3.5V8.5h5"/><path d="M8.5 13h7"/><path d="M8.5 16.5h4.5"/></svg></span>
+                <span class="grow-i"><b>PDF da conta</b><span>o que a mesa pediu, artigo a artigo</span></span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 5 16 12 9 19"/></svg>
+            </button>
+            <button class="grow-row" onclick="exportarPDFDivisao()">
+                <span class="grow-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M16.5 6.8A4.6 4.6 0 0 0 13 5.5h-2a3.2 3.2 0 0 0 0 6.4h2a3.2 3.2 0 0 1 0 6.4H9.6a4.6 4.6 0 0 1-2.9-1.1"/></svg></span>
+                <span class="grow-i"><b>PDF da divisão</b><span>quanto é que cada um fica a dever</span></span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 5 16 12 9 19"/></svg>
+            </button>
+        </div>
+        <span class="ev-hint">Os dois abrem numa página nova, prontos a imprimir ou a guardar.</span>
     </div>
 </div>
 

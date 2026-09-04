@@ -440,8 +440,6 @@ function _atualizarUIInner() {
 
     // ── Total da mesa ───────────────────────────────────────────────────────
     document.getElementById('total-mesa').textContent = '€' + totalMesa.toFixed(2);
-    document.getElementById('num-pessoas').textContent = todasPessoas.size;
-    document.getElementById('total-ordens').textContent = estado.ordens.length + estado.ofertas.length;
 
     // ── Quadrante ORDENS ────────────────────────────────────────────────────
     const lista = document.getElementById('lista-ordens');
@@ -459,24 +457,23 @@ function _atualizarUIInner() {
     document.getElementById('ev-n-ordens').textContent = estado.ordens.length;
 
     // ── Quadrante RODADAS (só existe quando há alguma) ──────────────────────
-    // Uma linha por quem oferece, e não uma por artigo picado: quem lê quer
-    // saber quanto é que o Barrona assumiu, não a lista das dezoito imperiais.
+    // Artigo a artigo e a quem: as ofertas nunca são muitas, e "2 artigos a 2
+    // pessoas" obrigava a abrir para saber o quê e a quem. Tocar abre a folha
+    // de quem oferece, que é onde se devolve.
     const listaOfertas = document.getElementById('lista-ofertas');
     const porOferente = {};
     estado.ofertas.forEach(o => {
-        if (!porOferente[o.quem]) porOferente[o.quem] = { total: 0, artigos: 0, pessoas: new Set() };
-        porOferente[o.quem].total += o.precoTotal;
-        porOferente[o.quem].artigos += 1;
-        o.para.forEach(p => porOferente[o.quem].pessoas.add(p));
+        if (!porOferente[o.quem]) porOferente[o.quem] = 0;
+        porOferente[o.quem] += o.precoTotal;
     });
-    _evOferentesKeys = Object.keys(porOferente).sort((a, b) => porOferente[b].total - porOferente[a].total);
-    listaOfertas.innerHTML = _evOferentesKeys.map((q, i) => {
-        const g = porOferente[q];
-        return _evRow("evAbrirLinha('oferente'," + i + ")", _evEsc(q),
-            g.artigos + (g.artigos === 1 ? ' artigo a ' : ' artigos a ') + g.pessoas.size + (g.pessoas.size === 1 ? ' pessoa' : ' pessoas'),
-            '€' + g.total.toFixed(2));
-    }).join('');
-    document.getElementById('ev-n-ofertas').textContent = _evOferentesKeys.length;
+    _evOferentesKeys = Object.keys(porOferente).sort((a, b) => porOferente[b] - porOferente[a]);
+    listaOfertas.innerHTML = estado.ofertas.slice().reverse().map(o => _evRow(
+        "evAbrirLinha('oferente'," + _evOferentesKeys.indexOf(o.quem) + ")",
+        _evQtdStr(o.quantidade) + '× ' + _evEsc(o.item),
+        _evEsc(o.quem) + ' → ' + _evNomes(o.para, 2),
+        '€' + o.precoTotal.toFixed(2)
+    )).join('');
+    document.getElementById('ev-n-ofertas').textContent = estado.ofertas.length;
 
     const temOfertas = estado.ofertas.length > 0;
     const qRod = document.getElementById('ev-q-rod');
@@ -513,8 +510,10 @@ function _atualizarUIInner() {
     } else {
         contaDiv.innerHTML = _evPessoasKeys.map((pessoa, i) => {
             const delta = saldoOfertas[pessoa] || 0;
+            // O valor antes da oferta fica por baixo, rasurado: assim vê-se de
+            // relance o que a oferta mudou, sem ter de abrir a linha.
             const sub = delta === 0 ? ''
-                : (delta > 0 ? '🎁 oferece +€' : '🎁 recebe −€') + Math.abs(delta).toFixed(2);
+                : '🎁 <s>€' + (contaPorPessoa[pessoa] || 0).toFixed(2) + '</s>';
             return _evRow("evAbrirLinha('pessoa'," + i + ")", _evEsc(pessoa), sub, '€' + totaisPessoa[pessoa].toFixed(2));
         }).join('');
     }
@@ -617,7 +616,7 @@ function evIconeArtigo(nome) {
 }
 
 // ── Folhas ─────────────────────────────────────────────────────────────────
-const _EV_SHEETS = ['ev-sheet-linha', 'ev-sheet-nova', 'ev-sheet-oferta', 'ev-sheet-gerir', 'ev-sheet-fecho'];
+const _EV_SHEETS = ['ev-sheet-linha', 'ev-sheet-nova', 'ev-sheet-oferta', 'ev-sheet-gerir', 'ev-sheet-relatorios', 'ev-sheet-fecho'];
 
 function evAbrirSheet(id) {
     _EV_SHEETS.forEach(s => { const el = document.getElementById(s); if (el) el.classList.remove('open'); });
@@ -680,7 +679,7 @@ function evAbrirLinha(tipo, chave) {
             + '</div>').join('') + '</div>';
         if (podeMexer) {
             foot.style.display = 'flex';
-            foot.innerHTML = '<button class="ev-btn ev-btn-ghost" onclick="evAbrirOferta(' + JSON.stringify(quem) + ')">Picar mais</button>';
+            foot.innerHTML = '<button class="ev-btn ev-btn-ghost" onclick="evPicarMais(' + chave + ')">Picar mais</button>';
         }
     } else if (tipo === 'item') {
         const item = _evItensKeys[chave];
@@ -847,8 +846,15 @@ function evRegistar() {
 }
 
 // ── Gerir · Fechar conta ───────────────────────────────────────────────────
+// Entrar na folha das ofertas já com a pessoa escolhida, a partir do quadrante.
+function evPicarMais(i) {
+    const quem = _evOferentesKeys[i];
+    if (quem) evAbrirOferta(quem);
+}
+
 function evAbrirGerir() { evSyncPermissoes(); evAbrirSheet('ev-sheet-gerir'); }
 function evAbrirFecho() { evSyncPermissoes(); evAbrirSheet('ev-sheet-fecho'); }
+function evAbrirRelatorios() { evSyncPermissoes(); evAbrirSheet('ev-sheet-relatorios'); }
 
 // O que muda com as permissões e com o estado da conta.
 function evSyncPermissoes() {
@@ -859,15 +865,20 @@ function evSyncPermissoes() {
     // só quem edita o evento, e só quando já há ordens.
     const fabOf = document.getElementById('ev-fab-of');
     if (fabOf) fabOf.style.display = (!modoReadOnly && podeEditarEventoAtual() && estado.ordens.length > 0) ? '' : 'none';
-    const fechoTxt = document.getElementById('ev-btn-fecho-txt');
-    if (fechoTxt) fechoTxt.textContent = estado.totalFatura ? 'Conta fechada' : 'Fechar conta';
+    const btConta = document.getElementById('ev-fab-conta');
+    if (btConta) {
+        const t = estado.totalFatura ? 'Conta fechada' : 'Fechar conta';
+        btConta.setAttribute('aria-label', t);
+        btConta.setAttribute('title', t);
+        btConta.classList.toggle('fechada', !!estado.totalFatura);
+    }
     const gsub = document.getElementById('ev-gerir-sub');
     if (gsub) gsub.textContent = (estado.descricaoEvento || 'Evento') + (ev && ev.data ? ' · ' + ev.data : '');
+    const totalMesa = estado.ordens.reduce((s, o) => s + o.precoTotal, 0);
     const fsub = document.getElementById('ev-fecho-sub');
-    if (fsub) {
-        const totalMesa = estado.ordens.reduce((s, o) => s + o.precoTotal, 0);
-        fsub.textContent = '€' + totalMesa.toFixed(2) + ' marcados na mesa';
-    }
+    if (fsub) fsub.textContent = '€' + totalMesa.toFixed(2) + ' marcados na mesa';
+    const rsub = document.getElementById('ev-rel-sub');
+    if (rsub) rsub.textContent = (estado.descricaoEvento || 'Evento') + ' · €' + totalMesa.toFixed(2);
     const ftit = document.getElementById('ev-fecho-titulo');
     if (ftit) ftit.textContent = estado.totalFatura ? 'Conta fechada' : 'Fechar conta';
 }
@@ -915,10 +926,14 @@ function _evRepararOfertas() {
     return mexeu;
 }
 
+/* `quem` só vem preenchido a partir do quadrante das ofertas (o "Picar mais"
+   de alguém). O botão da barra abre SEMPRE em branco: é para uma oferta nova,
+   e reabrir com a pessoa da vez anterior fazia parecer que estava a editar a
+   primeira. Editar as que existem faz-se pelo quadrante. */
 function evAbrirOferta(quem) {
     if (modoReadOnly || !podeEditarEventoAtual()) return;
     if (estado.ordens.length === 0) { evToast('Ainda não há nada pedido para oferecer', false); return; }
-    if (quem) _evOfQuem = quem;
+    _evOfQuem = quem || '';
     if (amigos.indexOf(_evOfQuem) < 0) _evOfQuem = '';
     evAbrirSheet('ev-sheet-oferta');
     evRenderOferta();

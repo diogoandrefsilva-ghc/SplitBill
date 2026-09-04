@@ -296,16 +296,29 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
   oferta que aponte para uma ordem que desapareceu, ou de que a pessoa saiu, vai
   atrás dela; se a ordem mudou de preço ou de gente, o valor é refeito. Sem isso
   ficava a deduzir um valor que já não existe. O quadrante mostra **uma linha
-  por quem oferece** (`_evOferentesKeys`), não uma por artigo picado: quem lê
-  quer saber quanto o Barrona assumiu, não a lista das dezoito imperiais.
+  por artigo oferecido** (`1× Bifana · Barrona → Nuno`) — as ofertas nunca são
+  muitas, e "2 artigos a 2 pessoas" obrigava a abrir para saber o quê e a quem;
+  tocar leva à folha de quem oferece, que é onde se devolve.
+  **O botão da barra abre sempre em branco**: é para uma oferta NOVA. Reabrir
+  com a pessoa da vez anterior fazia parecer que estava a editar a primeira.
+  Mexer nas que já existem faz-se pelo quadrante (`evPicarMais`) — e o nome vai
+  por ÍNDICE no `onclick`, nunca por `JSON.stringify`, que mete aspas duplas
+  dentro de um atributo delimitado por aspas duplas e parte o clique num "Zé".
 - **Símbolos dos artigos** (`evIconeArtigo`): o menu é escrito à mão em cada
   evento, por isso o símbolo vem do NOME (`_EV_ICO`, uma lista de padrões) e o
   que não é reconhecido fica com as **iniciais** — melhor do que um ícone
   errado. Atenção ao `\b` do JS, que é ASCII: `\bchá\b` NÃO tem fronteira a
   seguir ao "á" e não casa nada (era o Chá verde a receber o copo de vinho).
-- **Barra inferior** `Gerir · + · Fechar conta` (`.ev-bar`, fixa, só na página
-  do evento). O que se acerta antes do jogo (convocados, menu, substituto, PDFs)
-  está no **Gerir**; a **fatura** está no **Fechar conta**, que é onde serve.
+- **Barra inferior** `Gerir · 🎁 · + · conta · Relatórios` (`.ev-bar`, fixa, só
+  na página do evento). O **+ fica sempre ao centro do ecrã** e os dois
+  satélites (oferecer, fechar conta) são simétricos em relação a ele — por isso
+  as colunas de fora são `minmax(0, 1fr)`: com `1fr` o mínimo é o conteúdo e o
+  "Relatórios", mais largo do que o "Gerir", empurrava o + para o lado.
+  O que se acerta antes do jogo (convocados, menu, substituto) está no
+  **Gerir**; a fatura no **Fechar conta**; os dois PDFs em **Relatórios**.
+- **O cartão do total da mesa** é uma linha só, com o valor à direita: as
+  contagens de pessoas e de registos que lá estavam já vivem nas pílulas de cada
+  quadrante, e o que se ganha em altura vai todo para a grelha.
 - **O que NÃO mudou, e é o que segura isto tudo:** os formulários antigos
   continuam no DOM, dentro das folhas, com os **mesmos ids**
   (`section-adicionar`, `section-ofertas`, `#item`, `#quantidade`,
