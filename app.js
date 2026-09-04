@@ -880,6 +880,7 @@ function evSyncPermissoes() {
     if (rsub) rsub.textContent = (estado.descricaoEvento || 'Evento') + ' · €' + totalMesa.toFixed(2);
     const ftit = document.getElementById('ev-fecho-titulo');
     if (ftit) ftit.textContent = estado.totalFatura ? 'Conta fechada' : 'Fechar conta';
+    evAjustarAltura();
 }
 
 /* ── OFERECER: picar o que já foi pedido ───────────────────────────────────
@@ -3141,9 +3142,11 @@ function mudarPagina(pagina) {
     // FAB Novo Evento: só no ecrã inicial + admin
     const fabNovo = document.getElementById('fab-novo');
     if (fabNovo) fabNovo.style.display = (pagina === 'inicio' && isAdmin()) ? 'inline-flex' : 'none';
-    // Barra do evento (Gerir · + · Fechar conta) e folhas: só na página do evento
+    // Barra do evento e folhas: só na página do evento. E é só aqui que a
+    // página deixa de deslizar — quem desliza são os quadrantes.
     const _evBar = document.getElementById('ev-bar');
     if (_evBar) _evBar.style.display = pagina === 'eventos' ? 'grid' : 'none';
+    document.documentElement.classList.toggle('ev-lock', pagina === 'eventos');
     if (pagina !== 'eventos') evFecharSheet();
     if (pagina === 'pagamentos') renderContas();
     aplicarPermissoesEdicao();

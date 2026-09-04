@@ -269,8 +269,14 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
 - **O scroll vive DENTRO de cada quadrante** (`.ev-rows`), nunca na página: a
   altura da grelha é calculada em `evAjustarAltura()` a partir do que sobra do
   ecrã, e depois corrigida pelo que ainda estiver a transbordar (o padding de
-  baixo muda com o safe-area). Como a página não desliza, não há dois scrolls a
-  disputar o mesmo dedo. **Coisa nova por cima da grelha = a grelha encolhe
+  baixo muda com o safe-area). E a página fica **trancada** enquanto se está no
+  evento (`html.ev-lock`, posta e tirada no `mudarPagina`): não chega o conteúdo
+  caber, porque bastava um pixel a mais — ou o bounce do iOS — para o dedo que
+  queria deslizar as ordens mexer a página. Por isso `evAjustarAltura()` corre
+  também no `evSyncPermissoes()`: se aparecer o banner de leitura ou a barra do
+  "ver como", a grelha encolhe, senão o que transbordasse ficava sem forma de lá
+  chegar. As folhas e os painéis são `position:fixed` com scroll próprio, e
+  continuam a deslizar por dentro com a página trancada. **Coisa nova por cima da grelha = a grelha encolhe
   sozinha**, não é preciso mexer em contas.
 - **Toca-se na LINHA, não no quadrante.** Chegou a estar pensado um zoom por
   quadrante; o que ele servia era o detalhe de UMA linha, e isso resolve-se numa

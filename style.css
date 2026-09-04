@@ -1902,6 +1902,11 @@ html,body{touch-action:pan-x pan-y}
    ═══════════════════════════════════════════════════════════════════════════ */
 
 #page-eventos { padding-bottom: 92px; }
+/* A página do evento não desliza: o scroll vive dentro de cada quadrante, e ter
+   os dois a responder ao mesmo dedo é o que faz "arrastei nas ordens e mexeu-se
+   a página". Trancado só aqui (a classe entra e sai no mudarPagina), e no <html>
+   também, senão o iOS continua a fazer bounce. */
+html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
 
 /* ── Total da mesa: uma linha só, com o valor à direita ── */
 .ev-mesa {
