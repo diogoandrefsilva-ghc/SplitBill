@@ -504,10 +504,14 @@ html,body{touch-action:pan-x pan-y}
         }
         .historico-card:last-child { margin-bottom: 0; }
         .historico-card:active { background: rgba(255,255,255,0.2); }
+        /* O jogo que se está a ver, marcado a dourado — a mesma cor que já
+           distingue "o que precisa de atenção" no resto da app — em vez do
+           verde que se confundia com o fundo (o painel já é verde-escuro). */
         .historico-card.ativo {
-            background: rgba(21,145,95,0.2);
-            border-color: rgba(21,145,95,0.5);
+            background: rgba(216,178,60,0.22);
+            border-color: rgba(216,178,60,0.6);
         }
+        .historico-card.ativo .historico-card-nome { color: #F0D375; }
         .historico-card-nome {
             font-size: 13px;
             font-weight: 600;
@@ -2127,7 +2131,9 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
 .ev-zt i { font-style: normal; font-family: var(--mono); font-size: 12px; color: #7C8782; font-weight: 400; margin-left: 2px; }
 .ev-zs { display: block; font-size: 12px; color: #7C8782; margin-top: 3px; line-height: 1.4; }
 .ev-zs:empty { display: none; }
-.ev-zs i { font-style: normal; font-family: var(--mono); font-size: 10.5px; color: #9AA49E; }
+/* A quantidade de cada pessoa (o "1×" a seguir ao nome, no zoom de Por item)
+   é o número que se vai lá ver — não pode ser o mais apagado da linha. */
+.ev-zs i { font-style: normal; font-family: var(--mono); font-weight: 600; font-size: 12px; color: var(--verde-tinta); }
 .ev-zs em { font-style: normal; color: #8A6D14; font-weight: 600; }
 .ev-zv { flex: 0 0 auto; text-align: right; }
 .ev-zv b { display: block; font-family: var(--mono); font-weight: 600; font-size: 14px; color: var(--verde-tinta); }
