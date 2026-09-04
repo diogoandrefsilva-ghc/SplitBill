@@ -326,7 +326,10 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
   o **Oferecer**, a dourado, por ser o que mexe na conta dos outros.
   Cada botão tem **`grid-column` fixo pela posição** (`:nth-child`): esconder um
   (o Oferecer sem ordens, o + em modo leitura) deixa a célula vazia em vez de
-  arrastar os outros — sem isso o + saía do centro.
+  arrastar os outros — sem isso o + saía do centro. Os lugares são separados por
+  um fio de `rgba(11,59,43,.08)`, e o `padding-bottom` da barra sobe os botões
+  dentro do mesmo branco: com `border-box` e altura fixa, o padding encolhe a
+  caixa de conteúdo em vez de engordar a barra.
   O que se acerta antes do jogo (convocados, menu, substituto) está no
   **Gerir**; a fatura na **Conta**; os dois PDFs em **Relatórios**.
 - **O cartão do total da mesa** é uma linha só, com o valor à direita: as
