@@ -600,7 +600,10 @@ function evAjustarAltura() {
     const grid = document.getElementById('ev-grid');
     if (!grid || _paginaAtual !== 'eventos') return;
     const topo = grid.getBoundingClientRect().top + (window.scrollY || 0);
-    const barra = 78 + 12;
+    // 78 é a altura da .ev-bar e 10 a folga até ela — os mesmos números do
+    // padding-bottom do #page-eventos, senão a correção do `excesso` a seguir
+    // desfazia o que aqui se calcula.
+    const barra = 78 + 10;
     const h = Math.max(320, Math.round(window.innerHeight - topo - barra));
     grid.style.height = h + 'px';
     // O que sobra depois de medir é o padding de baixo do body e da página, que
@@ -608,6 +611,12 @@ function evAjustarAltura() {
     // fica NADA por deslizar — que é o ponto do ecrã todo.
     const excesso = document.documentElement.scrollHeight - window.innerHeight;
     if (excesso > 0) grid.style.height = Math.max(320, h - excesso) + 'px';
+    // Ecrã curto (um SE no Safari com as barras todas): nem com o piso de 320 a
+    // grelha cabe, e com a página trancada o fundo dos quadrantes ficava atrás
+    // da barra sem forma de lá chegar. Aí destranca-se — quadrantes pequenos
+    // ainda se lêem, escondidos não. Com espaço, tranca outra vez.
+    const sobra = document.documentElement.scrollHeight - window.innerHeight;
+    document.documentElement.classList.toggle('ev-lock', sobra <= 0);
 }
 window.addEventListener('resize', evAjustarAltura);
 
@@ -1577,9 +1586,12 @@ function renderHistoricoDropdown() {
         sel.appendChild(opt);
     });
 
-    // Update toggle button label
+    // Update toggle button label. O botão é um chip na linha do cabeçalho: leva
+    // só a contagem (o 📚 está no HTML), e a frase por extenso vai para o title.
     const label = document.getElementById('historico-toggle-label');
-    if (label) label.textContent = '📚 Histórico (' + lista.length + ' evento' + (lista.length !== 1 ? 's' : '') + ')';
+    if (label) label.textContent = lista.length;
+    const _tg = document.getElementById('historico-toggle-btn');
+    if (_tg) _tg.title = 'Histórico (' + lista.length + ' evento' + (lista.length !== 1 ? 's' : '') + ')';
 
     // Update card panel
     const panel = document.getElementById('historico-panel');
@@ -3247,7 +3259,12 @@ function aplicarPermissoesEdicao() {
     // Meta do título: data + época (corte a 15/jul)
     const _meta = document.getElementById('evento-meta');
     if (_meta) {
-        if (ev && ev.data) { _meta.textContent = ev.data + ' · Época ' + _epocaLabel(ev.data); _meta.style.display = ''; }
+        if (ev && ev.data) {
+            // Em duas peças: a época esconde-se sozinha em ecrãs estreitos (CSS).
+            _meta.innerHTML = '<span class="evm-d">' + _evEsc(ev.data) + '</span>'
+                + '<span class="evm-e">Época ' + _evEsc(_epocaLabel(ev.data)) + '</span>';
+            _meta.style.display = '';
+        }
         else { _meta.style.display = 'none'; _meta.textContent = ''; }
     }
 

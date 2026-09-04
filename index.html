@@ -203,13 +203,18 @@ window.sbEsconderSplash = function(){
 
 <!-- Event context bar (only visible on Eventos tab) -->
 <div id="header-evento-context">
-    <input type="text" id="descricao-evento" placeholder="Descrição do evento (ex: Almoço Sá 19 Abril)" maxlength="80"
-        oninput="estado.descricaoEvento=this.value;salvarNoLocalStorage()">
-    <div id="evento-meta" style="display:none;"></div>
-    <button class="historico-toggle-btn" id="historico-toggle-btn" onclick="toggleHistoricoPanel()" style="display:none;">
-        <span id="historico-toggle-label">📚 Histórico</span>
-        <span id="historico-toggle-arrow" style="font-size:10px;opacity:0.7;transition:transform 0.2s;">▼</span>
-    </button>
+    <!-- Uma linha só: nome do jogo · data · trocar de evento. Ver .evh-line no style.css. -->
+    <div class="evh-line">
+        <input type="text" id="descricao-evento" placeholder="Nome do evento" maxlength="80"
+            oninput="estado.descricaoEvento=this.value;salvarNoLocalStorage()">
+        <div id="evento-meta" style="display:none;"></div>
+        <button class="historico-toggle-btn" id="historico-toggle-btn" onclick="toggleHistoricoPanel()"
+            title="Trocar de evento" aria-label="Trocar de evento" style="display:none;">
+            <span class="ht-ico" aria-hidden="true">📚</span>
+            <span id="historico-toggle-label"></span>
+            <span id="historico-toggle-arrow" aria-hidden="true">▼</span>
+        </button>
+    </div>
     <select id="historico-select" onchange="navegarHistorico(this.value)" style="display:none;">
         <option value="">📚 Histórico de eventos</option>
     </select>
@@ -1018,10 +1023,20 @@ if ('serviceWorker' in navigator) {
 .sbi-mov-vazio{padding:13px;text-align:center;font-size:12px;color:var(--ink-soft,#5B6661);}
 
 
-/* Meta data/época do evento (sobre fundo verde) */
-#evento-meta{margin-top:8px;text-align:center;font-family:var(--mono,'IBM Plex Mono',monospace);font-size:12px;font-weight:500;color:rgba(255,255,255,0.7);letter-spacing:.04em;}
-/* Dropdown personalizada do histórico — botão largura total */
-#historico-toggle-btn{width:100%;margin-top:10px;}
+/* Meta data/época do evento — segunda peça da linha do cabeçalho (fundo verde).
+   Em ecrãs estreitos a época sai (continua nos cartões do histórico); a data,
+   essa, fica sempre. */
+#evento-meta{flex:0 0 auto;display:flex;align-items:baseline;gap:6px;min-width:0;font-family:var(--mono,'IBM Plex Mono',monospace);font-size:11.5px;font-weight:500;color:rgba(255,255,255,0.72);letter-spacing:.03em;white-space:nowrap;}
+#evento-meta .evm-e::before{content:'·';margin-right:6px;opacity:.6;}
+@media (max-width:430px){ #evento-meta .evm-e{display:none;} }
+/* Abaixo dos 400 o nome do jogo é o que vale a linha: a contagem do chip
+   sai (fica no title) para o adversário não truncar tão cedo. */
+@media (max-width:400px){ #historico-toggle-label{display:none;} }
+/* Dropdown personalizada do histórico — chip no fim da linha do cabeçalho */
+#historico-toggle-btn{flex:0 0 auto;width:auto;margin:0;height:32px;padding:0 9px;gap:5px;border-radius:9px;font-size:13px;letter-spacing:.02em;}
+#historico-toggle-btn .ht-ico{font-size:13px;line-height:1;}
+#historico-toggle-label{font-family:var(--mono,'IBM Plex Mono',monospace);font-weight:600;}
+#historico-toggle-arrow{font-size:9px;opacity:.7;transition:transform .2s;}
 /* Apagar evento — no fim do ecrã do evento */
 #btn-eliminar-evento{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:6px 0 10px;background:#fff;border:1.5px solid var(--rubro,#B3402F);color:var(--rubro,#B3402F);border-radius:12px;padding:13px;font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:15px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;}
 #btn-eliminar-evento:active{transform:scale(.99);background:#FDF2F0;}
