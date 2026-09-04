@@ -284,11 +284,6 @@ window.sbEsconderSplash = function(){
     </div>
 </div>
 
-<div id="readonly-banner">
-    <span>👁️ Modo leitura</span>
-    <button onclick="desbloquearEvento()">🔓 Desbloquear para editar</button>
-</div>
-
 <!-- ═══ PAGE: EVENTOS ═══ -->
 <div id="page-inicio" style="display:none;"></div>
 
@@ -497,6 +492,13 @@ window.sbEsconderSplash = function(){
         </button>
     </div>
     <div class="ev-shbody">
+        <!-- Só aparece com a conta fechada (a admin): não é coisa do dia-a-dia
+             do evento, por isso vive aqui nas definições, e não à vista de
+             sempre no ecrã principal. -->
+        <div id="readonly-banner">
+            <span>👁️ Modo leitura</span>
+            <button onclick="desbloquearEvento()">🔓 Desbloquear para editar</button>
+        </div>
         <div class="section" id="section-config">
             <div class="config-body" id="config-body">
                 <div id="substituto-box"></div>

@@ -570,10 +570,13 @@ function _evEsc(t) {
 // nomes e o valor — "antes do preço" — e não tem lugar na grelha a dois, por
 // isso só se passa quando há espaço (ver _atualizarUIInner).
 function _evRow(onclick, titulo, sub, valor, valorAntes, hora) {
+    // `hora` vem guardada como "22/08, 22:52" (para os relatórios, que querem
+    // a data); aqui só há espaço — e falta — para as horas, "22:52".
+    const soHora = hora ? String(hora).split(', ').pop() : '';
     return '<button class="ev-row" onclick="' + onclick + '">'
         + '<span class="ev-row-t">' + titulo + '</span>'
         + '<span class="ev-row-s">' + sub + '</span>'
-        + (hora ? '<span class="ev-row-h">' + _evEsc(hora) + '</span>' : '')
+        + (soHora ? '<span class="ev-row-h">' + _evEsc(soHora) + '</span>' : '')
         + '<span class="ev-row-v">' + valor + '</span>'
         + '<span class="ev-row-vs">' + (valorAntes || '') + '</span></button>';
 }
@@ -1170,13 +1173,14 @@ function evSyncPermissoes() {
     const ev = historico.find(h => h.id === eventoAtualId);
     const fab = document.getElementById('ev-fab');
     if (fab) fab.style.display = evPodeRegistar() ? '' : 'none';
-    // Oferecer mexe na conta de terceiros: só aparece a quem edita o evento.
+    // Oferecer mexe na conta de terceiros: só aparece a quem edita o evento
+    // (a conta fechada é sempre leitura, mas continua a ser dessa pessoa).
     // Fica sempre no lugar (esconder-e-mostrar abria um buraco na barra) —
-    // sem ordens ainda não há nada para oferecer, por isso fica só trancado.
+    // sem ordens, ou com a conta fechada, fica só trancado.
     const fabOf = document.getElementById('ev-fab-of');
     if (fabOf) {
-        fabOf.style.display = (!modoReadOnly && podeEditarEventoAtual()) ? '' : 'none';
-        fabOf.disabled = estado.ordens.length === 0;
+        fabOf.style.display = podeEditarEventoAtual() ? '' : 'none';
+        fabOf.disabled = modoReadOnly || estado.ordens.length === 0;
     }
     const btConta = document.getElementById('ev-fab-conta');
     if (btConta) btConta.classList.toggle('fechada', !!estado.totalFatura);
