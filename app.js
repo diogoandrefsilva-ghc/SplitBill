@@ -514,7 +514,7 @@ function _atualizarUIInner() {
             // direita, por baixo do total oficial, o que a pessoa pagaria se
             // não houvesse oferta nenhuma — esse sim, rasurado.
             const sub = delta === 0 ? ''
-                : (delta > 0 ? '🎁 oferece +€' : '🎁 recebe −€') + Math.abs(delta).toFixed(2);
+                : (delta > 0 ? 'oferece +€' : 'recebe −€') + Math.abs(delta).toFixed(2);
             const antes = delta === 0 ? '' : '€' + (contaPorPessoa[pessoa] || 0).toFixed(2);
             return _evRow("evAbrirLinha('pessoa'," + i + ")", _evEsc(pessoa), sub,
                 '€' + totaisPessoa[pessoa].toFixed(2), antes);
@@ -583,7 +583,7 @@ function evAjustarAltura() {
     const grid = document.getElementById('ev-grid');
     if (!grid || _paginaAtual !== 'eventos') return;
     const topo = grid.getBoundingClientRect().top + (window.scrollY || 0);
-    const barra = 74 + 14;
+    const barra = 78 + 12;
     const h = Math.max(320, Math.round(window.innerHeight - topo - barra));
     grid.style.height = h + 'px';
     // O que sobra depois de medir é o padding de baixo do body e da página, que
@@ -868,12 +868,9 @@ function evSyncPermissoes() {
     const fabOf = document.getElementById('ev-fab-of');
     if (fabOf) fabOf.style.display = (!modoReadOnly && podeEditarEventoAtual() && estado.ordens.length > 0) ? '' : 'none';
     const btConta = document.getElementById('ev-fab-conta');
-    if (btConta) {
-        const t = estado.totalFatura ? 'Conta fechada' : 'Fechar conta';
-        btConta.setAttribute('aria-label', t);
-        btConta.setAttribute('title', t);
-        btConta.classList.toggle('fechada', !!estado.totalFatura);
-    }
+    if (btConta) btConta.classList.toggle('fechada', !!estado.totalFatura);
+    const contaTxt = document.getElementById('ev-conta-txt');
+    if (contaTxt) contaTxt.textContent = estado.totalFatura ? 'Fechada' : 'Conta';
     const gsub = document.getElementById('ev-gerir-sub');
     if (gsub) gsub.textContent = (estado.descricaoEvento || 'Evento') + (ev && ev.data ? ' · ' + ev.data : '');
     const totalMesa = estado.ordens.reduce((s, o) => s + o.precoTotal, 0);

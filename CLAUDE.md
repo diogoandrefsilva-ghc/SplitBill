@@ -316,13 +316,19 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
   que não é reconhecido fica com as **iniciais** — melhor do que um ícone
   errado. Atenção ao `\b` do JS, que é ASCII: `\bchá\b` NÃO tem fronteira a
   seguir ao "á" e não casa nada (era o Chá verde a receber o copo de vinho).
-- **Barra inferior** `Gerir · 🎁 · + · conta · Relatórios` (`.ev-bar`, fixa, só
-  na página do evento). O **+ fica sempre ao centro do ecrã** e os dois
-  satélites (oferecer, fechar conta) são simétricos em relação a ele — por isso
-  as colunas de fora são `minmax(0, 1fr)`: com `1fr` o mínimo é o conteúdo e o
-  "Relatórios", mais largo do que o "Gerir", empurrava o + para o lado.
+- **Barra inferior** (`.ev-bar`, fixa, só na página do evento): cinco lugares —
+  `Gerir · Oferecer · + · Conta · Relatórios` — todos com nome por baixo do
+  ícone, e o + ao centro. Já foram três círculos de tamanhos e desenhos
+  diferentes com dois rótulos só nos de fora; ficava desarrumado e os do meio
+  não se percebiam. Agora só o + é cheio (um quadrado de cantos redondos, da
+  mesma família dos cartões) e **assenta na barra em vez de a romper** — não
+  precisa de subir para se ver que é o principal. O único que foge ao cinzento é
+  o **Oferecer**, a dourado, por ser o que mexe na conta dos outros.
+  Cada botão tem **`grid-column` fixo pela posição** (`:nth-child`): esconder um
+  (o Oferecer sem ordens, o + em modo leitura) deixa a célula vazia em vez de
+  arrastar os outros — sem isso o + saía do centro.
   O que se acerta antes do jogo (convocados, menu, substituto) está no
-  **Gerir**; a fatura no **Fechar conta**; os dois PDFs em **Relatórios**.
+  **Gerir**; a fatura na **Conta**; os dois PDFs em **Relatórios**.
 - **O cartão do total da mesa** é uma linha só, com o valor à direita: as
   contagens de pessoas e de registos que lá estavam já vivem nas pílulas de cada
   quadrante, e o que se ganha em altura vai todo para a grelha.
