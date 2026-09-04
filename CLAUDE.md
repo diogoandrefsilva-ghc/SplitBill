@@ -266,6 +266,19 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
   parte dos jogos não há ofertas, e um quadrante permanentemente vazio é pior do
   que não o ter. Sem ofertas, a linha inteira dá para pôr cada ordem numa linha
   só (`.ev-wide`: item · quem · valor) em vez de duas.
+- **O cabeçalho do evento é uma linha só** (`.evh-line`): nome · data · chip do
+  histórico. Eram três (nome centrado, data/época por baixo, botão de largura
+  inteira) e a altura que comiam saía toda à grelha. O que cede primeiro em
+  ecrãs estreitos é o **nome** (encolhe e trunca; por extenso no painel do
+  histórico), depois a **época** (≤430px) e por fim a **contagem** do chip
+  (≤400px, fica no `title`); a data e o botão nunca encolhem.
+- **Por baixo da grelha só há a barra e uma folga**: `#page-eventos` com
+  `padding-bottom:88px` (78 da `.ev-bar` + 10) e o do `body` a zero enquanto a
+  página está trancada — são estes que mandam na altura da grelha, porque a
+  correcção do `excesso` no `evAjustarAltura()` desfaz tudo o que transborde. Se
+  mexeres num, mexe no `barra` do `evAjustarAltura()` e no `min-height` da
+  `.ev-grid`, que tem de acompanhar o piso do JS (com 380 contra 320 o CSS
+  ganhava ao JS e o fundo dos quadrantes ia parar atrás da barra).
 - **O scroll vive DENTRO de cada quadrante** (`.ev-rows`), nunca na página: a
   altura da grelha é calculada em `evAjustarAltura()` a partir do que sobra do
   ecrã, e depois corrigida pelo que ainda estiver a transbordar (o padding de
@@ -277,7 +290,10 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
   "ver como", a grelha encolhe, senão o que transbordasse ficava sem forma de lá
   chegar. As folhas e os painéis são `position:fixed` com scroll próprio, e
   continuam a deslizar por dentro com a página trancada. **Coisa nova por cima da grelha = a grelha encolhe
-  sozinha**, não é preciso mexer em contas.
+  sozinha**, não é preciso mexer em contas. A tranca tem uma excepção: num ecrã
+  curto de mais para o piso de 320px (um SE no Safari com as barras todas) o
+  `evAjustarAltura()` **destranca** a página — quadrantes pequenos ainda se
+  lêem, escondidos atrás da barra não.
 - **Toca-se na LINHA para o detalhe, no CABEÇALHO para o zoom.** A linha abre
   uma folha pequena (`#ev-sheet-linha`): quem consumiu e quanto lhe calha, com
   Apagar/Editar nas ordens. O Editar reaproveita o `toggleEditOrdem()` de sempre
