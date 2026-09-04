@@ -510,10 +510,14 @@ function _atualizarUIInner() {
     } else {
         contaDiv.innerHTML = _evPessoasKeys.map((pessoa, i) => {
             const delta = saldoOfertas[pessoa] || 0;
-            // O valor antes da oferta fica por baixo, rasurado: assim vê-se de
-            // relance o que a oferta mudou, sem ter de abrir a linha.
+            // Rasurado = o que esta pessoa pagaria se não houvesse oferta, e só
+            // faz sentido em quem RECEBEU (pagarias 8, pagas 4.50). Em quem
+            // oferece o valor não foi anulado, foi acrescentado — aí diz-se
+            // quanto é que assumiu.
             const sub = delta === 0 ? ''
-                : '🎁 <s>€' + (contaPorPessoa[pessoa] || 0).toFixed(2) + '</s>';
+                : (delta < 0
+                    ? '🎁 <s>€' + (contaPorPessoa[pessoa] || 0).toFixed(2) + '</s>'
+                    : '🎁 assume +€' + delta.toFixed(2));
             return _evRow("evAbrirLinha('pessoa'," + i + ")", _evEsc(pessoa), sub, '€' + totaisPessoa[pessoa].toFixed(2));
         }).join('');
     }
@@ -669,17 +673,15 @@ function evAbrirLinha(tipo, chave) {
         const podeMexer = !modoReadOnly && podeEditarEventoAtual();
         tit.textContent = quem + ' oferece';
         sub.textContent = linhas.length + (linhas.length === 1 ? ' artigo · €' : ' artigos · €') + tot.toFixed(2);
+        // Só leitura: mexer (juntar, tirar, apagar tudo) faz-se num sítio só —
+        // o ecrã de picar, onde se vê a lista inteira e não apenas o que já foi
+        // assumido. Ter aqui um × por linha era um segundo sítio a meio.
         body.innerHTML = '<div class="ev-card">' + linhas.map(o =>
-            '<div class="ev-drow"><div class="ev-drow-i">'
-            + '<span class="ev-drow-t">' + _evQtdStr(o.quantidade) + '× ' + _evEsc(o.item) + '</span>'
-            + '<span class="ev-drow-s">a ' + _evNomes(o.para, 3) + '</span></div>'
-            + '<span class="ev-drow-v">€' + o.precoTotal.toFixed(2) + '</span>'
-            + (podeMexer ? '<button class="ev-of-x" onclick="evApagarLinha(\'oferta\',' + o.id + ')" aria-label="Devolver">'
-                + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>' : '')
-            + '</div>').join('') + '</div>';
+            _evDrow(_evQtdStr(o.quantidade) + '× ' + _evEsc(o.item), 'a ' + _evNomes(o.para, 3),
+                '€' + o.precoTotal.toFixed(2))).join('') + '</div>';
         if (podeMexer) {
             foot.style.display = 'flex';
-            foot.innerHTML = '<button class="ev-btn ev-btn-ghost" onclick="evPicarMais(' + chave + ')">Picar mais</button>';
+            foot.innerHTML = '<button class="ev-btn" onclick="evPicarMais(' + chave + ')">Editar oferta</button>';
         }
     } else if (tipo === 'item') {
         const item = _evItensKeys[chave];
@@ -1011,8 +1013,34 @@ function evRenderOferta() {
         : 'escolhe quem oferece';
     const lab = document.getElementById('ev-of-lab');
     if (lab) lab.textContent = _evOfQuem ? _evOfQuem + ' assume' : 'O que assume';
+    // Apagar a oferta inteira é despicar tudo — mas ninguém quer fazê-lo linha
+    // a linha, por isso há um atalho enquanto houver alguma coisa picada.
+    const limpar = document.getElementById('ev-of-limpar');
+    if (limpar) limpar.style.display = minhas.length ? '' : 'none';
     const sub = document.getElementById('ev-of-sub');
     if (sub) sub.textContent = _evOfQuem ? 'pica o que o ' + _evOfQuem + ' paga' : 'pica o que alguém assume';
+}
+
+async function evLimparOferta() {
+    if (modoReadOnly || !podeEditarEventoAtual() || !_evOfQuem) return;
+    const minhas = estado.ofertas.filter(o => o.quem === _evOfQuem);
+    if (minhas.length === 0) return;
+    const tot = minhas.reduce((s, o) => s + o.precoTotal, 0);
+    const ok = await mostrarModal({
+        icon: '🎁',
+        title: 'Devolver tudo?',
+        msg: 'A oferta do <strong>' + _evOfQuem + '</strong> (' + minhas.length
+            + (minhas.length === 1 ? ' artigo, €' : ' artigos, €') + tot.toFixed(2)
+            + ') volta para a conta de quem consumiu.',
+        confirmText: 'Devolver',
+        cancelText: 'Cancelar',
+        danger: true
+    });
+    if (!ok) return;
+    estado.ofertas = estado.ofertas.filter(o => o.quem !== _evOfQuem);
+    salvarNoLocalStorage();
+    atualizarUI();
+    evRenderOferta();
 }
 
 function evToggleOferta(pi, ordemId) {

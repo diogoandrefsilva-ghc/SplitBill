@@ -297,8 +297,13 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
   atrás dela; se a ordem mudou de preço ou de gente, o valor é refeito. Sem isso
   ficava a deduzir um valor que já não existe. O quadrante mostra **uma linha
   por artigo oferecido** (`1× Bifana · Barrona → Nuno`) — as ofertas nunca são
-  muitas, e "2 artigos a 2 pessoas" obrigava a abrir para saber o quê e a quem;
-  tocar leva à folha de quem oferece, que é onde se devolve.
+  muitas, e "2 artigos a 2 pessoas" obrigava a abrir para saber o quê e a quem.
+  Tocar abre a folha de quem oferece, que é **só de leitura**: mexer (juntar,
+  tirar, devolver tudo) faz-se num sítio só — o "Editar oferta" leva ao ecrã de
+  picar, onde se vê a lista inteira e não apenas o que já foi assumido.
+- **No Por pessoa, o rasurado é só de quem RECEBEU**: o valor que essa pessoa
+  pagaria se não houvesse oferta (pagarias €8.00, pagas €4.50). Em quem oferece
+  nada foi anulado — foi acrescentado —, por isso aí diz-se quanto assumiu.
   **O botão da barra abre sempre em branco**: é para uma oferta NOVA. Reabrir
   com a pessoa da vez anterior fazia parecer que estava a editar a primeira.
   Mexer nas que já existem faz-se pelo quadrante (`evPicarMais`) — e o nome vai
@@ -337,6 +342,12 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
   iguais — carrega-se e "não acontece nada". Qualquer checkbox nova precisa de
   `appearance: checkbox` e de desfazer padding/borda/fundo/cantos herdados (ver
   `.conv-row input`).
+- **Texto pequeno dentro de um `button` herda o peso e a família do botão.**
+  Uma legenda cinzenta debaixo de um título, dentro de um botão de lista, saía a
+  600 e em Barlow Condensed como o título (ver `.ev-lrow-i span`, que repõe as
+  duas). O mesmo vale para as classes: `.grow-row`/`.grow-ic` só existiam no
+  mockup — usá-las na app deixou os botões a cair no `button` global, verdes,
+  em maiúsculas e com os SVG sem tamanho (ícones gigantes).
 - **O `button` global é UPPERCASE com `letter-spacing`.** Qualquer botão novo
   herda-o: as linhas dos quadrantes (que são botões) saíam em maiúsculas e os
   nomes dos artigos truncavam a meio. Botão que mostre um NOME (de artigo, de

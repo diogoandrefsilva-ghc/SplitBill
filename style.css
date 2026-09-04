@@ -2009,8 +2009,8 @@ html,body{touch-action:pan-x pan-y}
 .ev-barbtn, .ev-barbtn:hover {
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
     min-height: 58px; border: 0; background: transparent; cursor: pointer; color: var(--verde-tinta);
-    font-family: var(--display); font-weight: 600; font-size: 12.5px; white-space: nowrap;
-    text-transform: uppercase; letter-spacing: .05em;
+    font-family: var(--display); font-weight: 600; font-size: 11px; white-space: nowrap;
+    text-transform: uppercase; letter-spacing: .06em; opacity: .92;
 }
 .ev-barbtn:active { transform: scale(.96); }
 .ev-barbtn svg { width: 21px; height: 21px; }
@@ -2084,6 +2084,7 @@ html,body{touch-action:pan-x pan-y}
 .ev-btn svg { width: 18px; height: 18px; }
 .ev-btn:disabled, .ev-btn:disabled:hover { background: #DDE3DD; color: #98A29C; cursor: default; }
 .ev-btn-red, .ev-btn-red:hover { background: #fff; color: var(--rubro); box-shadow: inset 0 0 0 1.6px rgba(179,64,47,.55); flex: 0 0 auto; width: 60px; }
+.ev-btn-largo { width: auto; flex: 0 0 auto; padding: 0 16px; }
 .ev-btn-ghost, .ev-btn-ghost:hover { background: #fff; color: var(--verde-tinta); box-shadow: inset 0 0 0 1.6px var(--verde); }
 .ev-hint { display: block; font-size: 11.5px; color: #7C8782; margin: 12px 4px 0; line-height: 1.45; }
 .ev-card { background: #fff; border: 1px solid #E6EDE6; border-radius: 14px; padding: 4px 12px; }
@@ -2094,6 +2095,32 @@ html,body{touch-action:pan-x pan-y}
 .ev-drow-s { display: block; font-size: 11.5px; color: #7C8782; margin-top: 2px; }
 .ev-drow-s:empty { display: none; }
 .ev-drow-v { flex: 0 0 auto; font-family: var(--mono); font-weight: 600; font-size: 13px; color: var(--verde-tinta); }
+
+/* Linha de lista dentro de uma folha (Relatórios). Sem isto os botões caíam
+   no `button` global — verde, maiúsculas e com os SVG sem tamanho, o que dava
+   ícones gigantes e os dois textos colados. */
+.ev-lrow, .ev-lrow:hover {
+    display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
+    padding: 13px 2px; border: 0; border-bottom: 1px solid #EDF1EC; border-radius: 0;
+    background: transparent; cursor: pointer; color: var(--ink);
+    text-transform: none; letter-spacing: normal;
+}
+.ev-lrow:last-child { border-bottom: 0; }
+.ev-lrow:active { transform: scale(.995); }
+.ev-lrow-ic {
+    flex: 0 0 auto; width: 38px; height: 38px; border-radius: 11px; background: #EEF3EF;
+    color: var(--verde-tinta); display: flex; align-items: center; justify-content: center;
+}
+.ev-lrow-ic svg { width: 19px; height: 19px; }
+.ev-lrow-i { flex: 1 1 auto; min-width: 0; }
+.ev-lrow-i b { display: block; font-family: var(--display); font-weight: 600; font-size: 18px; line-height: 1.1; }
+/* Dentro de um <button> o peso e a família vêm do botão (600, condensada):
+   a legenda tem de os repor, senão sai a negrito e condensada como o título. */
+.ev-lrow-i span {
+    display: block; font-size: 11.5px; color: #7C8782; margin-top: 1px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-weight: 400;
+}
+.ev-lrow > svg { width: 16px; height: 16px; color: #A6B0A8; flex: 0 0 auto; }
 
 /* ── Passo 1: escolher o artigo ── */
 .ev-igrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
