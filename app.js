@@ -441,6 +441,11 @@ function _atualizarUIInner() {
     // ── Total da mesa ───────────────────────────────────────────────────────
     document.getElementById('total-mesa').textContent = '€' + totalMesa.toFixed(2);
 
+    // Decide-se já aqui (antes de desenhar Ordens) porque, sem Ofertas, as
+    // Ordens ficam com a linha toda — e nessa largura cabem quase todos os
+    // nomes e ainda a hora, que na grelha a dois não cabiam.
+    const temOfertas = estado.ofertas.length > 0;
+
     // ── Quadrante ORDENS ────────────────────────────────────────────────────
     const lista = document.getElementById('lista-ordens');
     if (estado.ordens.length === 0) {
@@ -450,8 +455,10 @@ function _atualizarUIInner() {
         lista.innerHTML = estado.ordens.slice().reverse().map(o => _evRow(
             "evAbrirLinha('ordem'," + o.id + ")",
             o.quantidade + '× ' + _evEsc(o.item),
-            _evNomes(o.amigos),
-            '€' + o.precoTotal.toFixed(2)
+            _evNomes(o.amigos, temOfertas ? 3 : 99),
+            '€' + o.precoTotal.toFixed(2),
+            '',
+            temOfertas ? '' : o.hora
         )).join('');
     }
     document.getElementById('ev-n-ordens').textContent = estado.ordens.length;
@@ -475,7 +482,6 @@ function _atualizarUIInner() {
     )).join('');
     document.getElementById('ev-n-ofertas').textContent = estado.ofertas.length;
 
-    const temOfertas = estado.ofertas.length > 0;
     const qRod = document.getElementById('ev-q-rod');
     const grid = document.getElementById('ev-grid');
     const qOrd = document.getElementById('ev-q-ord');
@@ -560,10 +566,14 @@ function _evEsc(t) {
     return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function _evRow(onclick, titulo, sub, valor, valorAntes) {
+// `hora` só se usa na linha larga das Ordens (sem Ofertas): fica entre os
+// nomes e o valor — "antes do preço" — e não tem lugar na grelha a dois, por
+// isso só se passa quando há espaço (ver _atualizarUIInner).
+function _evRow(onclick, titulo, sub, valor, valorAntes, hora) {
     return '<button class="ev-row" onclick="' + onclick + '">'
         + '<span class="ev-row-t">' + titulo + '</span>'
         + '<span class="ev-row-s">' + sub + '</span>'
+        + (hora ? '<span class="ev-row-h">' + _evEsc(hora) + '</span>' : '')
         + '<span class="ev-row-v">' + valor + '</span>'
         + '<span class="ev-row-vs">' + (valorAntes || '') + '</span></button>';
 }
@@ -1160,10 +1170,14 @@ function evSyncPermissoes() {
     const ev = historico.find(h => h.id === eventoAtualId);
     const fab = document.getElementById('ev-fab');
     if (fab) fab.style.display = evPodeRegistar() ? '' : 'none';
-    // Oferecer mexe na conta de terceiros (e só faz sentido com algo pedido):
-    // só quem edita o evento, e só quando já há ordens.
+    // Oferecer mexe na conta de terceiros: só aparece a quem edita o evento.
+    // Fica sempre no lugar (esconder-e-mostrar abria um buraco na barra) —
+    // sem ordens ainda não há nada para oferecer, por isso fica só trancado.
     const fabOf = document.getElementById('ev-fab-of');
-    if (fabOf) fabOf.style.display = (!modoReadOnly && podeEditarEventoAtual() && estado.ordens.length > 0) ? '' : 'none';
+    if (fabOf) {
+        fabOf.style.display = (!modoReadOnly && podeEditarEventoAtual()) ? '' : 'none';
+        fabOf.disabled = estado.ordens.length === 0;
+    }
     const btConta = document.getElementById('ev-fab-conta');
     if (btConta) btConta.classList.toggle('fechada', !!estado.totalFatura);
     const contaTxt = document.getElementById('ev-conta-txt');
