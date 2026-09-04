@@ -510,15 +510,14 @@ function _atualizarUIInner() {
     } else {
         contaDiv.innerHTML = _evPessoasKeys.map((pessoa, i) => {
             const delta = saldoOfertas[pessoa] || 0;
-            // Rasurado = o que esta pessoa pagaria se não houvesse oferta, e só
-            // faz sentido em quem RECEBEU (pagarias 8, pagas 4.50). Em quem
-            // oferece o valor não foi anulado, foi acrescentado — aí diz-se
-            // quanto é que assumiu.
+            // À esquerda o que a oferta faz (essa vale, não se rasura); à
+            // direita, por baixo do total oficial, o que a pessoa pagaria se
+            // não houvesse oferta nenhuma — esse sim, rasurado.
             const sub = delta === 0 ? ''
-                : (delta < 0
-                    ? '🎁 <s>€' + (contaPorPessoa[pessoa] || 0).toFixed(2) + '</s>'
-                    : '🎁 assume +€' + delta.toFixed(2));
-            return _evRow("evAbrirLinha('pessoa'," + i + ")", _evEsc(pessoa), sub, '€' + totaisPessoa[pessoa].toFixed(2));
+                : (delta > 0 ? '🎁 oferece +€' : '🎁 recebe −€') + Math.abs(delta).toFixed(2);
+            const antes = delta === 0 ? '' : '€' + (contaPorPessoa[pessoa] || 0).toFixed(2);
+            return _evRow("evAbrirLinha('pessoa'," + i + ")", _evEsc(pessoa), sub,
+                '€' + totaisPessoa[pessoa].toFixed(2), antes);
         }).join('');
     }
     document.getElementById('ev-n-pessoas').textContent = _evPessoasKeys.length;
@@ -557,11 +556,12 @@ function _evEsc(t) {
     return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function _evRow(onclick, titulo, sub, valor) {
+function _evRow(onclick, titulo, sub, valor, valorAntes) {
     return '<button class="ev-row" onclick="' + onclick + '">'
         + '<span class="ev-row-t">' + titulo + '</span>'
         + '<span class="ev-row-s">' + sub + '</span>'
-        + '<span class="ev-row-v">' + valor + '</span></button>';
+        + '<span class="ev-row-v">' + valor + '</span>'
+        + '<span class="ev-row-vs">' + (valorAntes || '') + '</span></button>';
 }
 
 function _evDrow(titulo, sub, valor) {

@@ -1973,7 +1973,7 @@ html,body{touch-action:pan-x pan-y}
     display: grid; width: 100%; text-align: left; gap: 0 8px; cursor: pointer;
     background: transparent; border: 0; border-bottom: 1px solid #EDF1EC;
     padding: 7px 2px 8px; color: var(--ink); border-radius: 0;
-    grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t v" "s s";
+    grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t v" "s x";
 }
 .ev-row:hover { background: rgba(14,122,79,.05); }
 .ev-row:last-child { border-bottom: 0; }
@@ -1987,13 +1987,20 @@ html,body{touch-action:pan-x pan-y}
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
 }
 .ev-row-s:empty { display: none; }
-/* O total antes da oferta, rasurado por baixo do oficial. */
-.ev-row-s s { text-decoration-thickness: 1px; }
+/* O que a pessoa pagaria se não houvesse oferta: por baixo do total oficial,
+   rasurado, mais pequeno e cinzento. */
+.ev-row-vs {
+    grid-area: x; justify-self: end; margin-top: 1px;
+    font-family: var(--mono); font-weight: 400; font-size: 10.5px; color: #9AA49E;
+    text-decoration: line-through; text-decoration-thickness: 1px; white-space: nowrap;
+}
+.ev-row-vs:empty { display: none; }
 /* Linha inteira: item, quem e valor cabem todos na mesma linha. */
 .ev-wide .ev-row { display: flex; align-items: baseline; gap: 8px; padding: 8px 2px 9px; }
 .ev-wide .ev-row-t { flex: 0 0 auto; font-size: 17px; }
 .ev-wide .ev-row-s { flex: 1 1 auto; margin-top: 0; }
 .ev-wide .ev-row-v { flex: 0 0 auto; font-size: 12.5px; }
+.ev-wide .ev-row-vs { flex: 0 0 auto; margin-top: 0; }
 
 /* ── Barra inferior ── */
 .ev-bar {

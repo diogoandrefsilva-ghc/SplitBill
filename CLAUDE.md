@@ -301,9 +301,11 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
   Tocar abre a folha de quem oferece, que é **só de leitura**: mexer (juntar,
   tirar, devolver tudo) faz-se num sítio só — o "Editar oferta" leva ao ecrã de
   picar, onde se vê a lista inteira e não apenas o que já foi assumido.
-- **No Por pessoa, o rasurado é só de quem RECEBEU**: o valor que essa pessoa
-  pagaria se não houvesse oferta (pagarias €8.00, pagas €4.50). Em quem oferece
-  nada foi anulado — foi acrescentado —, por isso aí diz-se quanto assumiu.
+- **No Por pessoa há duas coisas por linha, e não uma:** à esquerda o que a
+  oferta faz (`🎁 oferece +€6.00` / `🎁 recebe −€3.50`) — essa vale, não se
+  rasura; à direita, **por baixo do total oficial**, o que essa pessoa pagaria
+  se não houvesse oferta nenhuma (`.ev-row-vs`, rasurado). É a quarta célula da
+  grelha da linha (`grid-template-areas: "t v" "s x"`).
   **O botão da barra abre sempre em branco**: é para uma oferta NOVA. Reabrir
   com a pessoa da vez anterior fazia parecer que estava a editar a primeira.
   Mexer nas que já existem faz-se pelo quadrante (`evPicarMais`) — e o nome vai
