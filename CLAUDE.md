@@ -307,6 +307,11 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
   Tocar abre a folha de quem oferece, que é **só de leitura**: mexer (juntar,
   tirar, devolver tudo) faz-se num sítio só — o "Editar oferta" leva ao ecrã de
   picar, onde se vê a lista inteira e não apenas o que já foi assumido.
+- **Na folha de uma pessoa, "a dividir por N" só aparece quando ela NÃO levou
+  unidades inteiras**: 3 canecas para 3 é uma caneca dela e mais nada; 1
+  costeletão para 3 mostra-se pelo que foi pedido (`1× Costeletão`) com a
+  divisão por baixo — "0.3× Costeletão" não é coisa que alguém tenha comido. As
+  rodadas dessa pessoa agrupam-se **por artigo** e vão a dourado (`.ev-of`).
 - **No Por pessoa há duas coisas por linha, e não uma:** à esquerda o que a
   oferta faz (`🎁 oferece +€6.00` / `🎁 recebe −€3.50`) — essa vale, não se
   rasura; à direita, **por baixo do total oficial**, o que essa pessoa pagaria

@@ -564,8 +564,8 @@ function _evRow(onclick, titulo, sub, valor, valorAntes) {
         + '<span class="ev-row-vs">' + (valorAntes || '') + '</span></button>';
 }
 
-function _evDrow(titulo, sub, valor) {
-    return '<div class="ev-drow"><div class="ev-drow-i"><span class="ev-drow-t">' + titulo + '</span>'
+function _evDrow(titulo, sub, valor, cls) {
+    return '<div class="ev-drow' + (cls ? ' ' + cls : '') + '"><div class="ev-drow-i"><span class="ev-drow-t">' + titulo + '</span>'
         + '<span class="ev-drow-s">' + (sub || '') + '</span></div>'
         + '<span class="ev-drow-v">' + (valor || '') + '</span></div>';
 }
@@ -705,12 +705,40 @@ function evAbrirLinha(tipo, chave) {
             const quota = o.precoTotal / o.amigos.length;
             base += quota;
             const q = o.quantidade / o.amigos.length;
-            linhas.push(_evDrow((Number.isInteger(q) ? q : q.toFixed(1)) + '× ' + _evEsc(o.item),
-                o.amigos.length > 1 ? 'a dividir por ' + o.amigos.length : '', '€' + quota.toFixed(2)));
+            // "A dividir por N" só quando a pessoa NÃO levou unidades inteiras:
+            // 3 canecas para 3 é uma caneca dela e mais nada. Já 1 costeletão
+            // para 3 mostra-se pelo que foi pedido (1×) com a divisão por baixo,
+            // que "0.3× Costeletão" não é coisa que alguém tenha comido.
+            const inteiro = Number.isInteger(q);
+            linhas.push(_evDrow((inteiro ? q : o.quantidade) + '× ' + _evEsc(o.item),
+                inteiro ? '' : 'a dividir por ' + o.amigos.length, '€' + quota.toFixed(2)));
         });
+        // Rodadas agrupadas por artigo: duas canecas oferecidas à mesma pessoa
+        // são uma linha, não duas. A dourado, como no resto das ofertas.
+        const dou = {}, recebo = {};
         estado.ofertas.forEach(o => {
-            if (o.quem === pessoa) linhas.push(_evDrow('Rodada de ' + o.quantidade + '× ' + _evEsc(o.item), 'a ' + o.para.length + ' pessoas', '+€' + o.precoTotal.toFixed(2)));
-            else if (o.para.indexOf(pessoa) >= 0) linhas.push(_evDrow('Oferta do ' + _evEsc(o.quem), o.quantidade + '× ' + _evEsc(o.item), '−€' + (o.precoTotal / o.para.length).toFixed(2)));
+            if (o.quem === pessoa) {
+                const g = dou[o.item] || (dou[o.item] = { qtd: 0, total: 0, quem: [] });
+                g.qtd += o.quantidade;
+                g.total += o.precoTotal;
+                o.para.forEach(p => { if (g.quem.indexOf(p) < 0) g.quem.push(p); });
+            } else if (o.para.indexOf(pessoa) >= 0) {
+                const k = o.quem + '|' + o.item;
+                const g = recebo[k] || (recebo[k] = { qtd: 0, total: 0, item: o.item, quem: o.quem });
+                g.qtd += o.quantidade / o.para.length;
+                g.total += o.precoTotal / o.para.length;
+            }
+        });
+        Object.keys(dou).sort().forEach(item => {
+            const g = dou[item];
+            linhas.push(_evDrow('Rodada de ' + _evQtdStr(g.qtd) + '× ' + _evEsc(item),
+                'a ' + g.quem.length + (g.quem.length === 1 ? ' pessoa' : ' pessoas'),
+                '+€' + g.total.toFixed(2), 'ev-of'));
+        });
+        Object.keys(recebo).sort().forEach(k => {
+            const g = recebo[k];
+            linhas.push(_evDrow(_evQtdStr(g.qtd) + '× ' + _evEsc(g.item),
+                'oferta do ' + _evEsc(g.quem), '−€' + g.total.toFixed(2), 'ev-of'));
         });
         const total = base + (saldo[pessoa] || 0);
         tit.textContent = pessoa;

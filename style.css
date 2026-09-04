@@ -2119,6 +2119,9 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
 .ev-drow-s { display: block; font-size: 11.5px; color: #7C8782; margin-top: 2px; }
 .ev-drow-s:empty { display: none; }
 .ev-drow-v { flex: 0 0 auto; font-family: var(--mono); font-weight: 600; font-size: 13px; color: var(--verde-tinta); }
+/* Linhas de oferta: dourado, como tudo o que mexe na conta dos outros. */
+.ev-drow.ev-of .ev-drow-t, .ev-drow.ev-of .ev-drow-v { color: #8A6D14; }
+.ev-drow.ev-of .ev-drow-s { color: #A89253; }
 
 /* Linha de lista dentro de uma folha (Relatórios). Sem isto os botões caíam
    no `button` global — verde, maiúsculas e com os SVG sem tamanho, o que dava
