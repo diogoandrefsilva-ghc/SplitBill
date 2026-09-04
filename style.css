@@ -2128,7 +2128,9 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
 .ev-zico b, .ev-zico .ev-itile-ini { font-family: var(--display); font-weight: 700; font-size: 16px; letter-spacing: .02em; background: transparent; color: inherit; width: auto; height: auto; }
 .ev-zi { flex: 1 1 auto; min-width: 0; }
 .ev-zt { display: block; font-family: var(--display); font-weight: 600; font-size: 19px; line-height: 1.1; overflow-wrap: anywhere; }
-.ev-zt i { font-style: normal; font-family: var(--mono); font-size: 12px; color: #7C8782; font-weight: 400; margin-left: 2px; }
+/* A quantidade total do artigo, ao lado do nome — o número mais importante da
+   linha, por isso não pode ficar mais apagado do que o "1×" de cada pessoa. */
+.ev-zt i { font-style: normal; font-family: var(--mono); font-size: 13px; color: var(--verde-tinta); font-weight: 700; margin-left: 3px; }
 .ev-zs { display: block; font-size: 12px; color: #7C8782; margin-top: 3px; line-height: 1.4; }
 .ev-zs:empty { display: none; }
 /* A quantidade de cada pessoa (o "1×" a seguir ao nome, no zoom de Por item)
