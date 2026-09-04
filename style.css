@@ -1884,3 +1884,512 @@ html,body{touch-action:pan-x pan-y}
    Aqui neutraliza-se o hover herdado nos botões destes painéis. */
 .sbi-mais, .sbi-mais:hover { background: transparent; color: var(--ink-soft, #5B6661); }
 .sbi-mais:active { background: rgba(11,59,43,.04); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ECRÃ DO EVENTO: quatro quadrantes num ecrã só
+   ---------------------------------------------------------------------------
+   O evento deixou de ser uma página comprida com scroll. O que se vê de uma
+   vez: total da mesa, ordens, rodadas (só quando existem), total por item e
+   total por pessoa. O que não cabe no quadrante desliza DENTRO dele — a página
+   não desliza, por isso não há confusão possível entre os dois scrolls.
+   Tudo o que era formulário (nova ordem, ofertas, configurações, fatura) passou
+   para folhas que sobem de baixo, e as secções antigas vivem lá dentro com os
+   mesmos ids — é o que mantém as permissões e o adicionarOrdem()/adicionarOferta()
+   a funcionar sem uma linha mudada.
+   Cuidado herdado: `button:hover{background:#0B6340}` ganha a qualquer classe
+   daqui e no telemóvel fica COLADO depois do toque. Botão novo = linha de
+   :hover própria, sempre.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+#page-eventos { padding-bottom: 92px; }
+/* A página do evento não desliza: o scroll vive dentro de cada quadrante, e ter
+   os dois a responder ao mesmo dedo é o que faz "arrastei nas ordens e mexeu-se
+   a página". Trancado só aqui (a classe entra e sai no mudarPagina), e no <html>
+   também, senão o iOS continua a fazer bounce. */
+html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
+
+/* ── Total da mesa: uma linha só, com o valor à direita ── */
+.ev-mesa {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    margin: 9px 0 8px; padding: 9px 15px 10px;
+    background: linear-gradient(180deg, #fff 0%, #F6FAF7 100%);
+    border: 1px solid #E6EDE6; border-radius: 16px;
+    box-shadow: 0 8px 20px -15px rgba(11,59,43,.55);
+}
+.ev-mesa-lab {
+    display: block; font-family: var(--display); font-weight: 700; font-size: 11px;
+    text-transform: uppercase; letter-spacing: .14em; color: var(--ink-soft);
+}
+.ev-mesa-val {
+    font-family: var(--display); font-weight: 700; font-size: 27px; line-height: 1;
+    color: var(--verde-escuro); flex: 0 0 auto;
+}
+
+/* ── A grelha ──
+   Sem rodadas, as Ordens ficam com a linha de cima inteira (e aí cada ordem
+   cabe numa linha só, ver .ev-a-ord.ev-wide). Com rodadas, parte-se ao meio. */
+.ev-grid {
+    display: grid; gap: 9px; min-height: 380px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    grid-template-areas: "ord ord" "itens pess";
+}
+.ev-grid.ev-g4 { grid-template-areas: "ord rod" "itens pess"; }
+.ev-a-ord { grid-area: ord; } .ev-a-rod { grid-area: rod; }
+.ev-a-itens { grid-area: itens; } .ev-a-pess { grid-area: pess; }
+
+.ev-q {
+    display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden;
+    background: linear-gradient(180deg, #fff 0%, #F6FAF7 100%);
+    border: 1px solid #E6EDE6; border-radius: 16px; padding: 10px 4px 7px 12px;
+    box-shadow: 0 8px 20px -14px rgba(11,59,43,.55);
+}
+/* O cabeçalho é um botão (abre o zoom do quadrante): desfaz-se o `button`
+   global — fundo verde, uppercase, hover colado — e fica só a linha de sempre,
+   com o glifo de expandir à direita a dizer que se toca. */
+.ev-qhead, .ev-qhead:hover {
+    display: flex; align-items: center; gap: 6px; margin: 0 6px 6px 0; flex: 0 0 auto;
+    width: calc(100% - 6px); padding: 0 0 2px; background: transparent; border: 0; border-radius: 8px;
+    text-align: left; cursor: pointer; color: inherit; text-transform: none; letter-spacing: normal;
+    -webkit-tap-highlight-color: transparent;
+}
+.ev-qhead:active { transform: scale(.97); transform-origin: left center; }
+.ev-qzoom { flex: 0 0 auto; width: 13px; height: 13px; color: #A6B0A8; }
+.ev-qhead:active .ev-qzoom { color: var(--verde); }
+.ev-eye {
+    display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0;
+    font-family: var(--display); font-weight: 700; font-size: 11.5px;
+    text-transform: uppercase; letter-spacing: .12em; color: var(--ink-soft);
+    white-space: nowrap; overflow: hidden;
+}
+.ev-eye::before {
+    content: ""; flex: 0 0 auto; width: 13px; height: 3px; border-radius: 2px;
+    background: linear-gradient(90deg, var(--verde), var(--dourado));
+}
+.ev-qn {
+    font-family: var(--mono); font-weight: 600; font-size: 10px; color: var(--verde-tinta);
+    background: var(--verde-claro); border-radius: 20px; padding: 2px 7px;
+}
+
+/* O scroll vive aqui dentro. A máscara em baixo é o que diz "há mais". */
+.ev-rows {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+    padding-right: 8px; -webkit-overflow-scrolling: touch;
+    -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 18px), transparent 100%);
+    mask-image: linear-gradient(180deg, #000 calc(100% - 18px), transparent 100%);
+}
+.ev-rows::-webkit-scrollbar { width: 3px; }
+.ev-rows::-webkit-scrollbar-thumb { background: #CBD6CC; border-radius: 3px; }
+.ev-rows::-webkit-scrollbar-track { background: transparent; }
+.ev-vazio { color: #7C8782; font-size: 12px; text-align: center; padding: 14px 4px; }
+
+.ev-row {
+    /* O `button` global da app é UPPERCASE com letter-spacing: aqui dentro são
+       nomes de artigos e de pessoas, e assim truncavam a meio. */
+    text-transform: none; letter-spacing: normal;
+    display: grid; width: 100%; text-align: left; gap: 0 8px; cursor: pointer;
+    background: transparent; border: 0; border-bottom: 1px solid #EDF1EC;
+    padding: 7px 2px 8px; color: var(--ink); border-radius: 0;
+    grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t v" "s x";
+}
+.ev-row:hover { background: rgba(14,122,79,.05); }
+.ev-row:last-child { border-bottom: 0; }
+.ev-row-t {
+    grid-area: t; font-family: var(--display); font-weight: 600; font-size: 16px; line-height: 1.15;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.ev-row-v { grid-area: v; font-family: var(--mono); font-weight: 600; font-size: 12px; color: var(--verde-tinta); }
+.ev-row-s {
+    grid-area: s; font-size: 10.5px; color: #7C8782; margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.ev-row-s:empty { display: none; }
+/* O que a pessoa pagaria se não houvesse oferta: por baixo do total oficial,
+   rasurado, mais pequeno e cinzento. */
+.ev-row-vs {
+    grid-area: x; justify-self: end; margin-top: 1px;
+    font-family: var(--mono); font-weight: 400; font-size: 10.5px; color: #9AA49E;
+    text-decoration: line-through; text-decoration-thickness: 1px; white-space: nowrap;
+}
+.ev-row-vs:empty { display: none; }
+/* Linha inteira: item, quem e valor cabem todos na mesma linha. */
+.ev-wide .ev-row { display: flex; align-items: baseline; gap: 8px; padding: 8px 2px 9px; }
+.ev-wide .ev-row-t { flex: 0 0 auto; font-size: 17px; }
+.ev-wide .ev-row-s { flex: 1 1 auto; margin-top: 0; }
+.ev-wide .ev-row-v { flex: 0 0 auto; font-size: 12.5px; }
+.ev-wide .ev-row-vs { flex: 0 0 auto; margin-top: 0; }
+
+/* ── Barra inferior: quatro ações com nome e o + ao centro ──
+   Cinco colunas com `grid-column` fixo por posição: assim, esconder um botão
+   (o Oferecer sem ordens, o + em modo leitura) deixa a célula vazia em vez de
+   arrastar os outros para o lado. */
+.ev-bar {
+    position: fixed; left: 50%; transform: translateX(-50%); bottom: 0; width: 100%; max-width: 600px;
+    /* O padding de baixo não engorda a barra (o height manda, com border-box):
+       encolhe a caixa de conteúdo e, com align-items:center, sobe os botões uns
+       6px dentro do mesmo branco. */
+    height: 78px; display: none; align-items: center; z-index: 90;
+    padding: 0 2px calc(env(safe-area-inset-bottom, 0px) + 12px);
+    grid-template-columns: repeat(2, minmax(0, 1fr)) auto repeat(2, minmax(0, 1fr));
+    background: #fff; border-top: 1px solid #E7ECE6;
+    box-shadow: 0 -10px 24px -20px rgba(11,59,43,.8);
+}
+/* Fio vertical a separar os lugares. Muito ténue de propósito: serve para
+   arrumar a linha, não para se dar por ele. */
+.ev-bar > * { position: relative; }
+.ev-bar > * + *::before {
+    content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+    width: 1px; height: 34px; background: rgba(11,59,43,.13); pointer-events: none;
+}
+/* O + não enche a coluna (é só o quadrado): a `left:0` o fio caía por cima do
+   verde e não se via. Vai para a margem, à mesma distância do fio do outro lado. */
+.ev-fab::before { left: -9px; }
+.ev-bar > :nth-child(1) { grid-column: 1; }
+.ev-bar > :nth-child(2) { grid-column: 2; }
+.ev-bar > :nth-child(3) { grid-column: 3; }
+.ev-bar > :nth-child(4) { grid-column: 4; }
+.ev-bar > :nth-child(5) { grid-column: 5; }
+.ev-barbtn, .ev-barbtn:hover {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+    min-height: 60px; border: 0; padding: 0 2px; background: transparent; cursor: pointer;
+    color: var(--ink-soft); border-radius: 12px;
+}
+.ev-barbtn span {
+    font-family: var(--display); font-weight: 600; font-size: 10.5px; white-space: nowrap;
+    text-transform: uppercase; letter-spacing: .05em; line-height: 1;
+}
+.ev-barbtn:active { transform: scale(.95); }
+.ev-barbtn svg { width: 21px; height: 21px; }
+/* O único a fugir do cinzento: oferecer é a ação que mexe na conta dos outros. */
+.ev-barbtn.ev-gold, .ev-barbtn.ev-gold:hover { color: #8A6D14; }
+.ev-barbtn.fechada, .ev-barbtn.fechada:hover { color: var(--verde-tinta); }
+.ev-barbtn:disabled { opacity: .4; }
+/* O + assenta na barra em vez de a romper: mesma família de cantos dos cartões,
+   e é o único cheio — não precisa de subir para se ver que é o principal. */
+.ev-fab, .ev-fab:hover {
+    width: 54px; height: 54px; border: 0; border-radius: 18px; cursor: pointer; color: #fff;
+    background: linear-gradient(135deg, #13A56E 0%, #0E7A4F 55%, #0B5238 100%);
+    display: flex; align-items: center; justify-content: center; padding: 0; margin: 0 9px;
+    box-shadow: 0 8px 18px -8px rgba(11,59,43,.75), inset 0 1px 0 rgba(255,255,255,.22);
+}
+.ev-fab:active { transform: scale(.95); }
+.ev-fab svg { width: 27px; height: 27px; }
+
+/* ── Folhas ── */
+.ev-scrim {
+    display: none; position: fixed; inset: 0; background: rgba(11,59,43,.45); z-index: 100;
+    animation: evFade .18s ease-out;
+}
+@keyframes evFade { from { opacity: 0; } }
+.ev-sheet {
+    display: none; position: fixed; left: 50%; transform: translateX(-50%);
+    width: calc(100% - 16px); max-width: 584px; top: 10px; bottom: 10px; z-index: 101;
+    background: #F7F9F5; border-radius: 20px; overflow: hidden;
+    flex-direction: column; box-shadow: 0 30px 60px -20px rgba(11,59,43,.7);
+}
+.ev-sheet.open { display: flex; animation: evUp .26s cubic-bezier(.2,.9,.3,1.2); }
+/* O zoom de um quadrante CRESCE em vez de subir: é o quadrante a ficar do
+   tamanho do ecrã, não uma folha nova a chegar de baixo. */
+.ev-sheet-zoom.open { animation: evZoom .28s cubic-bezier(.2,.9,.3,1.15); }
+@keyframes evZoom { from { opacity: 0; transform: translateX(-50%) scale(.88); } }
+/* A folha da linha abre POR CIMA do zoom: fica acima e o zoom escurece por
+   trás dela, para se perceber que a linha é a que está a mandar. */
+#ev-sheet-linha { z-index: 102; }
+.ev-sheet-zoom.ev-dim::after {
+    content: ""; position: absolute; inset: 0; z-index: 5;
+    background: rgba(11,59,43,.38); animation: evFade .18s ease-out;
+}
+/* ── Linhas do zoom: as do quadrante, com o espaço todo ──
+   Um cartão por linha, com o símbolo do artigo (ou as iniciais da pessoa) à
+   esquerda, o detalhe a correr para a linha de baixo sem truncar, e o valor
+   à direita — com o "antes da oferta" rasurado por baixo, como no quadrante. */
+.ev-zrow, .ev-zrow:hover {
+    text-transform: none; letter-spacing: normal;
+    display: flex; align-items: center; gap: 11px; width: 100%; text-align: left; cursor: pointer;
+    background: #fff; border: 1px solid #E6EDE6; border-radius: 15px; padding: 10px 12px; margin-bottom: 8px;
+    color: var(--ink); box-shadow: 0 6px 16px -14px rgba(11,59,43,.55);
+}
+.ev-zrow:active { transform: scale(.985); }
+.ev-zico {
+    flex: 0 0 auto; width: 42px; height: 42px; border-radius: 13px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--verde-claro); color: var(--verde);
+}
+.ev-zico svg { width: 24px; height: 24px; }
+.ev-zico b, .ev-zico .ev-itile-ini { font-family: var(--display); font-weight: 700; font-size: 16px; letter-spacing: .02em; background: transparent; color: inherit; width: auto; height: auto; }
+.ev-zi { flex: 1 1 auto; min-width: 0; }
+.ev-zt { display: block; font-family: var(--display); font-weight: 600; font-size: 19px; line-height: 1.1; overflow-wrap: anywhere; }
+.ev-zt i { font-style: normal; font-family: var(--mono); font-size: 12px; color: #7C8782; font-weight: 400; margin-left: 2px; }
+.ev-zs { display: block; font-size: 12px; color: #7C8782; margin-top: 3px; line-height: 1.4; }
+.ev-zs:empty { display: none; }
+.ev-zs i { font-style: normal; font-family: var(--mono); font-size: 10.5px; color: #9AA49E; }
+.ev-zs em { font-style: normal; color: #8A6D14; font-weight: 600; }
+.ev-zv { flex: 0 0 auto; text-align: right; }
+.ev-zv b { display: block; font-family: var(--mono); font-weight: 600; font-size: 14px; color: var(--verde-tinta); }
+.ev-zv s { display: block; font-family: var(--mono); font-size: 11px; color: #9AA49E; margin-top: 2px; text-decoration-thickness: 1px; }
+.ev-zrow.ev-of .ev-zico { background: var(--dourado-claro); color: #8A6D14; }
+.ev-zrow.ev-of .ev-zv b { color: #8A6D14; }
+.ev-zrow.ev-zpess .ev-zico { background: var(--verde-escuro); color: #fff; }
+/* Pessoas em zoom: o rodapé é o mesmo cartão verde do "Total a registar". */
+#ev-zoom-foot .ev-tot-r { max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Folha pequena: a linha tocada não precisa do ecrã todo. */
+.ev-sheet-mini { top: auto; max-height: 66%; bottom: 8px; }
+@keyframes evUp { from { opacity: 0; transform: translate(-50%, 60px); } }
+.ev-shhead {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 12px 12px 11px;
+    background: repeating-linear-gradient(0deg, rgba(255,255,255,.045) 0 7px, transparent 7px 14px), var(--verde-escuro);
+    color: #fff;
+}
+.ev-sht { flex: 1 1 auto; min-width: 0; }
+.ev-sht strong {
+    display: block; font-family: var(--display); font-weight: 700; font-size: 21px; line-height: 1.05;
+    text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ev-sht span { display: block; font-family: var(--mono); font-size: 10px; color: #9CC4AF; margin-top: 3px; }
+.ev-icb, .ev-icb:hover {
+    flex: 0 0 auto; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center;
+    border: 0; padding: 0; border-radius: 12px; background: rgba(255,255,255,.10); color: #fff; cursor: pointer;
+}
+.ev-icb:active { transform: scale(.94); }
+.ev-icb svg { width: 20px; height: 20px; }
+.ev-shbody { flex: 1 1 auto; overflow-y: auto; padding: 12px; -webkit-overflow-scrolling: touch; }
+.ev-shfoot { flex: 0 0 auto; padding: 10px 12px 12px; background: #fff; border-top: 1px solid #E6EDE6; display: flex; gap: 8px; }
+.ev-shfoot-btn { padding-top: 0; border-top: 0; }
+.ev-btn, .ev-btn:hover {
+    flex: 1 1 auto; min-height: 48px; border: 0; border-radius: 12px; background: var(--verde); color: #fff; cursor: pointer;
+    font-family: var(--display); font-weight: 700; font-size: 17px; text-transform: uppercase; letter-spacing: .06em;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.ev-btn:active { transform: scale(.98); }
+.ev-btn svg { width: 18px; height: 18px; }
+.ev-btn:disabled, .ev-btn:disabled:hover { background: #DDE3DD; color: #98A29C; cursor: default; }
+.ev-btn-red, .ev-btn-red:hover { background: #fff; color: var(--rubro); box-shadow: inset 0 0 0 1.6px rgba(179,64,47,.55); flex: 0 0 auto; width: 60px; }
+.ev-btn-largo { width: auto; flex: 0 0 auto; padding: 0 16px; }
+.ev-btn-ghost, .ev-btn-ghost:hover { background: #fff; color: var(--verde-tinta); box-shadow: inset 0 0 0 1.6px var(--verde); }
+.ev-hint { display: block; font-size: 11.5px; color: #7C8782; margin: 12px 4px 0; line-height: 1.45; }
+.ev-card { background: #fff; border: 1px solid #E6EDE6; border-radius: 14px; padding: 4px 12px; }
+.ev-drow { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #EDF1EC; }
+.ev-drow:last-child { border-bottom: 0; }
+.ev-drow-i { flex: 1 1 auto; min-width: 0; }
+.ev-drow-t { display: block; font-family: var(--display); font-weight: 600; font-size: 17px; line-height: 1.1; }
+.ev-drow-s { display: block; font-size: 11.5px; color: #7C8782; margin-top: 2px; }
+.ev-drow-s:empty { display: none; }
+.ev-drow-v { flex: 0 0 auto; font-family: var(--mono); font-weight: 600; font-size: 13px; color: var(--verde-tinta); }
+/* Linhas de oferta: dourado, como tudo o que mexe na conta dos outros. */
+.ev-drow.ev-of .ev-drow-t, .ev-drow.ev-of .ev-drow-v { color: #8A6D14; }
+.ev-drow.ev-of .ev-drow-s { color: #A89253; }
+
+/* Linha de lista dentro de uma folha (Relatórios). Sem isto os botões caíam
+   no `button` global — verde, maiúsculas e com os SVG sem tamanho, o que dava
+   ícones gigantes e os dois textos colados. */
+.ev-lrow, .ev-lrow:hover {
+    display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
+    padding: 13px 2px; border: 0; border-bottom: 1px solid #EDF1EC; border-radius: 0;
+    background: transparent; cursor: pointer; color: var(--ink);
+    text-transform: none; letter-spacing: normal;
+}
+.ev-lrow:last-child { border-bottom: 0; }
+.ev-lrow:active { transform: scale(.995); }
+.ev-lrow-ic {
+    flex: 0 0 auto; width: 38px; height: 38px; border-radius: 11px; background: #EEF3EF;
+    color: var(--verde-tinta); display: flex; align-items: center; justify-content: center;
+}
+.ev-lrow-ic svg { width: 19px; height: 19px; }
+.ev-lrow-i { flex: 1 1 auto; min-width: 0; }
+.ev-lrow-i b { display: block; font-family: var(--display); font-weight: 600; font-size: 18px; line-height: 1.1; }
+/* Dentro de um <button> o peso e a família vêm do botão (600, condensada):
+   a legenda tem de os repor, senão sai a negrito e condensada como o título. */
+.ev-lrow-i span {
+    display: block; font-size: 11.5px; color: #7C8782; margin-top: 1px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-weight: 400;
+}
+.ev-lrow > svg { width: 16px; height: 16px; color: #A6B0A8; flex: 0 0 auto; }
+
+/* ── Passo 1: escolher o artigo ──
+   Agrupado por categoria, com um título por grupo (o mesmo desenho dos
+   cabeçalhos dos quadrantes) e o símbolo de cada artigo numa placa com a cor
+   da categoria: verde bebidas, dourado petiscos, terracota pratos, ameixa
+   doces, cinzento o que não se reconheceu (iniciais). A pílula "3×" no canto é
+   quantos já foram pedidos nesta mesa. */
+.ev-igrid { display: block; }
+.ev-itiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.ev-igroup {
+    display: flex; align-items: center; gap: 7px; margin: 16px 2px 8px;
+    font-family: var(--display); font-weight: 700; font-size: 11.5px;
+    text-transform: uppercase; letter-spacing: .13em; color: var(--ink-soft);
+}
+.ev-igroup:first-child { margin-top: 2px; }
+.ev-igroup::before {
+    content: ""; flex: 0 0 auto; width: 13px; height: 3px; border-radius: 2px;
+    background: linear-gradient(90deg, var(--verde), var(--dourado));
+}
+.ev-igroup i {
+    font-style: normal; font-family: var(--mono); font-weight: 600; font-size: 10px; color: var(--verde-tinta);
+    background: var(--verde-claro); border-radius: 20px; padding: 2px 7px;
+}
+.ev-itile, .ev-itile:hover {
+    text-transform: none; letter-spacing: normal; position: relative;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; text-align: center;
+    min-height: 106px; padding: 11px 6px 10px; cursor: pointer; color: var(--ink);
+    background: linear-gradient(180deg, #fff 0%, #F6FAF7 100%); border: 1px solid #E6EDE6; border-radius: 16px;
+    box-shadow: 0 6px 16px -14px rgba(11,59,43,.55);
+    -webkit-tap-highlight-color: transparent;
+}
+.ev-itile:active { transform: scale(.96); }
+.ev-itile b { font-family: var(--display); font-weight: 600; font-size: 15px; line-height: 1.05; overflow-wrap: anywhere; }
+.ev-itile .ev-iprice { font-family: var(--mono); font-size: 10px; color: #7C8782; }
+.ev-ibadge {
+    flex: 0 0 auto; width: 44px; height: 44px; border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--verde-claro); color: var(--verde);
+}
+.ev-ibadge svg { width: 26px; height: 26px; }
+.ev-itile-ini {
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: .02em;
+}
+.ev-icount {
+    position: absolute; top: 7px; right: 7px; line-height: 1.2;
+    font-family: var(--mono); font-weight: 600; font-size: 9.5px; color: #fff;
+    background: var(--verde); border-radius: 20px; padding: 2px 6px;
+    box-shadow: 0 2px 6px -2px rgba(11,59,43,.6);
+}
+
+/* ── Passo 2 ── */
+/* Os nomes são o alvo mais tocado do ecrã: à escala dos artigos do passo 1
+   (3 colunas, ~62px) em vez das 4 colunas apertadas do formulário antigo. */
+.amigos-grid.ev-big { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.amigos-grid.ev-big .amigo-btn {
+    min-height: 62px; padding: 8px 6px; border-radius: 14px; line-height: 1.12;
+    font-family: var(--display); font-weight: 600; font-size: 16.5px;
+    text-transform: none; letter-spacing: normal; overflow-wrap: anywhere;
+}
+.ev-chosen { display: flex; align-items: center; gap: 11px; background: #fff; border: 1px solid #E6EDE6; border-radius: 15px; padding: 11px 12px; }
+.ev-chosen-ic { flex: 0 0 auto; width: 46px; height: 46px; border-radius: 13px; background: var(--verde-claro); color: var(--verde); display: flex; align-items: center; justify-content: center; }
+.ev-chosen-ic svg { width: 26px; height: 26px; }
+.ev-chosen-ic .ev-itile-ini { font-size: 19px; background: transparent; color: inherit; }
+/* As cores por categoria valem para a placa do passo 1, o artigo escolhido do
+   passo 2 e o símbolo das linhas do zoom — é a mesma família nos três.
+   Ficam DEPOIS do .ev-chosen-ic e do .ev-zico de propósito: têm a mesma
+   especificidade, e é a ordem que decide quem pinta. */
+.ev-c-beb { background: #E2EFE8; color: #0E7A4F; }
+.ev-c-pet { background: #FBF1D6; color: #8A6D14; }
+.ev-c-prato { background: #F9E6DF; color: #A3442F; }
+.ev-c-doce { background: #F3E4EF; color: #8A3E7C; }
+.ev-c-outro { background: #E9ECE9; color: #5B6661; }
+.ev-chosen-i { flex: 1 1 auto; min-width: 0; }
+.ev-chosen-i b { display: block; font-family: var(--display); font-weight: 700; font-size: 20px; line-height: 1.05; }
+.ev-chosen-i span { display: block; font-family: var(--mono); font-size: 10.5px; color: #7C8782; margin-top: 2px; }
+.ev-step { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.ev-step button, .ev-step button:hover {
+    width: 38px; height: 38px; border: 1.5px solid var(--linha); background: #fff; border-radius: 11px; cursor: pointer;
+    color: var(--verde-tinta); display: flex; align-items: center; justify-content: center; padding: 0;
+}
+.ev-step button:active { transform: scale(.94); }
+.ev-step svg { width: 16px; height: 16px; }
+.ev-step b { font-family: var(--mono); font-weight: 600; font-size: 16px; min-width: 22px; text-align: center; }
+.ev-lab {
+    display: block; font-family: var(--display); font-weight: 700; font-size: 11.5px;
+    text-transform: uppercase; letter-spacing: .13em; color: var(--ink-soft); margin: 15px 2px 8px;
+}
+.ev-seg { display: flex; gap: 6px; background: #E7ECE7; border-radius: 12px; padding: 4px; }
+.ev-seg button, .ev-seg button:hover {
+    flex: 1 1 0; min-height: 40px; border: 0; border-radius: 9px; background: transparent; cursor: pointer; color: var(--ink-soft);
+    font-family: var(--display); font-weight: 600; font-size: 15px; text-transform: uppercase; letter-spacing: .05em;
+}
+.ev-seg button.on, .ev-seg button.on:hover { background: #fff; color: var(--verde-escuro); box-shadow: 0 2px 6px -3px rgba(11,59,43,.5); }
+.ev-oferece {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px;
+    background: var(--dourado-claro); border: 1px solid #EADFB6; border-radius: 12px; padding: 9px 12px;
+}
+.ev-oferece span { font-size: 12px; color: #7A5E12; flex: 0 0 auto; }
+.ev-oferece select { flex: 1 1 auto; max-width: 55%; }
+.ev-tot { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--verde-escuro); color: #fff; border-radius: 14px; padding: 11px 14px; flex: 1 1 auto; }
+.ev-tot-l span { display: block; font-family: var(--display); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .14em; color: #9CC4AF; }
+.ev-tot-l b { display: block; font-family: var(--display); font-weight: 700; font-size: 26px; line-height: 1.05; margin-top: 1px; }
+.ev-tot-r { text-align: right; font-family: var(--mono); font-size: 10.5px; color: #C9DFD2; line-height: 1.5; }
+
+/* As secções antigas vivem dentro das folhas: perdem a moldura e o colapso,
+   mas mantêm ids e classes (é por elas que passam as permissões). */
+.ev-sheet .section { border: 0; padding: 0; margin: 0; background: transparent; box-shadow: none; }
+.ev-sheet .section.collapsed .section-body { display: block; }
+.ev-sheet .section h2 { display: none; }
+.ev-sheet #section-config { margin-top: 2px; }
+.ev-sheet .talao { margin: 0; }
+
+@media (max-width: 380px) {
+    /* "Relatórios" é a palavra mais comprida da barra e a 360px encostava à
+       margem: aqui a legenda aperta antes de o ícone ou o + encolherem. */
+    .ev-barbtn span { font-size: 9.5px; letter-spacing: .03em; }
+    .ev-mesa-val { font-size: 26px; }
+    .ev-row-t { font-size: 15px; }
+    .ev-wide .ev-row-t { font-size: 16px; }
+    .ev-igrid { gap: 7px; }
+    .ev-itile { min-height: 86px; }
+    .ev-seg button { font-size: 13.5px; }
+}
+
+/* Quantidade dentro do título da linha (Por item): é um dado, não é nome. */
+.ev-row-t i { font-style: normal; font-family: var(--mono); font-size: 11px; color: #7C8782; font-weight: 400; }
+
+/* Aviso flutuante (ver evToast no app.js) */
+.ev-toast {
+    position: fixed; left: 50%; transform: translateX(-50%) translateY(12px); bottom: 92px;
+    max-width: 92%; z-index: 200; padding: 11px 16px; border-radius: 12px;
+    background: var(--verde-escuro); color: #fff; font-size: 13.5px; font-weight: 600;
+    box-shadow: 0 16px 30px -12px rgba(11,59,43,.85);
+    opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
+}
+.ev-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.ev-toast.warn { background: var(--rubro); }
+
+/* ── Oferecer: botão pequeno ao lado do +, e a lista de picar ──────────────
+   A oferta não acrescenta nada à mesa (atua sobre o que lá está), por isso não
+   entra pelo +: tem botão próprio, mais pequeno, ao lado dele. */
+.ev-barmid { gap: 9px; }
+.ev-fab-of, .ev-fab-of:hover {
+    width: 46px; height: 46px; border: 0; border-radius: 50%; margin-top: -14px; cursor: pointer;
+    color: #8A6D14; background: var(--dourado-claro); padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 18px -8px rgba(138,109,20,.6), inset 0 0 0 1.5px #EADFB6, 0 0 0 4px #fff;
+}
+.ev-fab-of:active { transform: scale(.94); }
+.ev-fab-of svg { width: 22px; height: 22px; }
+
+.ev-of-grupo { background: #fff; border: 1px solid #E6EDE6; border-radius: 14px; padding: 2px 12px 6px; margin-bottom: 9px; }
+.ev-of-cab {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+    padding: 9px 0 7px; border-bottom: 1px solid #EDF1EC; margin-bottom: 2px;
+}
+.ev-of-cab span:first-child { font-family: var(--display); font-weight: 700; font-size: 18px; }
+.ev-of-cab span:last-child { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); }
+.ev-of-linha, .ev-of-linha:hover {
+    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; cursor: pointer;
+    background: transparent; border: 0; border-bottom: 1px solid #F1F4F0; padding: 9px 0; color: var(--ink);
+    text-transform: none; letter-spacing: normal; border-radius: 0;
+}
+.ev-of-linha:last-child { border-bottom: 0; }
+.ev-of-linha:hover:not(:disabled) { background: rgba(184,145,31,.06); }
+.ev-of-tick {
+    flex: 0 0 auto; width: 26px; height: 26px; border-radius: 8px; border: 1.6px solid var(--linha);
+    display: flex; align-items: center; justify-content: center; color: #fff; background: #fff;
+}
+.ev-of-tick svg { width: 15px; height: 15px; }
+.ev-of-linha.on .ev-of-tick { background: var(--dourado); border-color: var(--dourado); }
+.ev-of-t {
+    flex: 1 1 auto; min-width: 0; font-family: var(--display); font-weight: 600; font-size: 16.5px; line-height: 1.15;
+}
+.ev-of-t i {
+    display: block; font-style: normal; font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 400; font-size: 10.5px; color: #9AA49E; margin-top: 1px;
+}
+.ev-of-v { flex: 0 0 auto; font-family: var(--mono); font-weight: 600; font-size: 12.5px; color: var(--verde-tinta); }
+.ev-of-linha.on .ev-of-v { color: #8A6D14; }
+.ev-of-linha.off, .ev-of-linha.off:hover { opacity: .45; cursor: default; }
+.ev-of-linha.on.off, .ev-of-linha.on.off:hover { opacity: .75; }
+.ev-of-x, .ev-of-x:hover {
+    flex: 0 0 auto; width: 32px; height: 32px; border-radius: 9px; border: 0; padding: 0; cursor: pointer;
+    background: rgba(179,64,47,.10); color: var(--rubro); display: flex; align-items: center; justify-content: center;
+}
+.ev-of-x svg { width: 15px; height: 15px; }

@@ -16,7 +16,7 @@ App pessoal de divisão de contas ("dia de jogo").
 
 ## Como NÃO gastar tokens à toa (importante)
 - **Não leias o `app.js` inteiro.** Está dividido em secções com comentários `/* ── título ── */`. Para achar algo, faz `grep` pelo título e lê só esse troço. Secções:
-  Custom confirm modal · **Pagador & Contas (dívidas)** · Page switching · FAB · **Core: cálculo de saldos** (dívidas + pagamentos) · Render · Payment form · Edit Ordem inline · **Importar Fatura** (foto/PDF → Gemini → conferência artigo a artigo) · **Calendário do Sporting** (ler `goals.jogos`, guardar o mínimo cá) · **Jogo aberto & presenças** (abrir o jogo, vou/não vou, hora do Sá) · Configs · **Supabase** (+ Sessão/refresh do token, Permissões, Agregação global, IDs únicos, Equivalências amigo↔conta)
+  Custom confirm modal · **Pagador & Contas (dívidas)** · Page switching · FAB · **Core: cálculo de saldos** (dívidas + pagamentos) · Render · **Ecrã do evento** (quadrantes, folhas, o + em dois passos) · Payment form · Edit Ordem inline · **Importar Fatura** (foto/PDF → Gemini → conferência artigo a artigo) · **Calendário do Sporting** (ler `goals.jogos`, guardar o mínimo cá) · **Jogo aberto & presenças** (abrir o jogo, vou/não vou, hora do Sá) · Configs · **Supabase** (+ Sessão/refresh do token, Permissões, Agregação global, IDs únicos, Equivalências amigo↔conta)
 - `fatura-restaurante.ts` — Edge Function (Deno) que lê a fatura com o Gemini. **Não corre no site**: vive no Supabase, faz-se deploy à parte (`supabase functions deploy fatura-restaurante`). É irmã da `fatura-ocr` da FestasBV — mesmo projeto Supabase, schema e prompt diferentes.
 - `push-notificar.ts` — a outra Edge Function, a das notificações Web Push. Também **não corre no site** (`supabase functions deploy push-notificar`): se mexeres nos `tipo` daqui, o texto novo só aparece depois desse deploy. O corpo da notificação é escolhido **lá**, nunca vem livre do cliente — só nomes, valores e as horas (a do Sá e a da mesa, validadas `HH:MM` dos dois lados) são interpoladas.
 - **Fatura guardada:** o detalhe lido fica em `estado.fatura` e persiste na coluna `eventos.fatura` (jsonb, `db/fatura-detalhe.sql`). A correspondência linha-da-fatura ↔ artigo do menu **não** se guarda — é recalculada a cada render (`faturaConferir()`), de propósito: se o menu do evento mudar, a conferência acompanha. Sem a migração, `FATURA_COL=false` e a fatura fica só no localStorage.
@@ -256,12 +256,149 @@ sozinho conforme quem faltasse e ninguém percebia porquê.
   por cima de memória velha apagaria o que tivesse sido mudado noutro
   dispositivo. A edição vive em `_convSel` até se carregar em Guardar.
 
+## O ecrã do evento: quatro quadrantes, sem scroll de página
+O evento era uma página comprida: adicionar ordem, ordens registadas, ofertas,
+resumo da conta, configurações. Para saber quanto ia a mesa e quem devia o quê
+andava-se para baixo e para cima. Agora cabe tudo num ecrã.
+- **Total da mesa** em cima, e por baixo a grelha: **Ordens · Ofertas · Por item
+  · Por pessoa**. As Ordens ocupam a **linha de cima inteira** e a coluna das
+  **Ofertas só nasce quando existe alguma** (`ev-g4` no `#ev-grid`) — na maior
+  parte dos jogos não há ofertas, e um quadrante permanentemente vazio é pior do
+  que não o ter. Sem ofertas, a linha inteira dá para pôr cada ordem numa linha
+  só (`.ev-wide`: item · quem · valor) em vez de duas.
+- **O scroll vive DENTRO de cada quadrante** (`.ev-rows`), nunca na página: a
+  altura da grelha é calculada em `evAjustarAltura()` a partir do que sobra do
+  ecrã, e depois corrigida pelo que ainda estiver a transbordar (o padding de
+  baixo muda com o safe-area). E a página fica **trancada** enquanto se está no
+  evento (`html.ev-lock`, posta e tirada no `mudarPagina`): não chega o conteúdo
+  caber, porque bastava um pixel a mais — ou o bounce do iOS — para o dedo que
+  queria deslizar as ordens mexer a página. Por isso `evAjustarAltura()` corre
+  também no `evSyncPermissoes()`: se aparecer o banner de leitura ou a barra do
+  "ver como", a grelha encolhe, senão o que transbordasse ficava sem forma de lá
+  chegar. As folhas e os painéis são `position:fixed` com scroll próprio, e
+  continuam a deslizar por dentro com a página trancada. **Coisa nova por cima da grelha = a grelha encolhe
+  sozinha**, não é preciso mexer em contas.
+- **Toca-se na LINHA para o detalhe, no CABEÇALHO para o zoom.** A linha abre
+  uma folha pequena (`#ev-sheet-linha`): quem consumiu e quanto lhe calha, com
+  Apagar/Editar nas ordens. O Editar reaproveita o `toggleEditOrdem()` de sempre
+  — a folha cria o `#ordem-<id>` onde o painel de edição se desenha.
+  O cabeçalho de cada quadrante (`.ev-qhead`, um botão com o glifo ⤢) abre a
+  **mesma lista em zoom** (`#ev-sheet-zoom`, `evAbrirZoom`/`evRenderZoom`), com
+  o espaço que o quadrante não tem: nomes por extenso, hora e valor por cabeça
+  em cada ordem, quem levou cada artigo, o que cada pessoa comeu, e um rodapé
+  com o total. É a **única** folha que aceita outra por cima: tocar numa linha
+  do zoom abre a `#ev-sheet-linha` sobre ele (`evAbrirSheet` deixa o zoom
+  aberto e põe-lhe `.ev-dim`), e fechá-la volta ao zoom em vez de sair
+  (`evFecharSheet`). O zoom redesenha-se a cada `atualizarUI()`, para apagar ou
+  editar uma ordem a partir dele deixar a lista certa. Nos zooms **nunca** se
+  mostram fracções de unidade ("0.33×"): o que foi partilhado aparece como
+  "Costeletão ÷3" (Por pessoa) ou só com o nome de quem partilhou (Por item).
+- **O + abre em dois passos**: artigo (grelha de símbolos) → quem consome. O
+  artigo escolhido **avança sozinho** para o passo 2, onde estão a quantidade,
+  as pessoas e o total antes de registar. Só serve para **consumo**: a oferta
+  tem caminho próprio (a seguir).
+- **A oferta não entra pelo +.** O + lança consumo; uma oferta **não acrescenta
+  nada à mesa — atua sobre o que lá está**, e misturar as duas coisas no mesmo
+  botão confundia. Tem botão próprio (`#ev-fab-of`, dourado e mais pequeno, ao
+  lado do +, e só aparece com ordens já lançadas), que abre a lista do que foi
+  pedido **por pessoa**: escolhe-se quem oferece e **pica-se** o que essa pessoa
+  assume. Tocar outra vez devolve a linha.
+  Cada linha picada é UM registo em `estado.ofertas` com **`ordemId`** e **um só
+  nome** em `para` — assim o valor deduzido é exatamente a quota daquela pessoa
+  naquela ordem, e não uma média. As ofertas **antigas** (sem `ordemId`, com
+  vários nomes em `para`) continuam a valer: o `calcularSaldoOfertas()` é o
+  mesmo para as duas, e na lista as linhas que elas cobrem aparecem bloqueadas.
+  **`_evRepararOfertas()`** corre a seguir a apagar e a editar uma ordem: uma
+  oferta que aponte para uma ordem que desapareceu, ou de que a pessoa saiu, vai
+  atrás dela; se a ordem mudou de preço ou de gente, o valor é refeito. Sem isso
+  ficava a deduzir um valor que já não existe. O quadrante mostra **uma linha
+  por artigo oferecido** (`1× Bifana · Barrona → Nuno`) — as ofertas nunca são
+  muitas, e "2 artigos a 2 pessoas" obrigava a abrir para saber o quê e a quem.
+  Tocar abre a folha de quem oferece, que é **só de leitura**: mexer (juntar,
+  tirar, devolver tudo) faz-se num sítio só — o "Editar oferta" leva ao ecrã de
+  picar, onde se vê a lista inteira e não apenas o que já foi assumido.
+- **Na folha de uma pessoa, "a dividir por N" só aparece quando ela NÃO levou
+  unidades inteiras**: 3 canecas para 3 é uma caneca dela e mais nada; 1
+  costeletão para 3 mostra-se pelo que foi pedido (`1× Costeletão`) com a
+  divisão por baixo — "0.3× Costeletão" não é coisa que alguém tenha comido. As
+  rodadas dessa pessoa agrupam-se **por artigo** e vão a dourado (`.ev-of`).
+- **No Por pessoa há duas coisas por linha, e não uma:** à esquerda o que a
+  oferta faz (`🎁 oferece +€6.00` / `🎁 recebe −€3.50`) — essa vale, não se
+  rasura; à direita, **por baixo do total oficial**, o que essa pessoa pagaria
+  se não houvesse oferta nenhuma (`.ev-row-vs`, rasurado). É a quarta célula da
+  grelha da linha (`grid-template-areas: "t v" "s x"`).
+  **O botão da barra abre sempre em branco**: é para uma oferta NOVA. Reabrir
+  com a pessoa da vez anterior fazia parecer que estava a editar a primeira.
+  Mexer nas que já existem faz-se pelo quadrante (`evPicarMais`) — e o nome vai
+  por ÍNDICE no `onclick`, nunca por `JSON.stringify`, que mete aspas duplas
+  dentro de um atributo delimitado por aspas duplas e parte o clique num "Zé".
+- **Símbolos e categorias dos artigos** (`evCatArtigo` → `{cat, svg}`,
+  `evIconeArtigo` devolve só o svg): o menu é escrito à mão em cada evento, por
+  isso símbolo e categoria vêm do NOME (`_EV_ICO`, uma lista de padrões com
+  `cat`) e o que não é reconhecido fica com as **iniciais** e em "Outros" —
+  melhor do que um ícone errado. A **ordem** dos padrões conta: os específicos
+  antes dos genéricos (vinho e "prato" são os últimos, senão "Chá verde" era
+  vinho e "Arroz doce" era arroz). Atenção ao `\b` do JS, que é ASCII: a seguir
+  a um "á" não há fronteira, por isso as palavras acentuadas levam
+  `(?!\p{L})` com a flag `u` — sem isso o "Chamuça" apanhava a chávena do chá.
+  **Nunca** uses lookbehind (`(?<!…)`) nestes regex: um Safari antigo rebenta
+  ao *ler* o ficheiro e a app inteira deixa de arrancar.
+  O passo 1 do + (`evRenderIgrid`) agrupa a grelha por categoria (Bebidas ·
+  Petiscos · Pratos · Doces · Outros, `_EV_CAT_ORDEM`), pinta a placa do
+  símbolo com a cor da categoria (`.ev-c-*`, as mesmas classes no artigo
+  escolhido do passo 2 e nas linhas do zoom) e põe uma pílula "3×" nos artigos
+  já pedidos nesta mesa. Com uma categoria só, o título do grupo não aparece.
+- **Barra inferior** (`.ev-bar`, fixa, só na página do evento): cinco lugares —
+  `Gerir · Relatórios · + · Oferecer · Conta` — todos com nome por baixo do
+  ícone, e o + ao centro. O "Relatórios" está por dentro de propósito: é a
+  palavra mais comprida e à ponta encostava à margem do ecrã. Já foram três círculos de tamanhos e desenhos
+  diferentes com dois rótulos só nos de fora; ficava desarrumado e os do meio
+  não se percebiam. Agora só o + é cheio (um quadrado de cantos redondos, da
+  mesma família dos cartões) e **assenta na barra em vez de a romper** — não
+  precisa de subir para se ver que é o principal. O único que foge ao cinzento é
+  o **Oferecer**, a dourado, por ser o que mexe na conta dos outros.
+  Cada botão tem **`grid-column` fixo pela posição** (`:nth-child`): esconder um
+  (o Oferecer sem ordens, o + em modo leitura) deixa a célula vazia em vez de
+  arrastar os outros — sem isso o + saía do centro. Os lugares são separados por
+  um fio de `rgba(11,59,43,.13)` — o do **+** leva `left:-9px` porque esse botão
+  não enche a coluna e a `left:0` o fio caía por cima do verde —, e o
+  `padding-bottom` da barra sobe os botões
+  dentro do mesmo branco: com `border-box` e altura fixa, o padding encolhe a
+  caixa de conteúdo em vez de engordar a barra.
+  O que se acerta antes do jogo (convocados, menu, substituto) está no
+  **Gerir**; a fatura na **Conta**; os dois PDFs em **Relatórios**.
+- **O cartão do total da mesa** é uma linha só, com o valor à direita: as
+  contagens de pessoas e de registos que lá estavam já vivem nas pílulas de cada
+  quadrante, e o que se ganha em altura vai todo para a grelha.
+- **O que NÃO mudou, e é o que segura isto tudo:** os formulários antigos
+  continuam no DOM, dentro das folhas, com os **mesmos ids**
+  (`section-adicionar`, `section-ofertas`, `#item`, `#quantidade`,
+  `#amigos-grid`, `fatura-section`, `section-config`…). Quem grava continua a
+  ser o `adicionarOrdem()`/`adicionarOferta()`, e as permissões
+  (`aplicarPermissoesEdicao`, `atualizarReadOnly`) continuam a apanhar as mesmas
+  secções. **Não trocar esses ids** por uns mais bonitos: era reescrever as
+  permissões e a escrita no Supabase de graça.
+- `evToast()`: o `#mensagem` de sempre vive agora dentro da folha do +. Com a
+  folha fechada a mensagem não se via, por isso o `mostrarMensagem()` passa a
+  um aviso flutuante quando o `#mensagem` está escondido.
+
 ## Armadilhas do CSS (já mordidas)
 - **`input, select { appearance: none }`** (para os campos de texto) apaga o
   desenho nativo das **checkboxes**: elas mudam de estado mas ficam visualmente
   iguais — carrega-se e "não acontece nada". Qualquer checkbox nova precisa de
   `appearance: checkbox` e de desfazer padding/borda/fundo/cantos herdados (ver
   `.conv-row input`).
+- **Texto pequeno dentro de um `button` herda o peso e a família do botão.**
+  Uma legenda cinzenta debaixo de um título, dentro de um botão de lista, saía a
+  600 e em Barlow Condensed como o título (ver `.ev-lrow-i span`, que repõe as
+  duas). O mesmo vale para as classes: `.grow-row`/`.grow-ic` só existiam no
+  mockup — usá-las na app deixou os botões a cair no `button` global, verdes,
+  em maiúsculas e com os SVG sem tamanho (ícones gigantes).
+- **O `button` global é UPPERCASE com `letter-spacing`.** Qualquer botão novo
+  herda-o: as linhas dos quadrantes (que são botões) saíam em maiúsculas e os
+  nomes dos artigos truncavam a meio. Botão que mostre um NOME (de artigo, de
+  pessoa) precisa de `text-transform:none; letter-spacing:normal` — a mesma
+  razão pela qual o `.sbi-tap` do ecrã inicial já os desfaz.
 - **`hidden` não colapsa nada** dentro do ecrã inicial: `.sbi-list{display:flex}`
   é regra de autor e ganha ao `[hidden]` do browser — o bloco "mais N jogos"
   aparecia todo na mesma. Resolve-se com `.sbi-list[hidden]{display:none}` (já lá
