@@ -300,6 +300,29 @@ ninguém ter de mexer nos padrões do `_EV_ICO` para juntar um artigo novo.
   podem trazer cor nenhuma, senão ganhavam por serem as últimas e os pratos
   saíam todos verdes.
 
+## Quanto é que cada pessoa paga: uma só fonte de cêntimos
+Havia três contas diferentes a responder à mesma pergunta e o mesmo David
+aparecia a **17.50 no PDF e a 17.51 nas dívidas**: a divisão Hamilton gravada na
+BD, um arredondamento simples que a `ensureDividasExist` fazia por sua conta, e o
+rácio da fatura recalculado a cada ecrã (que arredonda cada pessoa isolada e
+portanto não tem de somar a fatura). Agora quem quiser saber quanto é que alguém
+paga chama **`divisaoDoEvento(ev)`** — e mais nada.
+- **Prioridade:** `divisoes[ev.id]` (fixada no fecho, tabela `eventos_divisao`) →
+  `ev.dividas` (legado local de antes dessa tabela) → recalcular pelo **mesmo**
+  `calcularDivisaoHamilton` do fecho. Nunca um arredondamento novo.
+- **Cuidado:** ao carregar do Supabase o `ev.dividas` vem **sempre vazio**
+  (`evDividas = {}`), por isso quem só olhasse para aí caía no rácio e ficava a um
+  cêntimo. É `divisoes` que sobrevive à recarga.
+- No **ecrã do evento** é a `contaFinalFixada()` que a embrulha, e o **pagador**
+  (que não tem dívida) fica com o **resto da fatura** — é ele que absorve o
+  cêntimo da sobra, como no fecho, e é isso que faz a soma das pessoas dar
+  exactamente a fatura. Os quatro sítios que mostram o valor (quadrante Por
+  pessoa, o seu zoom, a folha da pessoa, o PDF da divisão) passam todos pelo
+  `_evValorFinalPessoa`. **Sítio novo que mostre o que alguém paga = passa por
+  aqui**, senão volta a haver dois números para a mesma pessoa.
+- A folha da pessoa lista o **consumo** e, por baixo, a linha **Acerto da
+  fatura**: sem ela as linhas não somavam o total do cabeçalho.
+
 ## O ecrã do evento: quatro quadrantes, sem scroll de página
 O evento era uma página comprida: adicionar ordem, ordens registadas, ofertas,
 resumo da conta, configurações. Para saber quanto ia a mesa e quem devia o quê

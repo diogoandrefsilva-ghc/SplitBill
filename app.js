@@ -32,15 +32,14 @@ function init() {
             migrated = true;
         }
         if (ev.totalFatura && ev.pagador && (!ev.dividas || Object.keys(ev.dividas).length === 0)) {
-            ev.dividas = {};
-            const contaFinal = calcularContaFinalEvento(ev);
-            Object.keys(contaFinal).forEach(pessoa => {
-                if (pessoa !== ev.pagador && contaFinal[pessoa] > 0.005) {
-                    const val = Math.round(contaFinal[pessoa] * 100) / 100;
-                    ev.dividas[pessoa] = { valor: val };
-                }
-            });
-            migrated = true;
+            const div = divisaoDoEvento(ev);
+            if (div) {
+                ev.dividas = {};
+                Object.keys(div).forEach(pessoa => {
+                    if (div[pessoa] > 0.005) ev.dividas[pessoa] = { valor: div[pessoa] };
+                });
+                migrated = true;
+            }
         }
         // Clean up old 'pago' field from dividas if present
         if (ev.dividas) {
@@ -405,13 +404,34 @@ function removerOrdem(id) {
     mostrarMensagem('✓ Ordem removida', true);
 }
 
-// Preço final de uma pessoa: quando já há dívida fixada (Hamilton, depois de
-// fechar a conta) usa-se esse valor — é o que fica mesmo a pagamento. Sem
-// dívida (conta ainda aberta, ou é o pagador, que não tem dívida a ninguém)
-// aplica-se o rácio da fatura ao valor bruto do consumo.
-function _evValorFinalPessoa(pessoa, totalBruto, racio) {
-    const divida = estado.dividas && estado.dividas[pessoa];
-    return divida ? divida.valor : (racio ? totalBruto * racio : totalBruto);
+/* Quanto é que cada pessoa paga NESTE evento, já com a fatura fechada:
+   {pessoa: valor}, ou null com a conta ainda aberta (aí manda o consumo bruto).
+   Vem da divisão fixada (`divisaoDoEvento`), a mesma que a página das dívidas
+   lê — é isso que faz o quadrante, o zoom, a folha e o PDF dizerem todos o
+   mesmo número. O PAGADOR não tem dívida, por isso fica com o que sobra da
+   fatura depois das dos outros: é ele que absorve o cêntimo da sobra (como no
+   fecho) e é assim que a soma das pessoas dá exactamente a fatura. */
+function contaFinalFixada() {
+    if (!estado.totalFatura || !estado.pagador) return null;
+    const div = divisaoDoEvento(historico.find(h => h.id === eventoAtualId));
+    if (!div) return null;
+    const conta = {};
+    let somaOutros = 0;
+    Object.keys(div).forEach(p => {
+        if (p === estado.pagador) return;
+        conta[p] = div[p];
+        somaOutros += div[p];
+    });
+    conta[estado.pagador] = Math.round((estado.totalFatura - somaOutros) * 100) / 100;
+    return conta;
+}
+
+// O valor de UMA pessoa: o fixado quando existe; senão o bruto ajustado pelo
+// rácio da fatura (conta aberta, ou alguém que ficou de fora da divisão por
+// não dever nada).
+function _evValorFinalPessoa(pessoa, totalBruto, racio, fixada) {
+    if (fixada && fixada[pessoa] != null) return fixada[pessoa];
+    return racio ? totalBruto * racio : totalBruto;
 }
 
 function atualizarUI() {
@@ -521,10 +541,11 @@ function _atualizarUIInner() {
     // Fechada a conta, o valor a mostrar é o final (dívida já fixada, ou o
     // bruto ajustado pelo rácio da fatura) — não o bruto de antes do acerto.
     const racioFatura = (estado.totalFatura && totalMesa) ? estado.totalFatura / totalMesa : null;
+    const fixada = contaFinalFixada();
     const totaisPessoa = {};
     todasPessoas.forEach(p => {
         const totalBase = (contaPorPessoa[p] || 0) + (saldoOfertas[p] || 0);
-        totaisPessoa[p] = _evValorFinalPessoa(p, totalBase, racioFatura);
+        totaisPessoa[p] = _evValorFinalPessoa(p, totalBase, racioFatura, fixada);
     });
     _evPessoasKeys = Array.from(todasPessoas).sort((a, b) => totaisPessoa[b] - totaisPessoa[a]);
     if (_evPessoasKeys.length === 0) {
@@ -905,7 +926,15 @@ function evAbrirLinha(tipo, chave) {
         });
         const totalMesaAtual = estado.ordens.reduce((s, o) => s + o.precoTotal, 0);
         const racioAtual = (estado.totalFatura && totalMesaAtual) ? estado.totalFatura / totalMesaAtual : null;
-        const total = _evValorFinalPessoa(pessoa, base + (saldo[pessoa] || 0), racioAtual);
+        const bruto = base + (saldo[pessoa] || 0);
+        const total = _evValorFinalPessoa(pessoa, bruto, racioAtual, contaFinalFixada());
+        // As linhas acima são o consumo; o que a fatura acertou tem de aparecer,
+        // senão a lista não soma o total que está no cabeçalho.
+        const acerto = total - bruto;
+        if (Math.abs(acerto) >= 0.005) {
+            linhas.push(_evDrow('Acerto da fatura', 'repartido pelo consumo',
+                (acerto > 0 ? '+€' : '−€') + Math.abs(acerto).toFixed(2)));
+        }
         tit.textContent = pessoa;
         sub.textContent = '€' + total.toFixed(2) + (estado.totalFatura ? ' · valor final' : ' por confirmar');
         body.innerHTML = '<div class="ev-card">' + (linhas.length ? linhas.join('') : _evDrow('Sem consumo marcado', '', '')) + '</div>';
@@ -1059,10 +1088,14 @@ function evRenderZoom() {
                     e.div.push({ q: o.quantidade, n: o.amigos.length });
             });
         });
+        // Os mesmos números do quadrante: com a conta fechada é o valor fixado
+        // que manda, não o consumo bruto — abrir o zoom não pode mudar a conta.
+        const racioZ = (estado.totalFatura && totalMesa) ? estado.totalFatura / totalMesa : null;
+        const fixadaZ = contaFinalFixada();
         let soma = 0;
         const rows = _evPessoasKeys.map((p, i) => {
             const delta = saldo[p] || 0;
-            const total = (base[p] || 0) + delta;
+            const total = _evValorFinalPessoa(p, (base[p] || 0) + delta, racioZ, fixadaZ);
             soma += total;
             const meus = itens[p] || {};
             const lista = Object.keys(meus).sort((a, b) => (meus[b].qtd - meus[a].qtd) || a.localeCompare(b, 'pt'))
@@ -1079,12 +1112,13 @@ function evRenderZoom() {
             if (delta !== 0) partes.push('<em>' + (delta > 0 ? 'oferece +€' : 'recebe −€') + Math.abs(delta).toFixed(2) + '</em>');
             return _evZrow("evAbrirLinha('pessoa'," + i + ")", '<b>' + _evIniciais(p) + '</b>', _evEsc(p),
                 partes.join(' · ') || 'sem consumo marcado', '€' + total.toFixed(2),
-                delta === 0 ? '' : '€' + (base[p] || 0).toFixed(2), 'ev-zpess');
+                delta === 0 ? '' : '€' + ((base[p] || 0) * (racioZ || 1)).toFixed(2), 'ev-zpess');
         });
         const n = _evPessoasKeys.length;
         sub.textContent = _evNum(n, 'pessoa', 'pessoas') + ' · quem deve mais em cima';
         body.innerHTML = _evZlista(rows, cfg.vazio);
-        foot.innerHTML = _evZfoot('Total da mesa', '€' + soma.toFixed(2),
+        // Fechada a conta isto já não é o total da mesa: é a fatura repartida.
+        foot.innerHTML = _evZfoot(estado.totalFatura ? 'Total final' : 'Total da mesa', '€' + soma.toFixed(2),
             n ? '€' + (soma / n).toFixed(2) + ' por cabeça' : '', _evNum(n, 'pessoa', 'pessoas'));
     }
 }
@@ -2345,6 +2379,7 @@ function exportarPDFDivisao() {
                 <td style="padding:8px 10px;text-align:right;font-weight:700;color:#B8911F;">€${o.precoTotal.toFixed(2)}</td>
             </tr>`).join('');
 
+    const fixadaPdf = contaFinalFixada();
     const cols = racio ? 4 : (hasOfertas ? 3 : 2);
     const cabPessoas = `<tr style="background:#0B3B2B;color:white;">
         <th style="padding:10px 14px;text-align:left;">Pessoa</th>
@@ -2362,7 +2397,7 @@ function exportarPDFDivisao() {
             // Usa o valor já fixado nas dívidas (arredondamento Hamilton) quando existe,
             // para o PDF bater sempre certo com o que fica a pagamento — recalcular pelo
             // rácio aqui arredondava cada pessoa isolada e podia ficar 1 cêntimo diferente.
-            const ajustado = racio ? _evValorFinalPessoa(p, total, racio) : null;
+            const ajustado = racio ? _evValorFinalPessoa(p, total, racio, fixadaPdf) : null;
             const deltaStr = delta !== 0 ? `<span style="color:#B8911F;font-size:12px;">${delta>0?'+':''}€${delta.toFixed(2)}</span>` : '<span style="color:#C8D0C8;">—</span>';
             const consumos = {};
             estado.ordens.forEach(o => {
@@ -3690,11 +3725,7 @@ function getDividasPorPessoaPorEvento() {
     const result = {};
     historico.forEach(ev => {
         if (!ev.totalFatura || !ev.pagador) return;
-        // Preferir divisoes da BD (fixados no fecho); fallback para ev.dividas (legacy)
-        const div = divisoes[ev.id];
-        const fonte = div
-            ? Object.entries(div)
-            : Object.entries(ev.dividas || {}).map(([p, d]) => [p, typeof d === 'object' ? d.valor : d]);
+        const fonte = Object.entries(divisaoDoEvento(ev) || {});
         fonte.forEach(([pessoa, valor]) => {
             if (!valor || valor <= 0.005) return;
             if (!result[pessoa]) result[pessoa] = [];
@@ -3749,17 +3780,19 @@ function calcularSaldos() {
 }
 
 // Ensure closed events always have dividas — runs on every render to handle sync gaps
+// Os valores vêm da divisão do evento (ver `divisaoDoEvento`) e não de um
+// arredondamento próprio: era essa segunda conta que punha a aba Eventos a um
+// cêntimo da aba Saldos.
 function ensureDividasExist() {
     let changed = false;
     historico.forEach(ev => {
         if (!ev.totalFatura || !ev.pagador) return;
         if (ev.dividas && Object.keys(ev.dividas).length > 0) return; // already has dividas
+        const div = divisaoDoEvento(ev);
+        if (!div) return;
         ev.dividas = {};
-        const contaFinal = calcularContaFinalEvento(ev);
-        Object.keys(contaFinal).forEach(pessoa => {
-            if (pessoa !== ev.pagador && contaFinal[pessoa] > 0.005) {
-                ev.dividas[pessoa] = { valor: Math.round(contaFinal[pessoa] * 100) / 100 };
-            }
+        Object.keys(div).forEach(pessoa => {
+            if (div[pessoa] > 0.005) ev.dividas[pessoa] = { valor: div[pessoa] };
         });
         changed = true;
     });
@@ -4044,8 +4077,11 @@ function renderContasEventos(lista, resumo) {
                 const qtdStr = Number.isInteger(qtd) ? qtd : qtd.toFixed(1);
                 return qtdStr + '\u00d7 ' + item;
             }).join(', ');
-            const contaFinal = calcularContaFinalEvento(ev);
-            const pagadorValor = contaFinal[ev.pagador] || 0;
+            // O pagador fica com o que sobra da fatura depois das dívidas dos
+            // outros — a mesma regra do ecrã do evento, para as duas somas
+            // darem a fatura e não dois totais parecidos.
+            const somaDividas = Object.values(divisaoDoEvento(ev) || {}).reduce((s, v) => s + v, 0);
+            const pagadorValor = Math.round((ev.totalFatura - somaDividas) * 100) / 100;
             pagadorConsumoHtml = '<div class="contas-divida-item" style="flex-wrap:wrap;opacity:0.65;border:1px dashed #C8D0C8;background:#F7F8F4;">'
                 + '<span class="nome" style="color:#5B6661;">' + ev.pagador + ' <span style="font-weight:400;font-size:11px;">(pagou)</span></span>'
                 + '<span class="valor" style="color:#5B6661;font-weight:600;">\u20ac' + pagadorValor.toFixed(2) + ' <span style="display:inline-block;width:24px;text-align:center;margin-left:6px;">💳</span></span>'
@@ -4579,6 +4615,29 @@ async function rejeitarPedidoPagamento(id) {
     renderContas();
     refrescarInicioSeVisivel();
     mostrarMensagem('Pedido rejeitado', true);
+}
+
+/* A DIVISÃO DE UM EVENTO FECHADO — a ÚNICA fonte de cêntimos.
+   Havia três: a divisão Hamilton gravada na BD (o que fica a pagamento), o
+   `ev.dividas` que a `ensureDividasExist` reconstruía com arredondamento
+   simples, e o rácio da fatura recalculado a cada ecrã. Davam valores a um
+   cêntimo de distância uns dos outros — o mesmo David a 17.50 no PDF e a 17.51
+   nas dívidas. Agora quem quiser saber quanto é que alguém paga chama isto.
+   Manda sempre a divisão FIXADA no fecho (`divisoes`, gravada em
+   `eventos_divisao`); `ev.dividas` é o legado local de antes dessa tabela; sem
+   nenhuma delas recalcula-se pelo MESMO Hamilton do fecho, nunca por outro
+   arredondamento. O pagador não entra: não tem dívida a ninguém. */
+function divisaoDoEvento(ev) {
+    if (!ev || !ev.totalFatura || !ev.pagador) return null;
+    const fix = divisoes[ev.id];
+    if (fix && Object.keys(fix).length) return fix;
+    const legado = {};
+    Object.entries(ev.dividas || {}).forEach(([p, d]) => {
+        const v = (d && typeof d === 'object') ? d.valor : d;
+        if (v != null) legado[p] = parseFloat(v);
+    });
+    if (Object.keys(legado).length) return legado;
+    return calcularDivisaoHamilton(calcularContaFinalEvento(ev), ev.pagador);
 }
 
 // Calculate final amounts for any event
