@@ -7945,9 +7945,15 @@ function sbScheduleAutoSave() {
     if (_sbAutoSaveTimer) clearTimeout(_sbAutoSaveTimer);
     _sbAutoSaveTimer = setTimeout(() => {
         const ev = historico.find(e => e.id === eventoAtualId);
-        // O erro já é mostrado dentro de sbGuardarEvento; apanhar aqui evita a
-        // unhandled rejection (que em alguns browsers mata o resto do timer).
-        if (ev) sbGuardarEvento(ev).catch(() => {});
+        // Só quem pode editar o evento (admin/substituto) tem PATCH em
+        // `eventos` — os outros callers de sbGuardarEvento já verificam
+        // podeEditarEvento() antes de chamar, mas este disparava sozinho a
+        // cada salvarPagamentos() (inclui um simples recarregar de dados do
+        // servidor). Para um convocado normal a RLS bloqueia sempre essa
+        // escrita e devolve 0 linhas — indistinguível de "evento apagado" do
+        // lado de sbGuardarEvento — e o aviso disparava mesmo com o evento
+        // bem vivo, sempre que este telemóvel tivesse esse evento carregado.
+        if (ev && podeEditarEvento(ev)) sbGuardarEvento(ev).catch(() => {});
     }, 2000);
 }
 
