@@ -405,6 +405,15 @@ function removerOrdem(id) {
     mostrarMensagem('✓ Ordem removida', true);
 }
 
+// Preço final de uma pessoa: quando já há dívida fixada (Hamilton, depois de
+// fechar a conta) usa-se esse valor — é o que fica mesmo a pagamento. Sem
+// dívida (conta ainda aberta, ou é o pagador, que não tem dívida a ninguém)
+// aplica-se o rácio da fatura ao valor bruto do consumo.
+function _evValorFinalPessoa(pessoa, totalBruto, racio) {
+    const divida = estado.dividas && estado.dividas[pessoa];
+    return divida ? divida.valor : (racio ? totalBruto * racio : totalBruto);
+}
+
 function atualizarUI() {
     _atualizarUIInner();
     if(typeof atualizarReadOnly==='function') atualizarReadOnly();
@@ -509,8 +518,14 @@ function _atualizarUIInner() {
 
     // ── Quadrante POR PESSOA ────────────────────────────────────────────────
     const contaDiv = document.getElementById('conta-pessoas');
+    // Fechada a conta, o valor a mostrar é o final (dívida já fixada, ou o
+    // bruto ajustado pelo rácio da fatura) — não o bruto de antes do acerto.
+    const racioFatura = (estado.totalFatura && totalMesa) ? estado.totalFatura / totalMesa : null;
     const totaisPessoa = {};
-    todasPessoas.forEach(p => { totaisPessoa[p] = (contaPorPessoa[p] || 0) + (saldoOfertas[p] || 0); });
+    todasPessoas.forEach(p => {
+        const totalBase = (contaPorPessoa[p] || 0) + (saldoOfertas[p] || 0);
+        totaisPessoa[p] = _evValorFinalPessoa(p, totalBase, racioFatura);
+    });
     _evPessoasKeys = Array.from(todasPessoas).sort((a, b) => totaisPessoa[b] - totaisPessoa[a]);
     if (_evPessoasKeys.length === 0) {
         contaDiv.innerHTML = '<p class="ev-vazio">Sem dados ainda</p>';
@@ -519,10 +534,11 @@ function _atualizarUIInner() {
             const delta = saldoOfertas[pessoa] || 0;
             // À esquerda o que a oferta faz (essa vale, não se rasura); à
             // direita, por baixo do total oficial, o que a pessoa pagaria se
-            // não houvesse oferta nenhuma — esse sim, rasurado.
+            // não houvesse oferta nenhuma — esse sim, rasurado (na mesma escala
+            // do total, senão os dois números deixam de comparar).
             const sub = delta === 0 ? ''
                 : (delta > 0 ? 'oferece +€' : 'recebe −€') + Math.abs(delta).toFixed(2);
-            const antes = delta === 0 ? '' : '€' + (contaPorPessoa[pessoa] || 0).toFixed(2);
+            const antes = delta === 0 ? '' : '€' + ((contaPorPessoa[pessoa] || 0) * (racioFatura || 1)).toFixed(2);
             return _evRow("evAbrirLinha('pessoa'," + i + ")", _evEsc(pessoa), sub,
                 '€' + totaisPessoa[pessoa].toFixed(2), antes);
         }).join('');
@@ -887,9 +903,11 @@ function evAbrirLinha(tipo, chave) {
             linhas.push(_evDrow(_evQtdStr(g.qtd) + '× ' + _evEsc(g.item),
                 'oferta do ' + _evEsc(g.quem), '−€' + g.total.toFixed(2), 'ev-of'));
         });
-        const total = base + (saldo[pessoa] || 0);
+        const totalMesaAtual = estado.ordens.reduce((s, o) => s + o.precoTotal, 0);
+        const racioAtual = (estado.totalFatura && totalMesaAtual) ? estado.totalFatura / totalMesaAtual : null;
+        const total = _evValorFinalPessoa(pessoa, base + (saldo[pessoa] || 0), racioAtual);
         tit.textContent = pessoa;
-        sub.textContent = '€' + total.toFixed(2) + (estado.totalFatura ? ' (antes do acerto da fatura)' : ' por confirmar');
+        sub.textContent = '€' + total.toFixed(2) + (estado.totalFatura ? ' · valor final' : ' por confirmar');
         body.innerHTML = '<div class="ev-card">' + (linhas.length ? linhas.join('') : _evDrow('Sem consumo marcado', '', '')) + '</div>';
     }
 
@@ -2344,8 +2362,7 @@ function exportarPDFDivisao() {
             // Usa o valor já fixado nas dívidas (arredondamento Hamilton) quando existe,
             // para o PDF bater sempre certo com o que fica a pagamento — recalcular pelo
             // rácio aqui arredondava cada pessoa isolada e podia ficar 1 cêntimo diferente.
-            const divida = estado.dividas && estado.dividas[p];
-            const ajustado = divida ? divida.valor : (racio ? total * racio : null);
+            const ajustado = racio ? _evValorFinalPessoa(p, total, racio) : null;
             const deltaStr = delta !== 0 ? `<span style="color:#B8911F;font-size:12px;">${delta>0?'+':''}€${delta.toFixed(2)}</span>` : '<span style="color:#C8D0C8;">—</span>';
             const consumos = {};
             estado.ordens.forEach(o => {
