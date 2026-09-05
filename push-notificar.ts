@@ -2,7 +2,9 @@
 // SplitBill — Envia notificações Web Push (Notification/Push API, sem
 // Telegram). Sete momentos, todos chamados pela app:
 //   'divida'              fecharComFatura() → todos os devedores do evento
-//                          que acabou de fechar (fire-and-forget)
+//                          que acabou de fechar, com o nome de quem pagou a
+//                          conta (em `quem`) para o aviso dizer a quem entregar
+//                          o dinheiro (fire-and-forget)
 //   'pagamento_declarado' declararPagamento() → o pagador/tesoureiro do
 //                          evento, quando alguém diz "já paguei"
 //                          (fire-and-forget)
@@ -192,7 +194,7 @@ function montarMensagem(tipo: Tipo, p: Pessoa, descricao?: string, quem?: string
   }
   return {
     title: "💸 Nova dívida no SplitBill",
-    body: `${p.amigo}, ficaste a dever €${valor}${suf}`,
+    body: `${p.amigo}, ficaste a dever €${valor}${suf}${quem ? ` — paga a ${quem}, por favor` : ""}`,
   };
 }
 

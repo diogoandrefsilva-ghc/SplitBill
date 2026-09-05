@@ -2510,7 +2510,7 @@ async function fecharComFatura() {
     // sbGuardarEvento já mostra a sua própria mensagem de erro (com o
     // "Definições → Diagnóstico da BD") quando falha — não duplicar aqui.
     const divisaoGravada = await sbGuardarDivisao(eventoAtualId, divisaoHamilton);
-    sbNotificarDividas(divisaoHamilton, estado.descricaoEvento);  // fire-and-forget — notificação é um extra
+    sbNotificarDividas(divisaoHamilton, estado.descricaoEvento, pagador);  // fire-and-forget — notificação é um extra
 
     if (eventoGravado && divisaoGravada) {
         mostrarMensagem('✓ Conta fechada — €' + fatura.toFixed(2) + ' (paga por ' + pagador + ')', true);
@@ -3307,6 +3307,8 @@ function atualizarReadOnly() {
     document.getElementById('pagador-select').disabled = hasFatura;
     document.getElementById('btn-fechar-evento').style.display = hasFatura ? 'none' : '';
     document.getElementById('btn-reabrir-evento').style.display = hasFatura ? '' : 'none';
+    const _btnReenviar = document.getElementById('btn-reenviar-notif');
+    if (_btnReenviar) _btnReenviar.style.display = (hasFatura && PUSH_COL && isAdmin()) ? '' : 'none';
     const _car = document.getElementById('talao-carimbo');
     if (_car) _car.style.display = hasFatura ? '' : 'none';
     // Ler a fatura continua disponível com a conta fechada — só para consulta:
@@ -3437,7 +3439,7 @@ function aplicarPermissoesEdicao() {
         }
         const desc = document.getElementById('descricao-evento');
         if (desc) desc.disabled = true;
-        ['btn-fechar-evento', 'btn-reabrir-evento'].forEach(id => {
+        ['btn-fechar-evento', 'btn-reabrir-evento', 'btn-reenviar-notif'].forEach(id => {
             const b = document.getElementById(id); if (b) b.style.display = 'none';
         });
         if (banner) {
@@ -8859,11 +8861,30 @@ async function sbEnviarPush(tipo, pessoas, descricao, quem, extra) {
 
 // 1) Fire-and-forget: chamada no fim de fechar uma conta, para quem ficou a
 // dever. Nunca bloqueia nem incomoda o utilizador com erro — é só um extra.
-function sbNotificarDividas(divisaoObj, descricao) {
+// `pagador` vai em `quem`, para a Edge Function poder dizer a quem pagar.
+function sbNotificarDividas(divisaoObj, descricao, pagador) {
     const pessoas = Object.entries(divisaoObj || {})
         .filter(([, valor]) => valor > 0.005)
         .map(([amigo, valor]) => ({ amigo, valor }));
-    sbEnviarPush('divida', pessoas, descricao);
+    sbEnviarPush('divida', pessoas, descricao, pagador);
+}
+
+// 1b) Admin: reenvia a mesma notificação de dívida do evento aberto no ecrã —
+// para quando o texto muda depois de a conta já ter fechado, ou alguém não
+// recebeu da primeira vez. Usa sempre a divisaoDoEvento() de sempre (ver
+// "Quanto é que cada pessoa paga" no CLAUDE.md), nunca recalcula por conta
+// própria.
+async function reenviarNotificacoesDivida() {
+    if (!isAdmin()) return;
+    const ev = historico.find(h => h.id === eventoAtualId);
+    if (!ev || !ev.totalFatura || !ev.pagador) return;
+    const divisao = divisaoDoEvento(ev);
+    if (!divisao || !Object.keys(divisao).length) { mostrarMensagem('⚠️ Sem divisão para reenviar', false); return; }
+    const pessoas = Object.entries(divisao)
+        .filter(([, valor]) => valor > 0.005)
+        .map(([amigo, valor]) => ({ amigo, valor }));
+    const r = await sbEnviarPush('divida', pessoas, ev.descricao, ev.pagador);
+    mostrarMensagem(r ? ('🔔 Notificações reenviadas (' + r.enviados + ')') : '⚠️ Não foi possível reenviar — confirma que tens notificações ativadas', !!r);
 }
 
 // 2) Fire-and-forget: chamada quando alguém declara "já paguei" — avisa o
