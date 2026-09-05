@@ -1854,9 +1854,12 @@ async function apagarEvento(id, ev_) {
     // Remover o evento do histórico
     historico = historico.filter(e => e.id != id);
 
-    // Remover pagamentos ligados a este evento
+    // Remover pagamentos ligados a este evento — TODOS os tipos, não só
+    // 'evento': um pedido 'pendente' (ou uma 'prescricao') que ficasse para
+    // trás ficava preso para sempre, porque a RLS que deixa o pagador
+    // confirmar/rejeitar exige o evento a existir (eh_pagador_evento).
     const antesPg = pagamentos.length;
-    pagamentos = pagamentos.filter(p => !(p.tipo === 'evento' && p.eventoId == id));
+    pagamentos = pagamentos.filter(p => p.eventoId != id);
 
     salvarHistoricoLocal();
     if (pagamentos.length !== antesPg) salvarPagamentos();
@@ -4548,10 +4551,23 @@ async function declararPagamento(pessoa, eventoId, valor) {
     pagamentos.push(novo);
     salvarPagamentos();
     const okSb = await sbGuardarPagamento(novo);
+    // Se o INSERT falhar (RLS, sessão, rede…) o pedido nunca chegou ao
+    // servidor — o admin não tem nada para confirmar. Manter a linha aqui na
+    // mesma mostrava "enviado — a aguardar confirmação" para sempre (sobrevive
+    // a fechar/abrir a app, porque é isto que fica gravado no localStorage),
+    // sem ninguém do outro lado alguma vez ver o pedido. sbGuardarPagamento já
+    // mostrou o erro específico — isto só desfaz o estado otimista.
+    if (!okSb) {
+        pagamentos = pagamentos.filter(p => p.id !== novo.id);
+        salvarPagamentos();
+        renderContas();
+        refrescarInicioSeVisivel();
+        return;
+    }
     renderContas();
     refrescarInicioSeVisivel();
     sbNotificarPagamentoDeclarado(pessoa, novo.eventoId, valor);  // fire-and-forget, não bloqueia UI
-    if (okSb) mostrarMensagem('✓ Pedido enviado — aguarda confirmação do admin.', true);
+    mostrarMensagem('✓ Pedido enviado — aguarda confirmação do admin.', true);
 }
 
 // Anula a própria declaração (antes de o admin decidir). Só quem a fez pode.
@@ -7592,7 +7608,25 @@ async function sbGuardarEvento(ev, opts) {
             // chave estrangeira, e recriar o evento era exactamente o bug.
             const linhas = await r.json().catch(() => null);
             if (Array.isArray(linhas) && linhas.length === 0) {
-                mostrarMensagem('⚠️ Este evento já não existe no servidor (apagado noutro dispositivo?) — as alterações não foram gravadas. Refresca para actualizar a lista.', false);
+                // Purgar a cópia local: sem isto ficava uma carta zombie para
+                // sempre (fechar/abrir a app não corrigia nada, porque o
+                // init() a seguir relia no `historico`/`pagamentos` que já
+                // estavam em localStorage) — e um "Já paguei?" pendente deste
+                // evento ficava sem hipótese de confirmar/rejeitar, porque a
+                // RLS que deixa isso exige o evento existir.
+                historico = historico.filter(e => e.id != ev.id);
+                pagamentos = pagamentos.filter(p => p.eventoId != ev.id);
+                salvarHistoricoLocal();
+                salvarPagamentos();
+                if (eventoAtualId == ev.id) {
+                    if (historico.length > 0) carregarEvento(eventoPorDefeito());
+                    else limparEstadoEvento();
+                    atualizarReadOnly();
+                }
+                renderContas();
+                renderHistoricoDropdown();
+                refrescarInicioSeVisivel();
+                mostrarMensagem('⚠️ Este evento já não existe no servidor (apagado noutro dispositivo?) — removido deste aparelho.', false);
                 return;
             }
         }
@@ -7836,6 +7870,13 @@ async function sbApagarEvento(id) {
             mostrarMensagem('⚠️ Evento NÃO apagado: o servidor aceitou o pedido mas não removeu nada — falta política DELETE em `eventos`. Ver db/diagnostico-escrita.sql (query 2).', false);
             return false;
         }
+        // Rede de segurança: se `pagamentos` não tiver chave estrangeira para
+        // `eventos` (nunca deu 409 acima), um pedido 'pendente'/'prescricao'
+        // ficava órfão no servidor — e por lá preso PARA SEMPRE, porque a RLS
+        // que deixa confirmar/rejeitar exige o evento existir. Idempotente:
+        // se já não houver nada (caiu no ramo 409 ou tinha CASCADE), é um
+        // DELETE que não encontra linhas.
+        await sbFetch(`${SB_URL}/rest/v1/pagamentos?evento_id=eq.${id}`, { method: 'DELETE', headers: sbHeaders() });
         return true;
     } catch(e) {
         console.error('Erro ao apagar evento no Supabase:', e);
@@ -7904,9 +7945,15 @@ function sbScheduleAutoSave() {
     if (_sbAutoSaveTimer) clearTimeout(_sbAutoSaveTimer);
     _sbAutoSaveTimer = setTimeout(() => {
         const ev = historico.find(e => e.id === eventoAtualId);
-        // O erro já é mostrado dentro de sbGuardarEvento; apanhar aqui evita a
-        // unhandled rejection (que em alguns browsers mata o resto do timer).
-        if (ev) sbGuardarEvento(ev).catch(() => {});
+        // Só quem pode editar o evento (admin/substituto) tem PATCH em
+        // `eventos` — os outros callers de sbGuardarEvento já verificam
+        // podeEditarEvento() antes de chamar, mas este disparava sozinho a
+        // cada salvarPagamentos() (inclui um simples recarregar de dados do
+        // servidor). Para um convocado normal a RLS bloqueia sempre essa
+        // escrita e devolve 0 linhas — indistinguível de "evento apagado" do
+        // lado de sbGuardarEvento — e o aviso disparava mesmo com o evento
+        // bem vivo, sempre que este telemóvel tivesse esse evento carregado.
+        if (ev && podeEditarEvento(ev)) sbGuardarEvento(ev).catch(() => {});
     }, 2000);
 }
 
