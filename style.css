@@ -2292,6 +2292,11 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
     display: flex; align-items: center; justify-content: center;
     font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: .02em;
 }
+/* Emoji escrito à mão no catálogo, no lugar do símbolo: não é texto de marca,
+   é um desenho — vai à altura da caixa e sem a família condensada. */
+.ev-itile-emoji { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Emoji", sans-serif; font-size: 24px; letter-spacing: 0; line-height: 1; }
+.mcat-ic .ev-itile-emoji, .mcat-simic .ev-itile-emoji { font-size: 20px; }
+.ev-chosen-ic .ev-itile-emoji { font-size: 26px; }
 .ev-icount {
     position: absolute; top: 7px; right: 7px; line-height: 1.2;
     font-family: var(--mono); font-weight: 600; font-size: 9.5px; color: #fff;
@@ -2316,6 +2321,7 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
    passo 2 e o símbolo das linhas do zoom — é a mesma família nos três.
    Ficam DEPOIS do .ev-chosen-ic e do .ev-zico de propósito: têm a mesma
    especificidade, e é a ordem que decide quem pinta. */
+.mcat-ic, .mcat-simic { background: var(--verde-claro); color: var(--verde); }
 .ev-c-beb { background: #E2EFE8; color: #0E7A4F; }
 .ev-c-pet { background: #FBF1D6; color: #8A6D14; }
 .ev-c-prato { background: #F9E6DF; color: #A3442F; }
@@ -2436,3 +2442,101 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
     background: rgba(179,64,47,.10); color: var(--rubro); display: flex; align-items: center; justify-content: center;
 }
 .ev-of-x svg { width: 15px; height: 15px; }
+
+/* ── MENU DO SÁ: o catálogo de artigos (Definições, só admin) ─────────────
+   Mesma folha dos outros painéis do admin (page-convocados, page-equivalencias),
+   com uma lista agrupada por categoria e uma ficha por artigo. Todos os botões
+   daqui repetem a classe em `:hover`: o `button:hover` global é verde escuro e
+   ganha em especificidade a qualquer classe — no telemóvel fica colado depois
+   do toque. */
+.mcat-sheet {
+    background: #EFF1EC; width: 100%; max-width: 520px; height: 88vh; max-height: 88vh;
+    border-radius: 16px 16px 0 0; display: flex; flex-direction: column; overflow: hidden;
+}
+.mcat-grupo {
+    display: flex; align-items: center; gap: 7px; margin: 15px 2px 7px;
+    font-family: var(--display); font-weight: 700; font-size: 11.5px;
+    text-transform: uppercase; letter-spacing: .13em; color: var(--ink-soft);
+}
+.mcat-grupo:first-child { margin-top: 2px; }
+.mcat-grupo::before {
+    content: ""; flex: 0 0 auto; width: 13px; height: 3px; border-radius: 2px;
+    background: linear-gradient(90deg, var(--verde), var(--dourado));
+}
+.mcat-grupo i {
+    font-style: normal; font-family: var(--mono); font-weight: 600; font-size: 10px; color: var(--verde-tinta);
+    background: var(--verde-claro); border-radius: 20px; padding: 2px 7px;
+}
+.mcat-row {
+    display: flex; align-items: center; gap: 10px; background: #fff;
+    border: 1px solid var(--linha, #DDE3DD); border-radius: 11px; padding: 8px 10px; margin-bottom: 7px;
+}
+/* A COR destas placas vem da categoria (.ev-c-*), e essa vive lá em cima, ao
+   pé das outras — aqui embaixo, uma cor de base ganhava-lhe por ser a última
+   com a mesma especificidade, e os pratos saíam todos verdes. */
+.mcat-ic {
+    flex: 0 0 auto; width: 34px; height: 34px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+}
+.mcat-ic svg { width: 20px; height: 20px; }
+.mcat-ic .ev-itile-ini { font-size: 12px; background: transparent; color: inherit; }
+.mcat-nome {
+    flex: 1 1 auto; min-width: 0; font-family: var(--display); font-weight: 600; font-size: 15px;
+    color: var(--ink, #1B231F); overflow-wrap: anywhere; line-height: 1.15;
+}
+.mcat-preco { flex: 0 0 auto; font-family: var(--mono); font-size: 12px; color: var(--verde-tinta); font-weight: 600; }
+.mcat-b, .mcat-b:hover {
+    flex: 0 0 auto; width: 30px; height: 30px; border-radius: 9px; border: 1px solid var(--linha, #DDE3DD);
+    background: #fff; color: var(--ink-soft, #5B6661); padding: 0; cursor: pointer;
+    font-size: 13px; line-height: 1; display: flex; align-items: center; justify-content: center;
+    text-transform: none; letter-spacing: normal; -webkit-tap-highlight-color: transparent;
+}
+.mcat-b:active { transform: scale(.94); }
+.mcat-x, .mcat-x:hover { color: var(--rubro, #B3402F); border-color: #E3C9C4; font-size: 18px; font-weight: 700; }
+.mcat-vazio { font-size: 13px; color: var(--ink-soft, #5B6661); text-align: center; padding: 24px 8px; line-height: 1.5; }
+.mcat-add, .mcat-add:hover {
+    flex: 1 1 auto; padding: 11px; background: #fff; color: var(--verde, #0E7A4F);
+    border: 1.5px solid var(--verde, #0E7A4F); border-radius: 9px;
+    font-size: 14px; font-weight: 600; cursor: pointer; text-transform: none; letter-spacing: normal;
+}
+.mcat-save, .mcat-save:hover {
+    flex: 1 1 auto; padding: 11px; background: var(--verde, #0E7A4F); color: #fff; border: none; border-radius: 9px;
+    font-size: 14px; font-weight: 600; cursor: pointer; text-transform: none; letter-spacing: normal;
+}
+.mcat-save:disabled { opacity: .6; pointer-events: none; }
+
+/* ── A ficha de um artigo ── */
+.mcat-ficha { padding-bottom: 6px; }
+.mcat-lbl {
+    display: block; font-size: 11px; font-weight: 700; color: var(--ink-soft, #5B6661);
+    text-transform: uppercase; letter-spacing: .09em; margin: 14px 2px 6px;
+}
+.mcat-ficha > .mcat-lbl:first-child { margin-top: 2px; }
+.mcat-ficha input { width: 100%; box-sizing: border-box; font-size: 15px; }
+.mcat-segs { display: flex; flex-wrap: wrap; gap: 6px; }
+.mcat-seg, .mcat-seg:hover {
+    padding: 8px 12px; border-radius: 9px; border: 1px solid var(--linha, #DDE3DD); background: #fff;
+    color: var(--ink, #1B231F); font-size: 13px; font-weight: 600; cursor: pointer;
+    text-transform: none; letter-spacing: normal; -webkit-tap-highlight-color: transparent;
+}
+.mcat-seg.on, .mcat-seg.on:hover { background: var(--verde, #0E7A4F); border-color: var(--verde, #0E7A4F); color: #fff; }
+.mcat-sims { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.mcat-sim, .mcat-sim:hover {
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 5px;
+    padding: 9px 4px 8px; background: #fff; border: 1px solid var(--linha, #DDE3DD); border-radius: 12px;
+    cursor: pointer; color: var(--ink, #1B231F); text-transform: none; letter-spacing: normal;
+    -webkit-tap-highlight-color: transparent;
+}
+.mcat-sim.on, .mcat-sim.on:hover { border-color: var(--verde, #0E7A4F); box-shadow: 0 0 0 1.5px var(--verde, #0E7A4F) inset; }
+.mcat-sim:active { transform: scale(.96); }
+.mcat-sim b {
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-weight: 600; font-size: 10.5px;
+    line-height: 1.15; text-align: center; color: var(--ink-soft, #5B6661); overflow-wrap: anywhere;
+}
+.mcat-simic {
+    flex: 0 0 auto; width: 34px; height: 34px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+}
+.mcat-simic svg { width: 20px; height: 20px; }
+.mcat-simic .ev-itile-ini { font-size: 12px; background: transparent; color: inherit; }
+.mcat-dica { font-size: 11.5px; color: var(--ink-soft, #5B6661); line-height: 1.45; margin: 12px 2px 0; }

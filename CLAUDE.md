@@ -256,6 +256,50 @@ sozinho conforme quem faltasse e ninguém percebia porquê.
   por cima de memória velha apagaria o que tivesse sido mudado noutro
   dispositivo. A edição vive em `_convSel` até se carregar em Guardar.
 
+## O menu vive no admin (Definições › Menu do Sá)
+Os artigos deixaram de ser só o que alguém escreveu à mão em cada evento: há um
+**catálogo** — nome, símbolo, categoria e preço — que o admin trata sozinho, sem
+ninguém ter de mexer nos padrões do `_EV_ICO` para juntar um artigo novo.
+- Vive em `splitbill.config`, chave `menu_artigos`
+  (`{"artigos":[{nome,cat,ico,emoji,preco}]}`) — a mesma tabela genérica dos
+  convocados, por isso **não há migração nova**. `MENU_CATALOGO = null` = chave
+  ainda não existe, e aí a app comporta-se exactamente como antes (o menu vem do
+  evento, ou do agregado de todos). `CONFIG_TABELA=false` = nem a tabela existe
+  (falta `db/config-convocados.sql`) e o painel diz isso em vez de rebentar.
+- **`cat`** e **`ico`** são escolhas à mão; vazios = automático, isto é, o que os
+  padrões do nome derem (`_evIcoAuto`). O `ico` é o **id** de um dos símbolos
+  que já existem (`_EV_SIMBOLOS`, tirados do próprio `_EV_ICO` — uma lista só,
+  para não haver dois sítios a desenhar a mesma caneca); em alternativa, um
+  **emoji** escrito à mão (`emoji`, cortado por ponto de código em
+  `_evEmojiLimpo`, senão um `slice` parte o desenho ao meio). Escolher símbolo
+  limpa o emoji e vice-versa: é a mesma pergunta com duas respostas.
+- **O preço só vale para os jogos que ainda não aconteceram**
+  (`eventoPorOcorrer`: em agenda e sem conta fechada). `menuDoEvento()` é a
+  regra toda: por ocorrer → o catálogo, sempre fresco; já aberto ou fechado → a
+  fotografia guardada em `ev.menu`. A fotografia tira-se em **`abrirJogo()`** —
+  abrir o jogo é o momento em que a mesa fica com os preços do dia, e mexer no
+  catálogo depois disso já não lhe toca. As ordens já lançadas nunca se tocam:
+  têm o `precoUnitario` congelado desde que foram registadas.
+- Por isso o **Gerir › Menu** de um jogo por acontecer traz uma nota: o que se
+  mexer ali vale só até sair do evento, porque a próxima carga volta a buscar o
+  catálogo. Editar a sério faz-se no painel.
+- O painel (`abrirMenuArtigos`, `page-menu-artigos`) relê do servidor **antes**
+  de desenhar, como o dos convocados. A lista em edição vive em `_mcatLista` até
+  se carregar em Guardar (sair com alterações por gravar pede confirmação), e
+  `_mcatEdit` diz se se está a ver a lista (`null`) ou a ficha de um artigo
+  (índice, ou `-1` para um artigo novo). Na primeira vez o catálogo **arranca**
+  com os artigos que já andam pelos eventos (`menuAgregadoGlobal`), para não se
+  começar de uma folha em branco.
+- A lista e a ficha usam a mesma ordem da grelha do + (categorias, e dentro de
+  cada uma o mais consumido primeiro): quem procura um artigo procura-o no mesmo
+  sítio onde o vê no evento.
+- **Armadilha já mordida:** nos `onclick` destes botões vão aspas **simples** —
+  um `JSON.stringify` fecharia o atributo a meio (é a mesma razão da nota sobre
+  o "Zé" nas ofertas). E a **cor** das placas de símbolo vem da categoria
+  (`.ev-c-*`): as regras `.mcat-ic`/`.mcat-simic` no fim do `style.css` não
+  podem trazer cor nenhuma, senão ganhavam por serem as últimas e os pratos
+  saíam todos verdes.
+
 ## O ecrã do evento: quatro quadrantes, sem scroll de página
 O evento era uma página comprida: adicionar ordem, ordens registadas, ofertas,
 resumo da conta, configurações. Para saber quanto ia a mesa e quem devia o quê
@@ -354,10 +398,14 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
   por ÍNDICE no `onclick`, nunca por `JSON.stringify`, que mete aspas duplas
   dentro de um atributo delimitado por aspas duplas e parte o clique num "Zé".
 - **Símbolos e categorias dos artigos** (`evCatArtigo` → `{cat, svg}`,
-  `evIconeArtigo` devolve só o svg): o menu é escrito à mão em cada evento, por
-  isso símbolo e categoria vêm do NOME (`_EV_ICO`, uma lista de padrões com
-  `cat`) e o que não é reconhecido fica com as **iniciais** e em "Outros" —
-  melhor do que um ícone errado. A **ordem** dos padrões conta: os específicos
+  `evIconeArtigo` devolve só o svg): quem manda é o **catálogo** (ver secção
+  própria, mais abaixo) — o artigo que lá esteja com categoria e símbolo
+  escolhidos à mão é assim em todo o lado. Só o que não está no catálogo é que
+  passa pelos padrões do NOME (`_EV_ICO`, uma lista de padrões com `cat`, o que
+  sempre foi e é o que vale para os artigos dos eventos antigos); o que nem aí
+  é reconhecido fica com as **iniciais** e em "Outros" — melhor do que um ícone
+  errado. O `_evIcoAuto()` é essa leitura só-pelo-nome, sem o catálogo pelo
+  meio, e é o que a ficha do artigo mostra na opção "Automático". A **ordem** dos padrões conta: os específicos
   antes dos genéricos (vinho e "prato" são os últimos, senão "Chá verde" era
   vinho e "Arroz doce" era arroz). Atenção ao `\b` do JS, que é ASCII: a seguir
   a um "á" não há fronteira, por isso as palavras acentuadas levam
@@ -365,10 +413,16 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
   **Nunca** uses lookbehind (`(?<!…)`) nestes regex: um Safari antigo rebenta
   ao *ler* o ficheiro e a app inteira deixa de arrancar.
   O passo 1 do + (`evRenderIgrid`) agrupa a grelha por categoria (Bebidas ·
-  Petiscos · Pratos · Doces · Outros, `_EV_CAT_ORDEM`), pinta a placa do
+  **Pratos** · Petiscos · Doces · Outros, `_EV_CAT_ORDEM` — os pratos antes dos
+  petiscos porque é essa a ordem por que se pede), pinta a placa do
   símbolo com a cor da categoria (`.ev-c-*`, as mesmas classes no artigo
   escolhido do passo 2 e nas linhas do zoom) e põe uma pílula "3×" nos artigos
   já pedidos nesta mesa. Com uma categoria só, o título do grupo não aparece.
+  Dentro de cada categoria manda o **consumo** (`_evOrdenarArtigos` sobre
+  `_evPopularidade`, unidades de todas as mesas de sempre) e só depois, para os
+  que empatam a zero por nunca terem sido pedidos, a ordem alfabética: por
+  ordem alfabética, a imperial andava a meio da lista atrás de coisas que
+  ninguém pede.
 - **Barra inferior** (`.ev-bar`, fixa, só na página do evento): cinco lugares —
   `Gerir · Relatórios · + · Oferecer · Conta` — todos com nome por baixo do
   ícone, e o + ao centro. O "Relatórios" está por dentro de propósito: é a
