@@ -4551,10 +4551,23 @@ async function declararPagamento(pessoa, eventoId, valor) {
     pagamentos.push(novo);
     salvarPagamentos();
     const okSb = await sbGuardarPagamento(novo);
+    // Se o INSERT falhar (RLS, sessão, rede…) o pedido nunca chegou ao
+    // servidor — o admin não tem nada para confirmar. Manter a linha aqui na
+    // mesma mostrava "enviado — a aguardar confirmação" para sempre (sobrevive
+    // a fechar/abrir a app, porque é isto que fica gravado no localStorage),
+    // sem ninguém do outro lado alguma vez ver o pedido. sbGuardarPagamento já
+    // mostrou o erro específico — isto só desfaz o estado otimista.
+    if (!okSb) {
+        pagamentos = pagamentos.filter(p => p.id !== novo.id);
+        salvarPagamentos();
+        renderContas();
+        refrescarInicioSeVisivel();
+        return;
+    }
     renderContas();
     refrescarInicioSeVisivel();
     sbNotificarPagamentoDeclarado(pessoa, novo.eventoId, valor);  // fire-and-forget, não bloqueia UI
-    if (okSb) mostrarMensagem('✓ Pedido enviado — aguarda confirmação do admin.', true);
+    mostrarMensagem('✓ Pedido enviado — aguarda confirmação do admin.', true);
 }
 
 // Anula a própria declaração (antes de o admin decidir). Só quem a fez pode.
