@@ -176,9 +176,10 @@ function carregarEvento(ev) {
         amigos = amigosPorDefeito();
         if (estado.pagador && !amigos.includes(estado.pagador)) amigos.unshift(estado.pagador);
     }
-    // O menu pode não estar persistido na BD; se vier vazio, reconstrói-se a partir de
-    // todos os eventos (preço mais recente) para o dropdown de artigos funcionar.
-    menu = (ev.menu && Object.keys(ev.menu).length) ? JSON.parse(JSON.stringify(ev.menu)) : menuAgregadoGlobal();
+    // Jogo por ocorrer → o menu vem do catálogo (Definições › Menu do Sá), para
+    // os preços novos chegarem aos jogos que faltam; já aberto ou fechado → a
+    // fotografia guardada no evento. Ver menuDoEvento().
+    menu = menuDoEvento(ev);
     modoReadOnly = !!ev.totalFatura;
     // A conferência da fatura é de um evento concreto — ao trocar de evento o
     // painel fecha-se, senão ficavam comparações da conta anterior no ecrã.
@@ -634,52 +635,55 @@ function _evSvg(paths) {
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + paths + '</svg>';
 }
 const _EV_CATS = { beb: 'Bebidas', pet: 'Petiscos', prato: 'Pratos', doce: 'Doces', outro: 'Outros' };
-const _EV_CAT_ORDEM = ['beb', 'pet', 'prato', 'doce', 'outro'];
+// Bebidas primeiro, e os PRATOS antes dos petiscos: num dia de jogo o que se
+// pede primeiro é a bebida, e o prato é a decisão a seguir — o petisco vem
+// pelo caminho. Mexer aqui muda a ordem dos grupos no passo 1 do +.
+const _EV_CAT_ORDEM = ['beb', 'prato', 'pet', 'doce', 'outro'];
 const _EV_ICO = [
     // ── Bebidas ──
-    { cat: 'beb', re: /(imperial|cerveja|caneca|\bfino\b|\bbock\b|super ?bock|sagres|cristal|\bmini\b|panach|heineken|corona|\bipa\b|stout|\bpint\b)/iu,
+    { id: 'cerveja', nome: 'Cerveja', cat: 'beb', re: /(imperial|cerveja|caneca|\bfino\b|\bbock\b|super ?bock|sagres|cristal|\bmini\b|panach|heineken|corona|\bipa\b|stout|\bpint\b)/iu,
       svg: _evSvg('<path d="M7 9h9v11a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1z"/><path d="M16 11h2a2 2 0 0 1 0 4h-2"/><path d="M7 9c0-2 1.2-3 2.6-3 .3-1.2 1.3-2 2.6-2 1.4 0 2.4.9 2.6 2.1C16.1 6.3 17 7.4 17 9"/>') },
-    { cat: 'beb', re: /(cidra|sidra|bandida|somersby|strongbow|garrafa|long ?neck)/iu,
+    { id: 'garrafa', nome: 'Garrafa', cat: 'beb', re: /(cidra|sidra|bandida|somersby|strongbow|garrafa|long ?neck)/iu,
       svg: _evSvg('<path d="M10 3h4v3l1.5 2.4c.3.6.5 1.2.5 1.9V19a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-8.7c0-.7.2-1.3.5-1.9L10 6z"/><path d="M8 13.5h8"/><path d="M8 17h8"/>') },
-    { cat: 'beb', re: /(caf[ée]|\bbica\b|abatanado|gal[ãa]o|carioca|descaf|(^|[^\p{L}])ch[áa](?!\p{L})|chocolate quente|meia de leite|\bpingo\b|garoto|cappuc|latte|expresso|espresso)/iu,
+    { id: 'cafe', nome: 'Café', cat: 'beb', re: /(caf[ée]|\bbica\b|abatanado|gal[ãa]o|carioca|descaf|(^|[^\p{L}])ch[áa](?!\p{L})|chocolate quente|meia de leite|\bpingo\b|garoto|cappuc|latte|expresso|espresso)/iu,
       svg: _evSvg('<path d="M5 9h11v6a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4z"/><path d="M16 11h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8.5 6c0-1 .8-1.3.8-2.3"/><path d="M12 6c0-1 .8-1.3.8-2.3"/>') },
-    { cat: 'beb', re: /([áa]gua(?!\p{L})|pedras|\bluso\b|castello|vitalis|\bwater\b)/iu,
+    { id: 'agua', nome: 'Água', cat: 'beb', re: /([áa]gua(?!\p{L})|pedras|\bluso\b|castello|vitalis|\bwater\b)/iu,
       svg: _evSvg('<path d="M6 4h12l-1.3 15.1a2 2 0 0 1-2 1.9H9.3a2 2 0 0 1-2-1.9z"/><path d="M12 9.5c-1.5 1.8-2.3 3-2.3 4a2.3 2.3 0 0 0 4.6 0c0-1-.8-2.2-2.3-4z"/>') },
-    { cat: 'beb', re: /(coca|\bcola\b|\bsumo|refrig|ice ?tea|fanta|sprite|7 ?up|pepsi|guaran|laranjada|limonada|nestea|compal|schweppes|t[óo]nica|\bsoda\b|red ?bull)/iu,
+    { id: 'refri', nome: 'Refrigerante', cat: 'beb', re: /(coca|\bcola\b|\bsumo|refrig|ice ?tea|fanta|sprite|7 ?up|pepsi|guaran|laranjada|limonada|nestea|compal|schweppes|t[óo]nica|\bsoda\b|red ?bull)/iu,
       svg: _evSvg('<path d="M6 7h12l-1.4 12.2a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.8z"/><path d="M6.6 11.5h10.8"/><path d="M13 7 15.5 3"/>') },
-    { cat: 'beb', re: /(\bgin\b|ginj|whisk|vodka|\bshot|licor|caipir|\brum\b|cocktail|tequila|aguardente|bagac|mojito|amarguinha|medronho|j[äa]ger|absinto|brandy|conhaque|macieira)/iu,
+    { id: 'shot', nome: 'Shot / licor', cat: 'beb', re: /(\bgin\b|ginj|whisk|vodka|\bshot|licor|caipir|\brum\b|cocktail|tequila|aguardente|bagac|mojito|amarguinha|medronho|j[äa]ger|absinto|brandy|conhaque|macieira)/iu,
       svg: _evSvg('<path d="M4 4h16l-8 8z"/><path d="M12 12v7"/><path d="M8.5 19h7"/>') },
     // ── Petiscos ──
-    { cat: 'pet', re: /(bifana|prego|sandes|sand[uw]|tosta|hamb|burger|cachorro|francesinha|p[ãa]o(?!\p{L})|p[ãa]ozinho|torrada|\bwrap\b|baguet|croissant)/iu,
+    { id: 'sandes', nome: 'Sandes / pão', cat: 'pet', re: /(bifana|prego|sandes|sand[uw]|tosta|hamb|burger|cachorro|francesinha|p[ãa]o(?!\p{L})|p[ãa]ozinho|torrada|\bwrap\b|baguet|croissant)/iu,
       svg: _evSvg('<path d="M3 13a9 4.5 0 0 1 18 0"/><path d="M3 13h18v2a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z"/><path d="M6.5 10.5c1.5-1 3.5-1 5 0s3.5 1 5 0"/>') },
-    { cat: 'pet', re: /(chamu[çc]a|samosa)/iu,
+    { id: 'chamuca', nome: 'Chamuça', cat: 'pet', re: /(chamu[çc]a|samosa)/iu,
       svg: _evSvg('<path d="M12 4 20.5 19h-17z"/><path d="M8.2 14.2c2.5-1 5.1-1 7.6 0"/>') },
-    { cat: 'pet', re: /(pastel|past[ée]is|rissol|riss[óo]is|croquete|bolinho|patanisca|peixinhos|nuggets|frito|tempura|empada)/iu,
+    { id: 'frito', nome: 'Croquete / frito', cat: 'pet', re: /(pastel|past[ée]is|rissol|riss[óo]is|croquete|bolinho|patanisca|peixinhos|nuggets|frito|tempura|empada)/iu,
       svg: _evSvg('<rect x="3.5" y="8.5" width="9.5" height="4.6" rx="2.3" transform="rotate(-8 8.25 10.8)"/><rect x="11" y="12.4" width="9.5" height="4.6" rx="2.3" transform="rotate(6 15.75 14.7)"/><path d="M4 20.5h16"/>') },
-    { cat: 'pet', re: /(batata|fritas|\bchips\b)/iu,
+    { id: 'batatas', nome: 'Batatas fritas', cat: 'pet', re: /(batata|fritas|\bchips\b)/iu,
       svg: _evSvg('<path d="M5.5 11h13l-1.2 8.6a1.6 1.6 0 0 1-1.6 1.4H8.3a1.6 1.6 0 0 1-1.6-1.4z"/><path d="M8.2 11V5.5"/><path d="M11 11V3.5"/><path d="M13.8 11V4.5"/><path d="M16.3 11V6.5"/><path d="M6 14.5h12"/>') },
-    { cat: 'pet', re: /(queijo|cheese|requeij)/iu,
+    { id: 'queijo', nome: 'Queijo', cat: 'pet', re: /(queijo|cheese|requeij)/iu,
       svg: _evSvg('<path d="M3.5 10 19.5 5.5V18h-16z"/><path d="M3.5 10h16"/><circle cx="8.5" cy="14" r="1.2"/><circle cx="14.5" cy="13.2" r="1.5"/>') },
-    { cat: 'pet', re: /(trem[oó]|amendo|petisco|azeiton|chouri|presunto|t[áa]bua|enchid|moelas|caracó|pipis)/iu,
+    { id: 'tremocos', nome: 'Tremoços / azeitonas', cat: 'pet', re: /(trem[oó]|amendo|petisco|azeiton|chouri|presunto|t[áa]bua|enchid|moelas|caracó|pipis)/iu,
       svg: _evSvg('<path d="M3.5 11h17a8.5 8.5 0 0 1-17 0z"/><circle cx="9" cy="8" r="1.9"/><circle cx="14" cy="7" r="1.9"/><circle cx="12" cy="10.4" r="1.4"/>') },
     // ── Pratos ──
-    { cat: 'prato', re: /(\bovos?\b|omelet|estrelado|mexidos)/iu,
+    { id: 'ovos', nome: 'Ovos', cat: 'prato', re: /(\bovos?\b|omelet|estrelado|mexidos)/iu,
       svg: _evSvg('<circle cx="11.5" cy="12.5" r="3.5"/><path d="M3 8c0-3.5 2.5-6 6.5-6 5 0 4.83 3 7.5 5s5 2 5 6c0 4.5-2.5 6.5-7 6.5-2.5 0-2.5 2.5-6 2.5-3.5 0-6-2.5-6-5.5 0-3.5 2-3 2-6.5"/>') },
-    { cat: 'prato', re: /(bacalhau|peixe|sardinha|polvo|camar[ãa]o|lulas|\bchoco|marisco|atum|salm[ãa]o|dourada|robalo|carapau|pescada|am[êe]ijoa|gambas|lagost)/iu,
+    { id: 'peixe', nome: 'Peixe', cat: 'prato', re: /(bacalhau|peixe|sardinha|polvo|camar[ãa]o|lulas|\bchoco|marisco|atum|salm[ãa]o|dourada|robalo|carapau|pescada|am[êe]ijoa|gambas|lagost)/iu,
       svg: _evSvg('<path d="M6.5 12c2-3.6 5-5.5 8-5.5 2.7 0 4.9 1.9 6.5 5.5-1.6 3.6-3.8 5.5-6.5 5.5-3 0-6-1.9-8-5.5z"/><path d="M6.5 12 2.5 8.5v7z"/><path d="M17.2 11h.01"/>') },
-    { cat: 'prato', re: /(costelet|lagartinh|bitoque|\bbife|picanha|pica-?pau|entrecosto|frango|febra|entremeada|secretos|alheira|carne|vazia|lombo|costela|leit[ãa]o|cordeiro|borrego|pernil|churrasco|espetada|naco|posta)/iu,
+    { id: 'carne', nome: 'Carne', cat: 'prato', re: /(costelet|lagartinh|bitoque|\bbife|picanha|pica-?pau|entrecosto|frango|febra|entremeada|secretos|alheira|carne|vazia|lombo|costela|leit[ãa]o|cordeiro|borrego|pernil|churrasco|espetada|naco|posta)/iu,
       svg: _evSvg('<circle cx="12.5" cy="8.5" r="2.5"/><path d="M12.5 2a6.5 6.5 0 0 0-6.22 4.6c-1.1 3.13-.78 3.9-3.18 6.08A3 3 0 0 0 5 18c4 0 8.4-1.8 11.4-4.3A6.5 6.5 0 0 0 12.5 2Z"/><path d="m18.5 6 2.19 4.5a6.48 6.48 0 0 1 .31 2 6.49 6.49 0 0 1-2.6 5.2C15.4 20.2 11 22 7 22a3 3 0 0 1-2.68-1.66L2.4 16.5"/>') },
-    { cat: 'prato', re: /(sopa|caldo|creme de|salada|canja)/iu,
+    { id: 'sopa', nome: 'Sopa / salada', cat: 'prato', re: /(sopa|caldo|creme de|salada|canja)/iu,
       svg: _evSvg('<path d="M3.5 11.5h17a8.5 8.5 0 0 1-17 0z"/><path d="M8 20.5h8"/><path d="M9.5 8c0-1 .8-1.3.8-2.3"/><path d="M13.5 8c0-1 .8-1.3.8-2.3"/>') },
-    { cat: 'prato', re: /(pizza|piza)/iu,
+    { id: 'pizza', nome: 'Pizza', cat: 'prato', re: /(pizza|piza)/iu,
       svg: _evSvg('<path d="M12 3.5 21 18c-5.6 3.3-12.4 3.3-18 0z"/><path d="M6.2 16.2c3.7 1.6 7.9 1.6 11.6 0"/><circle cx="12" cy="11" r="1.3"/><circle cx="10" cy="15.5" r="1.1"/><circle cx="14" cy="15.5" r="1.1"/>') },
     // ── Doces ──
-    { cat: 'doce', re: /(bolo|gelado|sobremesa|mousse|tarte|pudim|doce|\bnata|cheesecake|brownie|tiramis|fruta|serradura|leite creme|baba de camelo|molotof)/iu,
+    { id: 'doce', nome: 'Doce / bolo', cat: 'doce', re: /(bolo|gelado|sobremesa|mousse|tarte|pudim|doce|\bnata|cheesecake|brownie|tiramis|fruta|serradura|leite creme|baba de camelo|molotof)/iu,
       svg: _evSvg('<path d="M4 12.5 12 6l8 6.5"/><path d="M4 12.5V19h16v-6.5"/><path d="M4 15.5c2 1.5 4 1.5 6 0s4-1.5 6 0 2.7 1.3 4 0"/>') },
     // ── Genéricos, no fim ──
-    { cat: 'beb', re: /(vinho|tinto|branco|sangria|porto|espumante|verde|ros[ée]|moscatel|champ|prosecco)/iu,
+    { id: 'vinho', nome: 'Vinho', cat: 'beb', re: /(vinho|tinto|branco|sangria|porto|espumante|verde|ros[ée]|moscatel|champ|prosecco)/iu,
       svg: _evSvg('<path d="M7 3h10l-.6 6a4.4 4.4 0 0 1-8.8 0z"/><path d="M12 13v6"/><path d="M8.5 21h7"/>') },
-    { cat: 'prato', re: /(prato|dose|arroz|feijoada|massa|esparguete|lasanha|risoto|migas|a[çc]orda|cozido|jardineira|comida|refei|menu|\bdiária)/iu,
+    { id: 'prato', nome: 'Prato / talheres', cat: 'prato', re: /(prato|dose|arroz|feijoada|massa|esparguete|lasanha|risoto|migas|a[çc]orda|cozido|jardineira|comida|refei|menu|\bdiária)/iu,
       svg: _evSvg('<path d="M7 3v18"/><path d="M4.5 3v4.5a2.5 2.5 0 0 0 5 0V3"/><path d="M17 3c-1.7.6-3 2.6-3 5.5 0 1.9 1 3 2 3.5V21"/><path d="M17 3v9"/>') }
 ];
 
@@ -689,12 +693,48 @@ function _evIniciais(nome) {
     return _evEsc(ini.toUpperCase());
 }
 
-// { cat, svg } — o svg é o símbolo, ou as iniciais quando não há símbolo.
-function evCatArtigo(nome) {
+// Símbolos escolhíveis à mão no catálogo (Definições › Menu do Sá), por id.
+// São exactamente os mesmos que a heurística usa — a lista de padrões acima é
+// a única fonte, para não haver dois sítios a desenhar a mesma caneca.
+const _EV_SIMBOLOS = _EV_ICO.map(a => ({ id: a.id, nome: a.nome, cat: a.cat, svg: a.svg }));
+function _evSimbolo(id) {
+    return _EV_SIMBOLOS.find(s => s.id === id) || null;
+}
+/* Um emoji escrito à mão no catálogo, em vez de um símbolo. O corte é por
+   PONTO DE CÓDIGO e não por caracteres: um `slice(0,2)` parte um emoji ao meio
+   (são dois caracteres em JS) e o que sobra é um losango com uma interrogação. */
+function _evEmojiLimpo(txt) {
+    return Array.from(String(txt == null ? '' : txt).trim()).slice(0, 2).join('');
+}
+function _evGlifo(txt) {
+    return '<span class="ev-itile-ini ev-itile-emoji">' + _evEsc(_evEmojiLimpo(txt)) + '</span>';
+}
+
+// Só os padrões do nome — o que sempre foi, sem o catálogo pelo meio. É o que
+// a ficha do artigo mostra na opção "Automático".
+function _evIcoAuto(nome) {
     for (let i = 0; i < _EV_ICO.length; i++) {
         if (_EV_ICO[i].re.test(nome)) return _EV_ICO[i];
     }
     return { cat: 'outro', svg: '<span class="ev-itile-ini">' + _evIniciais(nome) + '</span>' };
+}
+
+/* { cat, svg } — o svg é o símbolo, ou as iniciais quando não há símbolo.
+   O CATÁLOGO manda: se o artigo lá estiver com categoria/símbolo escolhidos à
+   mão, é isso que vale em todo o lado (grelha do +, zooms, artigo escolhido).
+   Só o que não está no catálogo é que passa pelos padrões do nome — que é o
+   que sempre foi, e continua a ser para os artigos dos eventos antigos. */
+function evCatArtigo(nome) {
+    const art = (typeof catalogoArtigo === 'function') ? catalogoArtigo(nome) : null;
+    if (art) {
+        const sim = art.ico ? _evSimbolo(art.ico) : null;
+        if (sim) return { cat: art.cat || sim.cat, svg: sim.svg };
+        if (art.emoji) return { cat: art.cat || _evIcoAuto(nome).cat, svg: _evGlifo(art.emoji) };
+        // Categoria escolhida à mão, símbolo em automático: o símbolo continua a
+        // vir do nome, mas é a categoria do catálogo que arruma a grelha.
+        if (art.cat) return { cat: art.cat, svg: _evIcoAuto(nome).svg };
+    }
+    return _evIcoAuto(nome);
 }
 
 function evIconeArtigo(nome) {
@@ -1077,10 +1117,34 @@ function evPasso(n) {
     }
 }
 
+/* Quanto é que cada artigo já foi consumido, em TODOS os eventos (incluindo
+   este, que o salvarNoLocalStorage vai mantendo no histórico). É o que põe a
+   imperial e a bifana à frente na grelha do +: por ordem alfabética, o que se
+   pede sempre andava a meio da lista, atrás de coisas que ninguém pede.
+   Conta unidades, não linhas: três canecas numa ordem valem três. */
+function _evPopularidade() {
+    const p = {};
+    const somar = o => {
+        if (!o || !o.item) return;
+        const k = String(o.item).toLowerCase();
+        p[k] = (p[k] || 0) + (Number(o.quantidade) || 0);
+    };
+    historico.forEach(ev => { (ev.ordens || []).forEach(somar); });
+    return p;
+}
+
+// Dentro de cada categoria: primeiro o que mais se consome, depois — para os
+// que nunca foram pedidos, que empatam todos a zero — por ordem alfabética.
+function _evOrdenarArtigos(nomes) {
+    const pop = _evPopularidade();
+    const n = it => pop[String(it).toLowerCase()] || 0;
+    return nomes.slice().sort((a, b) => (n(b) - n(a)) || a.localeCompare(b, 'pt'));
+}
+
 function evRenderIgrid() {
     const grid = document.getElementById('ev-igrid');
     if (!grid) return;
-    _evMenuKeys = Object.keys(menu).sort((a, b) => a.localeCompare(b, 'pt'));
+    _evMenuKeys = _evOrdenarArtigos(Object.keys(menu));
     if (_evMenuKeys.length === 0) {
         grid.innerHTML = '<p class="ev-vazio">O menu deste evento está vazio.<br>Acrescenta artigos em Gerir › Menu.</p>';
         return;
@@ -1810,7 +1874,7 @@ function criarEvento(opts) {
     const novosAmigos = amigosPorDefeito();
     const tesoureiro = opts.tesoureiro || '';
     if (tesoureiro && !novosAmigos.includes(tesoureiro)) novosAmigos.unshift(tesoureiro);
-    const novoMenu = menuAgregadoGlobal();
+    const novoMenu = menuBaseNovoEvento();
 
     const novoId = Date.now();
     const novoEvt = {
@@ -4843,8 +4907,16 @@ async function removerAmigo(idx) {
 function renderConfigMenu() {
     const div = document.getElementById('config-menu-lista');
     const itensEmUso = new Set(estado.ordens.map(o => o.item));
+    // Jogo por acontecer com catálogo: quem manda no menu é o catálogo, e o
+    // que se mexer aqui volta atrás na próxima carga do evento. Dizê-lo é
+    // melhor do que deixar a edição desaparecer sem explicação.
+    const evAtual = historico.find(h => h.id === eventoAtualId);
+    const doCatalogo = MENU_CATALOGO && MENU_CATALOGO.length && eventoPorOcorrer(evAtual);
+    const nota = doCatalogo
+        ? '<p style="font-size:11.5px;color:#5B6661;line-height:1.45;margin:0 0 10px;">Este jogo ainda não aconteceu: os artigos e os preços vêm do <strong>Menu do Sá</strong> (Definições). Muda-os lá — aqui só valem até saíres do evento. Quando o jogo abrir, fica com os preços desse dia.</p>'
+        : '';
 
-    div.innerHTML = Object.keys(menu).sort().map((item, i) => {
+    div.innerHTML = nota + Object.keys(menu).sort().map((item, i) => {
         // Corrigir: só mostrar botão eliminar se NÃO estiver em uso
         const usado = itensEmUso.has(item);
         const safeVal = item.replace(/"/g, '&quot;');
@@ -5351,7 +5423,7 @@ async function sincronizarJogosDoGoals() {
     // com consumo e, a criar 20 de seguida, a partir do 11.º só veria os que
     // estas linhas acabaram de criar (vazios) — nasciam todos sem ninguém.
     var amigosBase = amigosPorDefeito();
-    var menuBase = menuAgregadoGlobal();
+    var menuBase = menuBaseNovoEvento();
 
     for (var i = 0; i < jogos.length; i++) {
         var j = jogos[i];
@@ -5585,6 +5657,12 @@ async function abrirJogo(id) {
     if (!ev) return false;
     if (!podeEditarEvento(ev)) { mostrarMensagem('⚠️ Só o administrador (ou o substituto do evento) pode abrir o jogo', false); return false; }
     if (!ABERTO_COL) { mostrarMensagem('⚠️ Falta a coluna eventos.aberto — corre db/jogo-aberto.sql no Supabase', false); return false; }
+    // Abrir o jogo é o momento em que se tira a FOTOGRAFIA ao menu: a partir
+    // daqui esta mesa tem os preços de hoje, e mexer no catálogo já não lhe
+    // toca. (Sem catálogo, fica o menu que o evento já tinha.)
+    const menuHoje = catalogoMenuObj();
+    const menuAntes = ev.menu;
+    if (Object.keys(menuHoje).length) ev.menu = menuHoje;
     ev.aberto = true;
     salvarHistoricoLocal();
     try {
@@ -5593,6 +5671,7 @@ async function abrirJogo(id) {
         // Não gravou no servidor → também não fica aberto aqui, senão este
         // telemóvel via o jogo em aberto e mais nenhum.
         ev.aberto = false;
+        ev.menu = menuAntes;
         salvarHistoricoLocal();
         return false;
     }
@@ -6580,6 +6659,132 @@ async function guardarConvocadosDefault(lista) {
     }
 }
 
+/* ── CATÁLOGO DO MENU (splitbill.config, chave `menu_artigos`) ───────────
+   O menu deixou de se adivinhar pelo nome e de viver só dentro de cada evento:
+   há uma lista de artigos do grupo — nome, símbolo, categoria e preço — que o
+   admin trata em Definições › Menu do Sá. É o que dá autonomia para acrescentar
+   um artigo novo sem que ninguém tenha de mexer nos padrões do `_EV_ICO`.
+
+   PREÇOS: o catálogo manda apenas nos eventos POR OCORRER. Um jogo já aberto
+   (ou já fechado) tem o seu `ev.menu`, tirado no momento em que abriu, e é esse
+   que vale — mudar o preço da imperial hoje não pode mexer no que a mesa de
+   Março ficou a dever. As ordens já lançadas nunca são tocadas: têm o
+   `precoUnitario` congelado desde que foram registadas.
+
+   `null` = a chave ainda não existe (ou a tabela splitbill.config não foi
+   criada, db/config-convocados.sql). Aí a app comporta-se exactamente como
+   antes: o menu vem do evento, ou do agregado de todos os eventos. */
+let MENU_CATALOGO = null;
+let CONFIG_TABELA = true;    // false = splitbill.config não existe (migração por correr)
+let _menuCatIndice = null;   // nome em minúsculas → artigo (refeito a cada carga)
+
+function _menuCatNormalizar(lista) {
+    const vistos = new Set();
+    return (Array.isArray(lista) ? lista : []).map(a => {
+        if (!a) return null;
+        const nome = String(a.nome == null ? '' : a.nome).trim();
+        const preco = Number(a.preco);
+        if (!nome || !isFinite(preco) || preco <= 0) return null;
+        const chave = nome.toLowerCase();
+        if (vistos.has(chave)) return null;
+        vistos.add(chave);
+        return {
+            nome: nome,
+            cat: _EV_CATS[a.cat] ? a.cat : '',
+            ico: (a.ico && _evSimbolo(a.ico)) ? a.ico : '',
+            emoji: _evEmojiLimpo(a.emoji),
+            preco: Math.round(preco * 100) / 100
+        };
+    }).filter(Boolean);
+}
+
+function _menuCatIndexar() {
+    _menuCatIndice = new Map();
+    (MENU_CATALOGO || []).forEach(a => _menuCatIndice.set(a.nome.toLowerCase(), a));
+}
+
+// O artigo do catálogo com este nome, ou null. Sem distinção de maiúsculas:
+// "Imperial" e "imperial" são o mesmo artigo em qualquer menu escrito à mão.
+function catalogoArtigo(nome) {
+    if (!MENU_CATALOGO || !MENU_CATALOGO.length) return null;
+    if (!_menuCatIndice) _menuCatIndexar();
+    return _menuCatIndice.get(String(nome || '').trim().toLowerCase()) || null;
+}
+
+// O catálogo no formato do `menu` de trabalho: { nome: preço }.
+function catalogoMenuObj() {
+    const m = {};
+    (MENU_CATALOGO || []).forEach(a => { m[a.nome] = a.preco; });
+    return m;
+}
+
+async function carregarMenuCatalogo() {
+    try {
+        const r = await sbFetch(`${SB_URL}/rest/v1/config?chave=eq.menu_artigos&select=valor`,
+            { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        CONFIG_TABELA = r.ok;
+        if (!r.ok) { MENU_CATALOGO = null; _menuCatIndice = null; return; }
+        const rows = await r.json();
+        const lista = rows && rows[0] && rows[0].valor && rows[0].valor.artigos;
+        MENU_CATALOGO = Array.isArray(lista) ? _menuCatNormalizar(lista) : null;
+    } catch(e) {
+        console.warn('[SplitBill] catálogo do menu indisponível — o menu volta a vir de cada evento');
+        MENU_CATALOGO = null;
+        CONFIG_TABELA = false;
+    }
+    _menuCatIndice = null;
+}
+
+async function guardarMenuCatalogo(lista) {
+    if (!isAdmin()) { mostrarMensagem('⚠️ Apenas o administrador pode alterar o menu', false); return false; }
+    const limpa = _menuCatNormalizar(lista);
+    try {
+        // Upsert na chave: a linha pode ainda não existir neste projeto.
+        await sbOk(await sbFetch(`${SB_URL}/rest/v1/config`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+            body: JSON.stringify({
+                chave: 'menu_artigos',
+                valor: { artigos: limpa },
+                atualizado_em: new Date().toISOString(),
+                atualizado_por: emailSessao()
+            })
+        }), 'guardar o menu');
+        MENU_CATALOGO = limpa;
+        _menuCatIndice = null;
+        return true;
+    } catch(e) {
+        mostrarMensagem('⚠️ Não gravado: ' + sbErroLegivel(e), false);
+        return false;
+    }
+}
+
+// Evento que ainda não aconteceu: em agenda (por abrir) e sem conta fechada.
+// É a estes — e só a estes — que os preços novos do catálogo se aplicam.
+function eventoPorOcorrer(ev) {
+    return !!ev && !ev.totalFatura && !jogoAberto(ev);
+}
+
+// O menu com que um evento novo nasce.
+function menuBaseNovoEvento() {
+    const cat = catalogoMenuObj();
+    return Object.keys(cat).length ? cat : menuAgregadoGlobal();
+}
+
+/* O menu de trabalho de um evento. Por ocorrer → o catálogo, sempre fresco
+   (é o que faz um preço novo chegar aos jogos que faltam sem tocar nos que já
+   foram). Já aberto ou fechado → a fotografia guardada em `ev.menu`, como
+   sempre; e se esse vier vazio (eventos anteriores a db/convocados-menu.sql),
+   o agregado de todos os eventos, para o + não ficar sem artigos. */
+function menuDoEvento(ev) {
+    if (eventoPorOcorrer(ev)) {
+        const cat = catalogoMenuObj();
+        if (Object.keys(cat).length) return cat;
+    }
+    if (ev && ev.menu && Object.keys(ev.menu).length) return JSON.parse(JSON.stringify(ev.menu));
+    return menuAgregadoGlobal();
+}
+
 /* Evento a abrir quando não há um escolhido (arranque, importação, o evento
    aberto foi apagado). Era "o último do histórico" — o último a ser CRIADO —
    e com o calendário da época criado de uma vez (do Goals) isso passou a
@@ -6884,6 +7089,9 @@ async function sbCarregarDados() {
         // Convocados por defeito (splitbill.config, db/config-convocados.sql).
         // Sem a migração fica null e amigosPorDefeito() volta à heurística antiga.
         await carregarConvocadosDefault();
+        // Catálogo do menu (mesma tabela). Sem ele, o menu volta a vir de cada
+        // evento — ver menuDoEvento().
+        await carregarMenuCatalogo();
 
         // Reconstruir historico no formato esperado pela app
         // Faturas já guardadas neste dispositivo: sem a migração o servidor não
@@ -8094,6 +8302,261 @@ async function convGuardar() {
     if (!ok) return;
     fecharConvocados();
     mostrarMensagem('✓ Convocados por defeito guardados (' + _convSel.length + ')', true);
+}
+
+/* ── MENU DO SÁ: o catálogo de artigos (painel do admin) ─────────────────
+   Nome · símbolo · categoria · preço, sem ter de mexer no código. A lista em
+   edição vive em `_mcatLista` até se carregar em Guardar, como nos convocados:
+   assim mexer e fechar sem gravar não muda nada. `_mcatEdit` é o índice do
+   artigo aberto na ficha (-1 = artigo novo, null = a ver a lista). */
+let _mcatLista = [];
+let _mcatEdit = null;
+let _mcatForm = null;
+let _mcatSujo = false;
+
+async function abrirMenuArtigos() {
+    if (!isAdmin()) { mostrarMensagem('⚠️ Apenas o administrador pode alterar o menu', false); return; }
+    // Reler antes de desenhar: noutro dispositivo o menu pode ter mudado, e
+    // gravar por cima de memória velha apagava essa alteração.
+    await carregarMenuCatalogo();
+    if (!CONFIG_TABELA) {
+        mostrarMensagem('⚠️ Falta correr db/config-convocados.sql no Supabase', false);
+        return;
+    }
+    // Primeira vez: o catálogo arranca com os artigos que já andam pelos
+    // eventos, para não se começar de uma folha em branco. Só fica gravado
+    // quando o admin carregar em Guardar.
+    if (MENU_CATALOGO && MENU_CATALOGO.length) {
+        _mcatLista = MENU_CATALOGO.map(a => Object.assign({}, a));
+        _mcatSujo = false;
+    } else {
+        const base = menuAgregadoGlobal();
+        _mcatLista = Object.keys(base).map(nome => ({
+            nome: nome, cat: '', ico: '', emoji: '', preco: base[nome]
+        }));
+        _mcatSujo = _mcatLista.length > 0;
+    }
+    _mcatEdit = null;
+    document.getElementById('page-menu-artigos').style.display = 'flex';
+    renderMenuArtigos();
+}
+
+async function fecharMenuArtigos() {
+    if (_mcatSujo) {
+        const ok = await mostrarModal({
+            icon: '🍽️',
+            title: 'Sair sem guardar?',
+            msg: 'Há alterações ao menu por gravar. Se saíres agora, perdem-se.',
+            confirmText: 'Sair',
+            cancelText: 'Continuar a editar',
+            danger: true
+        });
+        if (!ok) return;
+    }
+    _mcatSujo = false;
+    _mcatEdit = null;
+    document.getElementById('page-menu-artigos').style.display = 'none';
+}
+
+// A lista, agrupada e ordenada como a grelha do + (categorias por _EV_CAT_ORDEM,
+// e dentro de cada uma o mais consumido primeiro): quem procura um artigo aqui
+// procura-o no mesmo sítio onde o vê no evento.
+// A lista em edição ainda não é o catálogo gravado, por isso a categoria e o
+// símbolo saem do artigo em mãos (`_mcatLista`) e não do que está no servidor.
+function _mcatCategoria(a) {
+    if (a.cat) return a.cat;
+    const sim = a.ico ? _evSimbolo(a.ico) : null;
+    return sim ? sim.cat : _evIcoAuto(a.nome).cat;
+}
+
+function _mcatIconeHTML(a) {
+    const sim = a.ico ? _evSimbolo(a.ico) : null;
+    if (sim) return sim.svg;
+    if (a.emoji) return _evGlifo(a.emoji);
+    return _evIcoAuto(a.nome).svg;
+}
+
+function renderMenuArtigos() {
+    const body = document.getElementById('mcat-body');
+    const foot = document.getElementById('mcat-foot');
+    if (!body) return;
+    if (_mcatEdit !== null) { _mcatRenderFicha(body, foot); return; }
+
+    foot.innerHTML = '<button class="mcat-add" onclick="mcatNovo()">+ Novo artigo</button>'
+        + '<button id="mcat-guardar" class="mcat-save" onclick="mcatGuardar()">Guardar</button>';
+
+    if (!_mcatLista.length) {
+        body.innerHTML = '<p class="mcat-vazio">O menu está vazio. Acrescenta o primeiro artigo.</p>';
+        return;
+    }
+    const pop = _evPopularidade();
+    const idx = _mcatLista.map((a, i) => i);
+    const grupos = {};
+    idx.forEach(i => {
+        const c = _mcatCategoria(_mcatLista[i]);
+        (grupos[c] || (grupos[c] = [])).push(i);
+    });
+    const cats = _EV_CAT_ORDEM.filter(c => grupos[c]);
+    body.innerHTML = cats.map(c => {
+        const linhas = grupos[c].sort((x, y) => {
+            const nx = pop[_mcatLista[x].nome.toLowerCase()] || 0;
+            const ny = pop[_mcatLista[y].nome.toLowerCase()] || 0;
+            return (ny - nx) || _mcatLista[x].nome.localeCompare(_mcatLista[y].nome, 'pt');
+        }).map(i => {
+            const a = _mcatLista[i];
+            return '<div class="mcat-row">'
+                + '<span class="mcat-ic ev-c-' + c + '">' + _mcatIconeHTML(a) + '</span>'
+                + '<span class="mcat-nome">' + _evEsc(a.nome) + '</span>'
+                + '<span class="mcat-preco">€' + a.preco.toFixed(2) + '</span>'
+                + '<button class="mcat-b" onclick="mcatEditar(' + i + ')" aria-label="Editar">✏️</button>'
+                + '<button class="mcat-b mcat-x" onclick="mcatRemover(' + i + ')" aria-label="Remover">×</button>'
+                + '</div>';
+        }).join('');
+        return '<div class="mcat-grupo"><span>' + _EV_CATS[c] + '</span><i>' + grupos[c].length + '</i></div>' + linhas;
+    }).join('');
+}
+
+function _mcatRenderFicha(body, foot) {
+    const f = _mcatForm;
+    const cats = [['', 'Automática']].concat(_EV_CAT_ORDEM.map(c => [c, _EV_CATS[c]]));
+    // Aspas SIMPLES no onclick: o atributo vai entre aspas duplas, e um
+    // JSON.stringify aqui fechava-o a meio — o clique deixava de existir. Os
+    // ids das categorias e dos símbolos são [a-z], não texto livre de ninguém.
+    const segs = cats.map(([v, txt]) =>
+        '<button type="button" class="mcat-seg' + (f.cat === v ? ' on' : '') + '" onclick="mcatCat(\'' + v + '\')">' + txt + '</button>').join('');
+    const tiles = ['<button type="button" class="mcat-sim' + (!f.ico && !f.emoji ? ' on' : '') + '" onclick="mcatIco(\'\')">'
+        + '<span class="mcat-simic ev-c-' + _evIcoAuto(f.nome || '?').cat + '">' + _evIcoAuto(f.nome || '?').svg + '</span><b>Automático</b></button>']
+        .concat(_EV_SIMBOLOS.map(s =>
+            '<button type="button" class="mcat-sim' + (f.ico === s.id ? ' on' : '') + '" onclick="mcatIco(\'' + s.id + '\')">'
+            + '<span class="mcat-simic ev-c-' + s.cat + '">' + s.svg + '</span><b>' + _evEsc(s.nome) + '</b></button>')).join('');
+
+    body.innerHTML = '<div class="mcat-ficha">'
+        + '<label class="mcat-lbl">Nome</label>'
+        + '<input type="text" id="mcat-f-nome" value="' + _evEsc(f.nome).replace(/"/g, '&quot;') + '" placeholder="Imperial" autocomplete="off">'
+        + '<label class="mcat-lbl">Preço (€)</label>'
+        + '<input type="number" id="mcat-f-preco" value="' + (f.preco || '') + '" min="0" step="0.10" inputmode="decimal" placeholder="1.50">'
+        + '<label class="mcat-lbl">Categoria</label>'
+        + '<div class="mcat-segs">' + segs + '</div>'
+        + '<label class="mcat-lbl">Símbolo</label>'
+        + '<div class="mcat-sims">' + tiles + '</div>'
+        + '<label class="mcat-lbl">…ou um emoji</label>'
+        + '<input type="text" id="mcat-f-emoji" value="' + _evEsc(f.emoji) + '" maxlength="4" placeholder="🥟" onchange="mcatEmoji(this.value)">'
+        + '<p class="mcat-dica">Em automático, o símbolo e a categoria saem do nome do artigo.</p>'
+        + '</div>';
+    foot.innerHTML = '<button class="mcat-add" onclick="mcatFecharFicha()">Cancelar</button>'
+        + '<button class="mcat-save" onclick="mcatAplicarFicha()">' + (_mcatEdit === -1 ? 'Juntar ao menu' : 'Aplicar') + '</button>';
+}
+
+// O que está escrito nos campos, antes de redesenhar a ficha (tocar numa
+// categoria não pode apagar o nome que já lá estava).
+function _mcatLerCampos() {
+    const n = document.getElementById('mcat-f-nome');
+    const p = document.getElementById('mcat-f-preco');
+    const e = document.getElementById('mcat-f-emoji');
+    if (n) _mcatForm.nome = n.value;
+    if (p) _mcatForm.preco = p.value;
+    if (e) _mcatForm.emoji = _evEmojiLimpo(e.value);
+}
+
+function mcatNovo() {
+    _mcatForm = { nome: '', cat: '', ico: '', emoji: '', preco: '' };
+    _mcatEdit = -1;
+    renderMenuArtigos();
+}
+
+function mcatEditar(i) {
+    const a = _mcatLista[i];
+    if (!a) return;
+    _mcatForm = { nome: a.nome, cat: a.cat, ico: a.ico, emoji: a.emoji, preco: a.preco };
+    _mcatEdit = i;
+    renderMenuArtigos();
+}
+
+function mcatFecharFicha() {
+    _mcatEdit = null;
+    _mcatForm = null;
+    renderMenuArtigos();
+}
+
+function mcatCat(c) {
+    _mcatLerCampos();
+    _mcatForm.cat = c;
+    renderMenuArtigos();
+}
+
+// Símbolo e emoji são a mesma pergunta com duas respostas: escolher um limpa o
+// outro, senão ficavam dois desenhos para o mesmo artigo.
+function mcatIco(id) {
+    _mcatLerCampos();
+    _mcatForm.ico = id;
+    if (id) _mcatForm.emoji = '';
+    renderMenuArtigos();
+}
+
+function mcatEmoji(v) {
+    _mcatLerCampos();
+    _mcatForm.emoji = _evEmojiLimpo(v);
+    if (_mcatForm.emoji) _mcatForm.ico = '';
+    renderMenuArtigos();
+}
+
+function mcatAplicarFicha() {
+    _mcatLerCampos();
+    const nome = String(_mcatForm.nome || '').trim();
+    const preco = parseFloat(String(_mcatForm.preco).replace(',', '.'));
+    if (!nome) { mostrarMensagem('⚠️ O artigo precisa de um nome', false); return; }
+    if (!isFinite(preco) || preco <= 0) { mostrarMensagem('⚠️ Preço inválido', false); return; }
+    const repetido = _mcatLista.some((a, i) => i !== _mcatEdit && a.nome.toLowerCase() === nome.toLowerCase());
+    if (repetido) { mostrarMensagem('⚠️ Já existe um artigo com esse nome', false); return; }
+    const artigo = {
+        nome: nome,
+        cat: _mcatForm.cat || '',
+        ico: _mcatForm.ico || '',
+        emoji: _mcatForm.emoji || '',
+        preco: Math.round(preco * 100) / 100
+    };
+    if (_mcatEdit === -1) _mcatLista.push(artigo);
+    else _mcatLista[_mcatEdit] = artigo;
+    _mcatSujo = true;
+    mcatFecharFicha();
+}
+
+async function mcatRemover(i) {
+    const a = _mcatLista[i];
+    if (!a) return;
+    const ok = await mostrarModal({
+        icon: '🍽️',
+        title: 'Tirar do menu',
+        msg: 'Tirar <strong>' + _evEsc(a.nome) + '</strong> do menu?<br><br>Os jogos já abertos ou fechados ficam como estão — isto só muda o menu dos jogos que faltam.',
+        confirmText: 'Tirar',
+        cancelText: 'Cancelar',
+        danger: true
+    });
+    if (!ok) return;
+    _mcatLista.splice(i, 1);
+    _mcatSujo = true;
+    renderMenuArtigos();
+}
+
+async function mcatGuardar() {
+    const btn = document.getElementById('mcat-guardar');
+    if (btn) { btn.disabled = true; btn.textContent = 'A guardar…'; }
+    const ok = await guardarMenuCatalogo(_mcatLista);
+    if (btn) { btn.disabled = false; btn.textContent = 'Guardar'; }
+    if (!ok) return;
+    _mcatSujo = false;
+    document.getElementById('page-menu-artigos').style.display = 'none';
+    // O evento aberto no ecrã pode ser um dos que o catálogo manda (por
+    // ocorrer): sem isto o menu novo só aparecia depois de trocar de evento.
+    const ev = historico.find(h => h.id === eventoAtualId);
+    if (ev && eventoPorOcorrer(ev)) {
+        menu = menuDoEvento(ev);
+        renderConfigMenu();
+        renderDropdownItens();
+        renderOfertaDropdowns();
+        atualizarUI();
+    }
+    mostrarMensagem('✓ Menu guardado (' + _mcatLista.length + ' artigos)', true);
 }
 
 async function abrirEquivalencias() {
