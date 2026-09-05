@@ -2341,7 +2341,11 @@ function exportarPDFDivisao() {
             const base = contaPorPessoa[p] || 0;
             const delta = saldoOfertas[p] || 0;
             const total = base + delta;
-            const ajustado = racio ? total * racio : null;
+            // Usa o valor já fixado nas dívidas (arredondamento Hamilton) quando existe,
+            // para o PDF bater sempre certo com o que fica a pagamento — recalcular pelo
+            // rácio aqui arredondava cada pessoa isolada e podia ficar 1 cêntimo diferente.
+            const divida = estado.dividas && estado.dividas[p];
+            const ajustado = divida ? divida.valor : (racio ? total * racio : null);
             const deltaStr = delta !== 0 ? `<span style="color:#B8911F;font-size:12px;">${delta>0?'+':''}€${delta.toFixed(2)}</span>` : '<span style="color:#C8D0C8;">—</span>';
             const consumos = {};
             estado.ordens.forEach(o => {
