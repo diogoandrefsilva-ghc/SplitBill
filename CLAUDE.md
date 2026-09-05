@@ -320,8 +320,12 @@ paga chama **`divisaoDoEvento(ev)`** — e mais nada.
   pessoa, o seu zoom, a folha da pessoa, o PDF da divisão) passam todos pelo
   `_evValorFinalPessoa`. **Sítio novo que mostre o que alguém paga = passa por
   aqui**, senão volta a haver dois números para a mesma pessoa.
-- A folha da pessoa lista o **consumo** e, por baixo, a linha **Acerto da
-  fatura**: sem ela as linhas não somavam o total do cabeçalho.
+- A folha da pessoa lista o **consumo** e, num cartão à parte, os **dois
+  totais**: `Consumo` (aos preços do menu) · `Acerto da fatura` · `Total final`.
+  Com um só total o número do cabeçalho não se explicava a partir das linhas de
+  cima. O acerto tira-se do **consumo já arredondado** (`Math.round(bruto*100)/100`)
+  e não do valor cru — senão um consumo de 10.375, mostrado 10.38, deixava os
+  três números a um cêntimo de fechar.
 
 ## O ecrã do evento: quatro quadrantes, sem scroll de página
 O evento era uma página comprida: adicionar ordem, ordens registadas, ofertas,

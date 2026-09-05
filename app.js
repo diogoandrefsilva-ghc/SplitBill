@@ -928,16 +928,24 @@ function evAbrirLinha(tipo, chave) {
         const racioAtual = (estado.totalFatura && totalMesaAtual) ? estado.totalFatura / totalMesaAtual : null;
         const bruto = base + (saldo[pessoa] || 0);
         const total = _evValorFinalPessoa(pessoa, bruto, racioAtual, contaFinalFixada());
-        // As linhas acima são o consumo; o que a fatura acertou tem de aparecer,
-        // senão a lista não soma o total que está no cabeçalho.
-        const acerto = total - bruto;
-        if (Math.abs(acerto) >= 0.005) {
-            linhas.push(_evDrow('Acerto da fatura', 'repartido pelo consumo',
-                (acerto > 0 ? '+€' : '−€') + Math.abs(acerto).toFixed(2)));
-        }
+        // Os DOIS totais, em cartão próprio: o que a pessoa consumiu aos preços
+        // do menu e o que fica mesmo a pagamento depois de a fatura da casa
+        // acertar a mesa. Com um só, o número do cabeçalho não se explicava a
+        // partir das linhas de cima.
+        // O acerto tira-se do consumo JÁ ARREDONDADO, senão os três números
+        // mostrados não somam: com um consumo de 10.375 (mostrado 10.38), um
+        // acerto tirado do valor cru deixava a conta a um cêntimo de fechar.
+        const consumo = Math.round(bruto * 100) / 100;
+        const acerto = Math.round((total - consumo) * 100) / 100;
+        const totais = estado.totalFatura ? '<div class="ev-card">'
+            + _evDrow('Consumo', 'aos preços do menu', '€' + consumo.toFixed(2))
+            + (Math.abs(acerto) >= 0.005 ? _evDrow('Acerto da fatura', 'repartido pelo consumo',
+                (acerto > 0 ? '+€' : '−€') + Math.abs(acerto).toFixed(2)) : '')
+            + _evDrow('Total final', 'é este que fica a pagamento', '€' + total.toFixed(2), 'ev-dtot')
+            + '</div>' : '';
         tit.textContent = pessoa;
         sub.textContent = '€' + total.toFixed(2) + (estado.totalFatura ? ' · valor final' : ' por confirmar');
-        body.innerHTML = '<div class="ev-card">' + (linhas.length ? linhas.join('') : _evDrow('Sem consumo marcado', '', '')) + '</div>';
+        body.innerHTML = '<div class="ev-card">' + (linhas.length ? linhas.join('') : _evDrow('Sem consumo marcado', '', '')) + '</div>' + totais;
     }
 
     evAbrirSheet('ev-sheet-linha');

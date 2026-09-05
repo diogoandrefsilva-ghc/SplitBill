@@ -2222,6 +2222,12 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
 /* Linhas de oferta: dourado, como tudo o que mexe na conta dos outros. */
 .ev-drow.ev-of .ev-drow-t, .ev-drow.ev-of .ev-drow-v { color: #8A6D14; }
 .ev-drow.ev-of .ev-drow-s { color: #A89253; }
+/* O cartão dos totais vem a seguir ao do consumo, e precisa de ar entre os
+   dois — colados liam-se como uma lista só. */
+.ev-card + .ev-card { margin-top: 9px; }
+/* Dos dois totais manda o que fica a pagamento. */
+.ev-drow.ev-dtot .ev-drow-t { font-weight: 700; font-size: 18px; }
+.ev-drow.ev-dtot .ev-drow-v { font-weight: 700; font-size: 15px; }
 
 /* Linha de lista dentro de uma folha (Relatórios). Sem isto os botões caíam
    no `button` global — verde, maiúsculas e com os SVG sem tamanho, o que dava
