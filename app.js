@@ -1030,13 +1030,15 @@ function evRenderZoom() {
             o.amigos.forEach(a => {
                 base[a] = (base[a] || 0) + quota;
                 // Unidades inteiras contam-se ("1× Café"); o que foi partilhado
-                // mostra-se pela divisão ("Costeletão ÷3") — "0.33× Costeletão"
-                // não é coisa que alguém tenha comido.
+                // mostra-se pela divisão ("2× Costeletão ÷3") — "0.66× Costeletão"
+                // não é coisa que alguém tenha comido. A quantidade da ordem vai
+                // junto: "÷3" sozinho não dizia se eram 1 ou 2 costeletões.
                 const g = itens[a] || (itens[a] = {});
                 const q = o.quantidade / o.amigos.length;
                 const e = g[o.item] || (g[o.item] = { qtd: 0, div: [] });
                 if (Number.isInteger(q)) e.qtd += q;
-                else if (e.div.indexOf(o.amigos.length) < 0) e.div.push(o.amigos.length);
+                else if (!e.div.some(d => d.q === o.quantidade && d.n === o.amigos.length))
+                    e.div.push({ q: o.quantidade, n: o.amigos.length });
             });
         });
         let soma = 0;
@@ -1050,7 +1052,8 @@ function evRenderZoom() {
                     const e = meus[it];
                     const partes = [];
                     if (e.qtd) partes.push(e.qtd + '× ' + _evEsc(it));
-                    if (e.div.length) partes.push(_evEsc(it) + ' <i>÷' + e.div.sort((x, y) => x - y).join('/') + '</i>');
+                    e.div.sort((x, y) => x.n - y.n).forEach(d =>
+                        partes.push((d.q > 1 ? d.q + '× ' : '') + _evEsc(it) + ' <i>÷' + d.n + '</i>'));
                     return partes.join(', ');
                 }).join(', ');
             const partes = [];
