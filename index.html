@@ -700,11 +700,15 @@ async function apagarEventoAtual() {
 /* ── Pull-to-refresh v2 (só DADOS, só standalone): badge + dim + spinner central ── */
 async function __ptrDoRefresh(){
   if (!_sbSession) return;
-  // flush do auto-save pendente (debounce de 2s) antes de ler — evita perder a última edição
+  // flush do auto-save pendente (debounce de 2s) antes de ler — evita perder a última edição.
+  // Mesma guarda que o sbScheduleAutoSave() do app.js: só quem pode editar o
+  // evento (admin/substituto) tem PATCH em `eventos` — para os outros isto
+  // falhava sempre por RLS (0 linhas), e sbGuardarEvento lia isso como "evento
+  // apagado".
   if (_sbAutoSaveTimer){
     clearTimeout(_sbAutoSaveTimer); _sbAutoSaveTimer = null;
     const ev = historico.find(e => e.id === eventoAtualId);
-    if (ev) { try { await sbGuardarEvento(ev); } catch(_){} }
+    if (ev && podeEditarEvento(ev)) { try { await sbGuardarEvento(ev); } catch(_){} }
   }
   await sbEnsureFresh();
   await sbCarregarDados();
