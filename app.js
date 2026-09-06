@@ -4385,7 +4385,7 @@ async function registarPagamento() {
     const selEvento = document.getElementById('pgto-evento');
     const eventoId = selEvento.value;
     if (!eventoId) { mostrarPgtoMsg('⚠️ Seleciona o evento', false); return; }
-    if (!podeEditarPagamentoDoEvento(eventoId)) { mostrarPgtoMsg('⚠️ Sem permissão para registar pagamentos deste evento', false); return; }
+    if (!podeRegistarDiretamente(pessoa, eventoId)) { mostrarPgtoMsg('⚠️ Sem permissão para registar pagamentos deste evento', false); return; }
     const valor = parseFloat(selEvento.selectedOptions[0].dataset.valor);
 
     // Check for duplicate: same pessoa + same eventoId already paid
@@ -4433,7 +4433,7 @@ async function prescreverDivida() {
     const selEvento = document.getElementById('pgto-evento');
     const eventoId = selEvento.value;
     if (!eventoId) { mostrarPgtoMsg('⚠️ Seleciona o evento', false); return; }
-    if (!podeEditarPagamentoDoEvento(eventoId)) { mostrarPgtoMsg('⚠️ Sem permissão para editar dívidas deste evento', false); return; }
+    if (!podeRegistarDiretamente(pessoa, eventoId)) { mostrarPgtoMsg('⚠️ Sem permissão para editar dívidas deste evento', false); return; }
     const valor = parseFloat(selEvento.selectedOptions[0].dataset.valor);
 
     const existente = pagamentos.find(p => p.pessoa === pessoa && String(p.eventoId) === String(eventoId));
