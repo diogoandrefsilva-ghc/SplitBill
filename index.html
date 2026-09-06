@@ -949,6 +949,7 @@ if ('serviceWorker' in navigator) {
 .sbi-pedido-pessoa{font-family:var(--display,'Barlow Condensed',sans-serif);font-weight:700;font-size:17px;color:var(--ink,#1B231F);}
 .sbi-pedido-evento{font-size:11.5px;color:var(--ink-soft,#5B6661);margin-top:2px;}
 .sbi-pedido-valor{display:block;font-weight:800;font-size:15px;color:#8A6D14;margin-top:4px;}
+.sbi-pedido-nota{margin-top:10px;font-size:11.5px;color:var(--ink-soft,#5B6661);}
 .sbi-pedido-acoes{display:flex;gap:8px;margin-top:10px;}
 .sbi-pedido-btn{flex:1;border:none;border-radius:8px;padding:8px 10px;font-size:12.5px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;}
 .sbi-pedido-btn svg{width:14px;height:14px;}
@@ -1477,24 +1478,31 @@ if ('serviceWorker' in navigator) {
     return s;
   }
 
-  // Pedidos de pagamento declarados pelos utilizadores ("já paguei"), por
-  // confirmar pelo admin, substituto, ou pelo pagador desse evento em
-  // específico — ver declararPagamento()/confirmarPedidoPagamento() em app.js.
-  // Só aparece a quem tem pelo menos um pedido para agir.
+  // Pedidos de pagamento declarados pelos utilizadores ("já paguei"). Quem
+  // recebe (o pagador do evento) ou o substituto veem Confirmar/Rejeitar —
+  // ver podeConfirmarPedidosDoEvento()/confirmarPedidoPagamento() em app.js.
+  // O admin, quando não é nenhum dos dois, vê o pedido na mesma (para
+  // acompanhar) mas só de leitura: quem diz que recebeu é quem recebeu.
   function cardPedidoPagamento(p){
     var ev = getHist().filter(function(h){ return String(h.id)===String(p.eventoId); })[0];
     var evNome = esc(ev ? (ev.descricao || 'Sem nome') : 'Evento removido');
     var evData = ev && ev.data ? esc(ev.data) : '';
+    var podeAgir = false;
+    try { podeAgir = typeof podeConfirmarPedidosDoEvento==='function' && podeConfirmarPedidosDoEvento(p.eventoId); } catch(e){}
+    var acoes = podeAgir
+      ? '<div class="sbi-pedido-acoes">'
+        + '<button class="sbi-pedido-btn confirmar" onclick="confirmarPedidoPagamento('+p.id+')">'+CHK+' Confirmar</button>'
+        + '<button class="sbi-pedido-btn rejeitar" onclick="rejeitarPedidoPagamento('+p.id+')">Rejeitar</button>'
+        + '</div>'
+      : '<div class="sbi-pedido-nota">A aguardar confirmação de '+esc(ev && ev.pagador || 'quem recebeu')+'</div>';
     return '<div class="sbi-pedido">'
       + '<div class="sbi-pedido-info">'
       + '<span class="sbi-pedido-pessoa">'+esc(p.pessoa)+'</span>'
       + '<span class="sbi-pedido-evento">'+evNome+(evData?' · '+evData:'')+'</span>'
       + '</div>'
       + '<span class="sbi-pedido-valor">'+eur(p.valor)+'</span>'
-      + '<div class="sbi-pedido-acoes">'
-      + '<button class="sbi-pedido-btn confirmar" onclick="confirmarPedidoPagamento('+p.id+')">'+CHK+' Confirmar</button>'
-      + '<button class="sbi-pedido-btn rejeitar" onclick="rejeitarPedidoPagamento('+p.id+')">Rejeitar</button>'
-      + '</div></div>';
+      + acoes
+      + '</div>';
   }
   function pedidosPagamentoHtml(){
     var pend = [];
