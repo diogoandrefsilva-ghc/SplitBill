@@ -3896,7 +3896,14 @@ function renderContasSaldos(lista, resumo) {
             if ((ehEu(e.pagador) || isAdmin()) && !ehEu(pessoa) && PUSH_COL) {
                 acaoHtml += '<button class="btn-lembrar" onclick="event.stopPropagation();enviarLembretePagamento(\'' + pessoaEsc + '\',' + e.eventoId + ',' + e.restante + ')">\ud83d\udd14 Lembrar</button>';
             }
-            return '<div class="saldo-evento-row"' + (hasToken ? ' style="cursor:pointer;" onclick="abrirPagamentoPrePreenchido(\'' + pessoaEsc + '\',' + e.eventoId + ')" title="Clica para registar pagamento"' : '') + '>'
+            // Dar como pago diretamente: quem recebe (pagador do evento), o
+            // admin ou o substituto \u2014 para quem n\u00e3o usou o "J\u00e1 paguei?".
+            // Bot\u00e3o expl\u00edcito em vez de s\u00f3 a linha clic\u00e1vel, sen\u00e3o passa
+            // despercebido ao lado do "Lembrar".
+            if (hasToken) {
+                acaoHtml += '<button class="btn-marcar-pago" onclick="event.stopPropagation();abrirPagamentoPrePreenchido(\'' + pessoaEsc + '\',' + e.eventoId + ')">\u2714 Dar como pago</button>';
+            }
+            return '<div class="saldo-evento-row">'
                 + '<div class="saldo-evento-info">'
                 + '<span class="saldo-evento-nome">\u26BD ' + e.descricao + '</span>'
                 + '<span class="saldo-evento-data">' + (e.data || '\u2014') + '</span>'
@@ -4530,12 +4537,12 @@ async function declararPagamento(pessoa, eventoId, valor) {
     if (!PAGAMENTOS_PENDENTE_COL) { mostrarMensagem('⚠️ Funcionalidade indisponível — falta uma migração na BD', false); return; }
     if (!ehEu(pessoa)) { mostrarMensagem('⚠️ Só podes declarar os teus próprios pagamentos', false); return; }
     const jaPendente = pagamentos.find(p => p.tipo === 'pendente' && p.pessoa === pessoa && String(p.eventoId) === String(eventoId));
-    if (jaPendente) { mostrarMensagem('⏳ Já enviaste este pedido — aguarda confirmação do admin.', false); return; }
+    if (jaPendente) { mostrarMensagem('⏳ Já enviaste este pedido — aguarda confirmação de quem recebeu.', false); return; }
 
     const ok = await mostrarModal({
         icon: '💸',
         title: 'Já pagaste?',
-        msg: 'Confirmas que já pagaste os <strong>€' + valor.toFixed(2) + '</strong>?<br><br>Fica pendente até o admin confirmar — não é definitivo.',
+        msg: 'Confirmas que já pagaste os <strong>€' + valor.toFixed(2) + '</strong>?<br><br>Fica pendente até quem recebeu confirmar — não é definitivo.',
         confirmText: 'Sim, já paguei',
         cancelText: 'Cancelar'
     });
@@ -4567,7 +4574,7 @@ async function declararPagamento(pessoa, eventoId, valor) {
     renderContas();
     refrescarInicioSeVisivel();
     sbNotificarPagamentoDeclarado(pessoa, novo.eventoId, valor);  // fire-and-forget, não bloqueia UI
-    mostrarMensagem('✓ Pedido enviado — aguarda confirmação do admin.', true);
+    mostrarMensagem('✓ Pedido enviado — aguarda confirmação de quem recebeu.', true);
 }
 
 // Anula a própria declaração (antes de o admin decidir). Só quem a fez pode.
@@ -4582,16 +4589,20 @@ async function cancelarDeclaracaoPagamento(id) {
     mostrarMensagem('Pedido cancelado', true);
 }
 
-// Pedidos que ESTE utilizador pode agir: o admin (e o substituto, via
-// podeEditarPagamentoDoEvento) vê todos; o pagador só os do(s) evento(s) que
-// ele próprio pagou.
+// Pedidos que aparecem a ESTE utilizador no ecrã inicial: o admin vê todos
+// (para acompanhar, mesmo sem poder agir nos que não são dele), o substituto
+// e o pagador só os do(s) evento(s) que lhes tocam — ver
+// podeConfirmarPedidosDoEvento() para quem, desses, ganha os botões de
+// confirmar/rejeitar.
 function pedidosPagamentoPendentes() {
-    return pagamentos.filter(p => p.tipo === 'pendente' && podeConfirmarPedidosDoEvento(p.eventoId));
+    return pagamentos.filter(p => p.tipo === 'pendente' && (isAdmin() || podeConfirmarPedidosDoEvento(p.eventoId)));
 }
 
-// Admin, substituto ou o pagador do evento confirmam um pedido: grava como
-// pagamento real (tipo='evento') e, se existia uma prescrição anterior para
-// o mesmo evento/pessoa, remove-a — o utilizador estava a corrigi-la.
+// Quem recebe (o pagador do evento) ou o substituto confirmam um pedido —
+// ver podeConfirmarPedidosDoEvento(); o admin só nos eventos sem pagador com
+// conta. Grava como pagamento real (tipo='evento') e, se existia uma
+// prescrição anterior para o mesmo evento/pessoa, remove-a — o utilizador
+// estava a corrigi-la.
 async function confirmarPedidoPagamento(id) {
     const p = pagamentos.find(pg => pg.id === id);
     if (!p || p.tipo !== 'pendente') return;
@@ -4620,8 +4631,9 @@ async function confirmarPedidoPagamento(id) {
     mostrarMensagem('✓ Pagamento de ' + p.pessoa + ' confirmado', true);
 }
 
-// Admin, substituto ou o pagador do evento rejeitam: a dívida volta a ficar
-// como estava antes (pendente, ou prescrita se já o era — essa não é tocada).
+// A mesma permissão de confirmar (podeConfirmarPedidosDoEvento) rejeita: a
+// dívida volta a ficar como estava antes (pendente, ou prescrita se já o
+// era — essa não é tocada).
 async function rejeitarPedidoPagamento(id) {
     const p = pagamentos.find(pg => pg.id === id);
     if (!p || p.tipo !== 'pendente') return;
@@ -6531,18 +6543,26 @@ function ehPagadorDoEvento(eventoId) {
     const ev = historico.find(h => String(h.id) === String(eventoId));
     return !!(ev && ev.pagador && ehEu(ev.pagador));
 }
-// Pode marcar esta dívida como paga diretamente (sem pedido pendente)? Ter
-// permissão de admin/substituto no evento não chega quando a dívida é a
-// própria — mesmo o admin tem de pedir "Já paguei?" e deixar quem pagou a
-// conta confirmar, para não se auto-confirmar pagamentos a si mesmo.
+// Pode marcar esta dívida como paga diretamente (sem pedido pendente)? Admin,
+// substituto OU o pagador do evento (é ele quem recebe, mesmo sem ser admin)
+// — mas nenhum deles quando a dívida é a própria: mesmo assim tem de pedir
+// "Já paguei?" e deixar quem recebe confirmar, para não se auto-confirmar
+// pagamentos a si mesmo.
 function podeRegistarDiretamente(pessoa, eventoId) {
-    return podeEditarPagamentoDoEvento(eventoId) && !(ehEu(pessoa) && PAGAMENTOS_PENDENTE_COL);
+    return (podeEditarPagamentoDoEvento(eventoId) || ehPagadorDoEvento(eventoId)) && !(ehEu(pessoa) && PAGAMENTOS_PENDENTE_COL);
 }
-// Pode confirmar/rejeitar pedidos de pagamento deste evento? Admin e
-// substituto (via podeEditarPagamentoDoEvento) sempre; o pagador só para os
-// pedidos DESTE evento — não ganha acesso aos outros.
+// Pode confirmar/rejeitar pedidos de pagamento deste evento? Substituto
+// sempre; o pagador só para os pedidos DESTE evento — não ganha acesso aos
+// outros. O admin, quando não é nenhum dos dois, só pode VER o pedido (ecrã
+// inicial/Pagamentos): quem diz que recebeu é sempre quem recebeu, nunca o
+// admin por ele. Exceção: se o pagador deste evento não tem conta ligada,
+// não há mais ninguém que o possa confirmar, e o admin volta a ser quem
+// confirma (como sempre foi antes de o pagador ter conta própria).
 function podeConfirmarPedidosDoEvento(eventoId) {
-    return podeEditarPagamentoDoEvento(eventoId) || ehPagadorDoEvento(eventoId);
+    const ev = historico.find(h => String(h.id) === String(eventoId));
+    if (ehSubstitutoDe(ev)) return true;
+    if (ehPagadorDoEvento(eventoId)) return true;
+    return isAdmin() && !(ev && ev.pagador && amigoUsers[ev.pagador]);
 }
 // Tem permissão para registar algum pagamento (admin ou tem eventos delegados)?
 function podeRegistarPagamentos() { return isAdmin() || eventosDelegados().length > 0; }
