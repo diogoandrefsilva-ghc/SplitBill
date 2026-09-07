@@ -3838,11 +3838,6 @@ function renderContasSaldos(lista, resumo) {
         .filter(p => saldos[p].saldo >= 0.01)
         .sort((a, b) => saldos[b].saldo - saldos[a].saldo);
 
-    // Não-admin: só dívidas próprias (sou o devedor) ou valores a receber por mim (sou o credor de algum evento pendente)
-    if (!isAdmin()) {
-        pessoas = pessoas.filter(p => ehEu(p) || saldos[p].eventos.some(e => e.restante >= 0.01 && ehEu(e.pagador)));
-    }
-
     if (pessoas.length === 0) {
         lista.innerHTML = '<div class="contas-vazio">✅ Não há dívidas pendentes</div>';
         resumo.innerHTML = '';
@@ -3861,9 +3856,7 @@ function renderContasSaldos(lista, resumo) {
             (porCredor[c] = porCredor[c] || []).push(e);
         });
         const subtotalDe = c => porCredor[c].reduce((t, e) => t + e.restante, 0);
-        let credores = Object.keys(porCredor).sort((a, b) => subtotalDe(b) - subtotalDe(a));
-        // Não-admin a ver dívida de outra pessoa: só os montantes que essa pessoa me deve a mim
-        if (!isAdmin() && !ehEu(pessoa)) credores = credores.filter(c => ehEu(c));
+        const credores = Object.keys(porCredor).sort((a, b) => subtotalDe(b) - subtotalDe(a));
 
         const renderEvento = e => {
             // Get consumption detail for this person in this event
@@ -3927,14 +3920,7 @@ function renderContasSaldos(lista, resumo) {
                 + '</div>';
         }).join('');
 
-        // Total a mostrar no cabeçalho da pessoa:
-        // - admin vê o saldo global da pessoa
-        // - não-admin vê apenas o que lhe é relevante (a sua própria dívida, ou o que essa pessoa lhe deve a si)
-        let totalCabecalho = s.saldo;
-        if (!isAdmin() && !ehEu(pessoa)) {
-            totalCabecalho = credores.reduce((t, c) => t + subtotalDe(c), 0);
-        }
-        totalCabecalho = Math.round(totalCabecalho * 100) / 100;
+        const totalCabecalho = Math.round(s.saldo * 100) / 100;
 
         return '<div class="saldo-pessoa-card">'
             + '<div class="saldo-pessoa-header">'
@@ -4084,7 +4070,7 @@ function renderContasEventos(lista, resumo) {
 
         // Pagador consumption row (gray, informational — not a debt)
         let pagadorConsumoHtml = '';
-        if (ev.pagador) {
+        if (ev.pagador && (isAdmin() || ehEu(ev.pagador))) {
             const pagadorConsumos = {};
             (ev.ordens || []).forEach(o => {
                 if (o.amigos.includes(ev.pagador)) {
