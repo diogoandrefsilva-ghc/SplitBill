@@ -5863,7 +5863,7 @@ async function marcarPresenca(id, vai) {
 
     let ok;
     if (podeEditarEvento(ev)) {
-        try { await sbGuardarEvento(ev); ok = true; } catch (e) { ok = false; }
+        try { await sbGuardarEvento(ev, { apenas: ['amigos', 'saHora'] }); ok = true; } catch (e) { ok = false; }
     } else {
         ok = await sbMarcarPresenca(ev.id, vai);
         // A lista e a hora vivem em colunas diferentes e a função do servidor
@@ -5912,7 +5912,7 @@ async function marcarPresencaJogo(id, vai) {
 
     let ok;
     if (podeEditarEvento(ev)) {
-        try { await sbGuardarEvento(ev); ok = true; } catch (e) { ok = false; }
+        try { await sbGuardarEvento(ev, { apenas: ['jogo', 'gamebox'] }); ok = true; } catch (e) { ok = false; }
     } else {
         ok = await sbMarcarPresencaJogo(ev.id, vai);
         // A resposta ao jogo e a box vivem em colunas diferentes e a função do
@@ -5954,7 +5954,7 @@ async function marcarGamebox(id, disp) {
 
     let ok;
     if (podeEditarEvento(ev)) {
-        try { await sbGuardarEvento(ev); ok = true; } catch (e) { ok = false; }
+        try { await sbGuardarEvento(ev, { apenas: ['gamebox'] }); ok = true; } catch (e) { ok = false; }
     } else {
         ok = await sbMarcarGamebox(ev.id, !!disp);
     }
@@ -6001,7 +6001,7 @@ async function marcarMesaHora(id, hora) {
 
     let ok;
     if (podeEditarEvento(ev)) {
-        try { await sbGuardarEvento(ev); ok = true; } catch (e) { ok = false; }
+        try { await sbGuardarEvento(ev, { apenas: ['mesaHora'] }); ok = true; } catch (e) { ok = false; }
     } else {
         ok = await sbMarcarMesaHora(ev.id, limpa);
     }
@@ -6038,7 +6038,7 @@ async function marcarHoraSa(id, hora) {
 
     let ok;
     if (podeEditarEvento(ev)) {
-        try { await sbGuardarEvento(ev); ok = true; } catch (e) { ok = false; }
+        try { await sbGuardarEvento(ev, { apenas: ['saHora'] }); ok = true; } catch (e) { ok = false; }
     } else {
         ok = await sbMarcarHoraSa(ev.id, limpa);
     }
@@ -7586,29 +7586,53 @@ async function sbSyncFilhos(tabelaPai, tabelaFilho, fkFilho, eventoId, itens, pr
 async function sbGuardarEvento(ev, opts) {
     if (!_sbSession) return;
     const criar = !!(opts && opts.criar);
+    // `opts.apenas`: PATCH só estes campos (nomes locais, ex.: ['amigos','saHora']).
+    // Usado por quem responde a UMA pergunta da folha do jogo (vou ao Sá, vou
+    // ao jogo, gamebox, horas) e PODE editar o evento — os outros usam a via
+    // RPC (sbMarcarPresenca & cª), que já só mexe na coluna própria. Sem isto,
+    // cada resposta arrastava consigo TODOS os campos do `ev` local, incluindo
+    // os que têm essa via paralela — e podia reverter uma resposta de outra
+    // pessoa que tivesse chegado ao servidor depois da última vez que este
+    // `ev` local foi actualizado (o mesmo bug do prune das ordens, mas em
+    // colunas jsonb em vez de linhas). `criar` nunca vem com `apenas`.
+    const apenas = opts && opts.apenas;
     try {
         // Upsert evento — admin cria/atualiza; substituto apenas atualiza (nunca cria
         // nem mexe no campo substituto_email, protegido também por RLS/trigger).
         // `fatura` só entra no corpo se a coluna existir — senão o PostgREST
         // rejeitava o pedido inteiro (PGRST204) e o evento não se gravava.
-        const campos = { descricao: ev.descricao, data: ev.data, total_fatura: ev.totalFatura, pagador: ev.pagador };
-        if (FATURA_COL) campos.fatura = ev.fatura ?? null;
-        // Convocados e menu: idem — só entram se as colunas existirem, senão o
-        // PostgREST rejeitava o pedido inteiro (PGRST204) e o evento não gravava.
-        if (AMIGOS_COL) campos.amigos = ev.amigos || [];
-        if (MENU_COL) campos.menu = ev.menu || {};
-        if (VAI_JOGO_COL) campos.vai_jogo = ev.jogo || {};
-        if (GAMEBOX_COL) campos.gamebox = ev.gamebox || {};
-        if (SA_HORA_COL) campos.sa_hora = ev.saHora || {};
-        // A coluna aceita NULL (mesa por marcar) mas não '' — o CHECK do
-        // formato rejeitava a string vazia (ver db/mesa-hora.sql).
-        if (MESA_HORA_COL) campos.mesa_hora = mesaHoraEvento(ev) || null;
-        // `aberto` só vai se souber o valor: um evento anterior à migração tem
-        // isto a undefined e escrever false punha-o de volta em agenda.
-        if (ABERTO_COL && ev.aberto != null) campos.aberto = !!ev.aberto;
-        // A ligação ao jogo do Goals só se escreve quando se sabe qual é: um
-        // PATCH com null apagava-a nos eventos que o retroactivo já ligou.
-        if (JOGO_ID_COL && ev.jogoId != null) campos.jogo_id = ev.jogoId;
+        let campos;
+        if (apenas) {
+            campos = {};
+            const camposDisponiveis = {
+                amigos: () => { if (AMIGOS_COL) campos.amigos = ev.amigos || []; },
+                menu: () => { if (MENU_COL) campos.menu = ev.menu || {}; },
+                jogo: () => { if (VAI_JOGO_COL) campos.vai_jogo = ev.jogo || {}; },
+                gamebox: () => { if (GAMEBOX_COL) campos.gamebox = ev.gamebox || {}; },
+                saHora: () => { if (SA_HORA_COL) campos.sa_hora = ev.saHora || {}; },
+                // A coluna aceita NULL (mesa por marcar) mas não '' — o CHECK do
+                // formato rejeitava a string vazia (ver db/mesa-hora.sql).
+                mesaHora: () => { if (MESA_HORA_COL) campos.mesa_hora = mesaHoraEvento(ev) || null; }
+            };
+            apenas.forEach(campo => { if (camposDisponiveis[campo]) camposDisponiveis[campo](); });
+        } else {
+            campos = { descricao: ev.descricao, data: ev.data, total_fatura: ev.totalFatura, pagador: ev.pagador };
+            if (FATURA_COL) campos.fatura = ev.fatura ?? null;
+            // Convocados e menu: idem — só entram se as colunas existirem, senão o
+            // PostgREST rejeitava o pedido inteiro (PGRST204) e o evento não gravava.
+            if (AMIGOS_COL) campos.amigos = ev.amigos || [];
+            if (MENU_COL) campos.menu = ev.menu || {};
+            if (VAI_JOGO_COL) campos.vai_jogo = ev.jogo || {};
+            if (GAMEBOX_COL) campos.gamebox = ev.gamebox || {};
+            if (SA_HORA_COL) campos.sa_hora = ev.saHora || {};
+            if (MESA_HORA_COL) campos.mesa_hora = mesaHoraEvento(ev) || null;
+            // `aberto` só vai se souber o valor: um evento anterior à migração tem
+            // isto a undefined e escrever false punha-o de volta em agenda.
+            if (ABERTO_COL && ev.aberto != null) campos.aberto = !!ev.aberto;
+            // A ligação ao jogo do Goals só se escreve quando se sabe qual é: um
+            // PATCH com null apagava-a nos eventos que o retroactivo já ligou.
+            if (JOGO_ID_COL && ev.jogoId != null) campos.jogo_id = ev.jogoId;
+        }
         // sbOk: se a linha-pai não gravar, as ordens seguintes rebentam na chave
         // estrangeira. Sem esta verificação a causa real ficava escondida e só
         // se via o erro derivado (ou nada).
@@ -7651,6 +7675,10 @@ async function sbGuardarEvento(ev, opts) {
                 return;
             }
         }
+
+        // Resposta a uma pergunta só (apenas): não mexe em ordens/ofertas, que
+        // não têm nada a ver com isto e só ficariam por reenviar à toa.
+        if (apenas) return;
 
         // Sincronizar ordens e ofertas com UPSERT+PRUNE (nunca apaga antes de inserir).
         // Ordens: o prune nunca toca numa linha com `criado_por` — essas são de
