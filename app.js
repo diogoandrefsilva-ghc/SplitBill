@@ -396,6 +396,11 @@ function removerOrdem(id) {
     _evRepararOfertas();
     if (podeTudo) {
         salvarNoLocalStorage();
+        // DELETE dirigido e imediato: o prune do autosave (sbSyncFilhos) já não
+        // apaga ordens com `criado_por` (são de um convocado, ver ali) — para o
+        // admin continuar a poder remover a ordem de outra pessoa por aqui,
+        // este pedido próprio é que trata dela, sem esperar pelos 2s.
+        sbApagarOrdemPropria(id);
     } else {
         _sincronizarOrdensNoHistorico();
         sbApagarOrdemPropria(id);
@@ -5858,7 +5863,7 @@ async function marcarPresenca(id, vai) {
 
     let ok;
     if (podeEditarEvento(ev)) {
-        try { await sbGuardarEvento(ev); ok = true; } catch (e) { ok = false; }
+        try { await sbGuardarEvento(ev, { apenas: ['amigos', 'saHora'] }); ok = true; } catch (e) { ok = false; }
     } else {
         ok = await sbMarcarPresenca(ev.id, vai);
         // A lista e a hora vivem em colunas diferentes e a função do servidor
@@ -5907,7 +5912,7 @@ async function marcarPresencaJogo(id, vai) {
 
     let ok;
     if (podeEditarEvento(ev)) {
-        try { await sbGuardarEvento(ev); ok = true; } catch (e) { ok = false; }
+        try { await sbGuardarEvento(ev, { apenas: ['jogo', 'gamebox'] }); ok = true; } catch (e) { ok = false; }
     } else {
         ok = await sbMarcarPresencaJogo(ev.id, vai);
         // A resposta ao jogo e a box vivem em colunas diferentes e a função do
@@ -5949,7 +5954,7 @@ async function marcarGamebox(id, disp) {
 
     let ok;
     if (podeEditarEvento(ev)) {
-        try { await sbGuardarEvento(ev); ok = true; } catch (e) { ok = false; }
+        try { await sbGuardarEvento(ev, { apenas: ['gamebox'] }); ok = true; } catch (e) { ok = false; }
     } else {
         ok = await sbMarcarGamebox(ev.id, !!disp);
     }
@@ -5996,7 +6001,7 @@ async function marcarMesaHora(id, hora) {
 
     let ok;
     if (podeEditarEvento(ev)) {
-        try { await sbGuardarEvento(ev); ok = true; } catch (e) { ok = false; }
+        try { await sbGuardarEvento(ev, { apenas: ['mesaHora'] }); ok = true; } catch (e) { ok = false; }
     } else {
         ok = await sbMarcarMesaHora(ev.id, limpa);
     }
@@ -6033,7 +6038,7 @@ async function marcarHoraSa(id, hora) {
 
     let ok;
     if (podeEditarEvento(ev)) {
-        try { await sbGuardarEvento(ev); ok = true; } catch (e) { ok = false; }
+        try { await sbGuardarEvento(ev, { apenas: ['saHora'] }); ok = true; } catch (e) { ok = false; }
     } else {
         ok = await sbMarcarHoraSa(ev.id, limpa);
     }
@@ -7530,7 +7535,17 @@ async function sbMarcarMesaHora(eventoId, hora) {
 // (ordem_amigos/oferta_para) com o padrão UPSERT + PRUNE: insere/atualiza tudo
 // PRIMEIRO e só DEPOIS remove o que sobra. Nunca apaga linhas-pai antes de a
 // inserção das novas estar confirmada — elimina a perda do bug DELETE→INSERT.
-async function sbSyncFilhos(tabelaPai, tabelaFilho, fkFilho, eventoId, itens) {
+// `pruneExtra` (ex.: '&criado_por=is.null') estreita o PRUNE do passo 3 — usado
+// pelas ordens para nunca apagar uma linha com dono (db/ordens-proprias.sql):
+// um convocado pode gravar a própria ordem diretamente na BD sem passar pelo
+// caminho do admin, e este sync só conhece o que está na LISTA LOCAL de quem
+// grava. Sem esta exclusão, o autosave de 2s do admin apagava (sem ele tocar
+// em nada) a ordem que um amigo tinha acabado de lançar do telemóvel dele,
+// só por ainda não constar da lista local do admin. Apagar uma ordem alheia
+// a sério continua a funcionar — passa a ser um DELETE dirigido em
+// removerOrdem(), não este prune (ver aí).
+async function sbSyncFilhos(tabelaPai, tabelaFilho, fkFilho, eventoId, itens, pruneExtra) {
+    pruneExtra = pruneExtra || '';
     const ids = itens.map(i => i.row.id);
     if (itens.length > 0) {
         // 1) UPSERT das linhas-pai (cria/atualiza pela PK id)
@@ -7551,12 +7566,12 @@ async function sbSyncFilhos(tabelaPai, tabelaFilho, fkFilho, eventoId, itens) {
             }), `inserir ${tabelaFilho}`);
         }
         // 3) PRUNE: remover linhas-pai deste evento que já não existem (só após upsert OK)
-        await sbOk(await sbFetch(`${SB_URL}/rest/v1/${tabelaPai}?evento_id=eq.${eventoId}&id=not.in.(${ids.join(',')})`, {
+        await sbOk(await sbFetch(`${SB_URL}/rest/v1/${tabelaPai}?evento_id=eq.${eventoId}&id=not.in.(${ids.join(',')})${pruneExtra}`, {
             method: 'DELETE', headers: sbHeaders()
         }), `prune ${tabelaPai}`);
     } else {
         // Sem itens = limpeza intencional (utilizador removeu tudo)
-        await sbOk(await sbFetch(`${SB_URL}/rest/v1/${tabelaPai}?evento_id=eq.${eventoId}`, {
+        await sbOk(await sbFetch(`${SB_URL}/rest/v1/${tabelaPai}?evento_id=eq.${eventoId}${pruneExtra}`, {
             method: 'DELETE', headers: sbHeaders()
         }), `limpar ${tabelaPai}`);
     }
@@ -7571,29 +7586,53 @@ async function sbSyncFilhos(tabelaPai, tabelaFilho, fkFilho, eventoId, itens) {
 async function sbGuardarEvento(ev, opts) {
     if (!_sbSession) return;
     const criar = !!(opts && opts.criar);
+    // `opts.apenas`: PATCH só estes campos (nomes locais, ex.: ['amigos','saHora']).
+    // Usado por quem responde a UMA pergunta da folha do jogo (vou ao Sá, vou
+    // ao jogo, gamebox, horas) e PODE editar o evento — os outros usam a via
+    // RPC (sbMarcarPresenca & cª), que já só mexe na coluna própria. Sem isto,
+    // cada resposta arrastava consigo TODOS os campos do `ev` local, incluindo
+    // os que têm essa via paralela — e podia reverter uma resposta de outra
+    // pessoa que tivesse chegado ao servidor depois da última vez que este
+    // `ev` local foi actualizado (o mesmo bug do prune das ordens, mas em
+    // colunas jsonb em vez de linhas). `criar` nunca vem com `apenas`.
+    const apenas = opts && opts.apenas;
     try {
         // Upsert evento — admin cria/atualiza; substituto apenas atualiza (nunca cria
         // nem mexe no campo substituto_email, protegido também por RLS/trigger).
         // `fatura` só entra no corpo se a coluna existir — senão o PostgREST
         // rejeitava o pedido inteiro (PGRST204) e o evento não se gravava.
-        const campos = { descricao: ev.descricao, data: ev.data, total_fatura: ev.totalFatura, pagador: ev.pagador };
-        if (FATURA_COL) campos.fatura = ev.fatura ?? null;
-        // Convocados e menu: idem — só entram se as colunas existirem, senão o
-        // PostgREST rejeitava o pedido inteiro (PGRST204) e o evento não gravava.
-        if (AMIGOS_COL) campos.amigos = ev.amigos || [];
-        if (MENU_COL) campos.menu = ev.menu || {};
-        if (VAI_JOGO_COL) campos.vai_jogo = ev.jogo || {};
-        if (GAMEBOX_COL) campos.gamebox = ev.gamebox || {};
-        if (SA_HORA_COL) campos.sa_hora = ev.saHora || {};
-        // A coluna aceita NULL (mesa por marcar) mas não '' — o CHECK do
-        // formato rejeitava a string vazia (ver db/mesa-hora.sql).
-        if (MESA_HORA_COL) campos.mesa_hora = mesaHoraEvento(ev) || null;
-        // `aberto` só vai se souber o valor: um evento anterior à migração tem
-        // isto a undefined e escrever false punha-o de volta em agenda.
-        if (ABERTO_COL && ev.aberto != null) campos.aberto = !!ev.aberto;
-        // A ligação ao jogo do Goals só se escreve quando se sabe qual é: um
-        // PATCH com null apagava-a nos eventos que o retroactivo já ligou.
-        if (JOGO_ID_COL && ev.jogoId != null) campos.jogo_id = ev.jogoId;
+        let campos;
+        if (apenas) {
+            campos = {};
+            const camposDisponiveis = {
+                amigos: () => { if (AMIGOS_COL) campos.amigos = ev.amigos || []; },
+                menu: () => { if (MENU_COL) campos.menu = ev.menu || {}; },
+                jogo: () => { if (VAI_JOGO_COL) campos.vai_jogo = ev.jogo || {}; },
+                gamebox: () => { if (GAMEBOX_COL) campos.gamebox = ev.gamebox || {}; },
+                saHora: () => { if (SA_HORA_COL) campos.sa_hora = ev.saHora || {}; },
+                // A coluna aceita NULL (mesa por marcar) mas não '' — o CHECK do
+                // formato rejeitava a string vazia (ver db/mesa-hora.sql).
+                mesaHora: () => { if (MESA_HORA_COL) campos.mesa_hora = mesaHoraEvento(ev) || null; }
+            };
+            apenas.forEach(campo => { if (camposDisponiveis[campo]) camposDisponiveis[campo](); });
+        } else {
+            campos = { descricao: ev.descricao, data: ev.data, total_fatura: ev.totalFatura, pagador: ev.pagador };
+            if (FATURA_COL) campos.fatura = ev.fatura ?? null;
+            // Convocados e menu: idem — só entram se as colunas existirem, senão o
+            // PostgREST rejeitava o pedido inteiro (PGRST204) e o evento não gravava.
+            if (AMIGOS_COL) campos.amigos = ev.amigos || [];
+            if (MENU_COL) campos.menu = ev.menu || {};
+            if (VAI_JOGO_COL) campos.vai_jogo = ev.jogo || {};
+            if (GAMEBOX_COL) campos.gamebox = ev.gamebox || {};
+            if (SA_HORA_COL) campos.sa_hora = ev.saHora || {};
+            if (MESA_HORA_COL) campos.mesa_hora = mesaHoraEvento(ev) || null;
+            // `aberto` só vai se souber o valor: um evento anterior à migração tem
+            // isto a undefined e escrever false punha-o de volta em agenda.
+            if (ABERTO_COL && ev.aberto != null) campos.aberto = !!ev.aberto;
+            // A ligação ao jogo do Goals só se escreve quando se sabe qual é: um
+            // PATCH com null apagava-a nos eventos que o retroactivo já ligou.
+            if (JOGO_ID_COL && ev.jogoId != null) campos.jogo_id = ev.jogoId;
+        }
         // sbOk: se a linha-pai não gravar, as ordens seguintes rebentam na chave
         // estrangeira. Sem esta verificação a causa real ficava escondida e só
         // se via o erro derivado (ou nada).
@@ -7637,12 +7676,20 @@ async function sbGuardarEvento(ev, opts) {
             }
         }
 
-        // Sincronizar ordens e ofertas com UPSERT+PRUNE (nunca apaga antes de inserir)
+        // Resposta a uma pergunta só (apenas): não mexe em ordens/ofertas, que
+        // não têm nada a ver com isto e só ficariam por reenviar à toa.
+        if (apenas) return;
+
+        // Sincronizar ordens e ofertas com UPSERT+PRUNE (nunca apaga antes de inserir).
+        // Ordens: o prune nunca toca numa linha com `criado_por` — essas são de
+        // um convocado que gravou a própria ordem por fora desta lista (ver
+        // sbSyncFilhos) e apagam-se só pelo DELETE dirigido em removerOrdem().
         await sbSyncFilhos('ordens', 'ordem_amigos', 'ordem_id', ev.id,
             (ev.ordens || []).map(o => ({
                 row: { id: o.id, evento_id: ev.id, item: o.item, quantidade: o.quantidade, preco_unitario: o.precoUnitario, preco_total: o.precoTotal, hora: o.hora },
                 filhos: (o.amigos || []).map(a => ({ ordem_id: o.id, amigo: a }))
-            }))
+            })),
+            '&criado_por=is.null'
         );
         await sbSyncFilhos('ofertas', 'oferta_para', 'oferta_id', ev.id,
             (ev.ofertas || []).map(o => ({
