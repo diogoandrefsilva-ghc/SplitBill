@@ -396,6 +396,11 @@ function removerOrdem(id) {
     _evRepararOfertas();
     if (podeTudo) {
         salvarNoLocalStorage();
+        // DELETE dirigido e imediato: o prune do autosave (sbSyncFilhos) já não
+        // apaga ordens com `criado_por` (são de um convocado, ver ali) — para o
+        // admin continuar a poder remover a ordem de outra pessoa por aqui,
+        // este pedido próprio é que trata dela, sem esperar pelos 2s.
+        sbApagarOrdemPropria(id);
     } else {
         _sincronizarOrdensNoHistorico();
         sbApagarOrdemPropria(id);
@@ -7530,7 +7535,17 @@ async function sbMarcarMesaHora(eventoId, hora) {
 // (ordem_amigos/oferta_para) com o padrão UPSERT + PRUNE: insere/atualiza tudo
 // PRIMEIRO e só DEPOIS remove o que sobra. Nunca apaga linhas-pai antes de a
 // inserção das novas estar confirmada — elimina a perda do bug DELETE→INSERT.
-async function sbSyncFilhos(tabelaPai, tabelaFilho, fkFilho, eventoId, itens) {
+// `pruneExtra` (ex.: '&criado_por=is.null') estreita o PRUNE do passo 3 — usado
+// pelas ordens para nunca apagar uma linha com dono (db/ordens-proprias.sql):
+// um convocado pode gravar a própria ordem diretamente na BD sem passar pelo
+// caminho do admin, e este sync só conhece o que está na LISTA LOCAL de quem
+// grava. Sem esta exclusão, o autosave de 2s do admin apagava (sem ele tocar
+// em nada) a ordem que um amigo tinha acabado de lançar do telemóvel dele,
+// só por ainda não constar da lista local do admin. Apagar uma ordem alheia
+// a sério continua a funcionar — passa a ser um DELETE dirigido em
+// removerOrdem(), não este prune (ver aí).
+async function sbSyncFilhos(tabelaPai, tabelaFilho, fkFilho, eventoId, itens, pruneExtra) {
+    pruneExtra = pruneExtra || '';
     const ids = itens.map(i => i.row.id);
     if (itens.length > 0) {
         // 1) UPSERT das linhas-pai (cria/atualiza pela PK id)
@@ -7551,12 +7566,12 @@ async function sbSyncFilhos(tabelaPai, tabelaFilho, fkFilho, eventoId, itens) {
             }), `inserir ${tabelaFilho}`);
         }
         // 3) PRUNE: remover linhas-pai deste evento que já não existem (só após upsert OK)
-        await sbOk(await sbFetch(`${SB_URL}/rest/v1/${tabelaPai}?evento_id=eq.${eventoId}&id=not.in.(${ids.join(',')})`, {
+        await sbOk(await sbFetch(`${SB_URL}/rest/v1/${tabelaPai}?evento_id=eq.${eventoId}&id=not.in.(${ids.join(',')})${pruneExtra}`, {
             method: 'DELETE', headers: sbHeaders()
         }), `prune ${tabelaPai}`);
     } else {
         // Sem itens = limpeza intencional (utilizador removeu tudo)
-        await sbOk(await sbFetch(`${SB_URL}/rest/v1/${tabelaPai}?evento_id=eq.${eventoId}`, {
+        await sbOk(await sbFetch(`${SB_URL}/rest/v1/${tabelaPai}?evento_id=eq.${eventoId}${pruneExtra}`, {
             method: 'DELETE', headers: sbHeaders()
         }), `limpar ${tabelaPai}`);
     }
@@ -7637,12 +7652,16 @@ async function sbGuardarEvento(ev, opts) {
             }
         }
 
-        // Sincronizar ordens e ofertas com UPSERT+PRUNE (nunca apaga antes de inserir)
+        // Sincronizar ordens e ofertas com UPSERT+PRUNE (nunca apaga antes de inserir).
+        // Ordens: o prune nunca toca numa linha com `criado_por` — essas são de
+        // um convocado que gravou a própria ordem por fora desta lista (ver
+        // sbSyncFilhos) e apagam-se só pelo DELETE dirigido em removerOrdem().
         await sbSyncFilhos('ordens', 'ordem_amigos', 'ordem_id', ev.id,
             (ev.ordens || []).map(o => ({
                 row: { id: o.id, evento_id: ev.id, item: o.item, quantidade: o.quantidade, preco_unitario: o.precoUnitario, preco_total: o.precoTotal, hora: o.hora },
                 filhos: (o.amigos || []).map(a => ({ ordem_id: o.id, amigo: a }))
-            }))
+            })),
+            '&criado_por=is.null'
         );
         await sbSyncFilhos('ofertas', 'oferta_para', 'oferta_id', ev.id,
             (ev.ofertas || []).map(o => ({
