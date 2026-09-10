@@ -3897,9 +3897,13 @@ function renderContasSaldos(lista, resumo) {
             // Dar como pago diretamente: quem recebe (pagador do evento), o
             // admin ou o substituto \u2014 para quem n\u00e3o usou o "J\u00e1 paguei?".
             // Bot\u00e3o expl\u00edcito em vez de s\u00f3 a linha clic\u00e1vel, sen\u00e3o passa
-            // despercebido ao lado do "Lembrar".
+            // despercebido ao lado do "Lembrar". Quando quem carrega n\u00e3o \u00e9 o
+            // pagador e este tem conta ligada, o r\u00f3tulo avisa que ainda vai
+            // pedir confirma\u00e7\u00e3o (ver precisaConfirmacaoDoPagador).
             if (hasToken) {
-                acaoHtml += '<button class="btn-marcar-pago" onclick="event.stopPropagation();abrirPagamentoPrePreenchido(\'' + pessoaEsc + '\',' + e.eventoId + ')">\u2714 Dar como pago</button>';
+                const pendenteConf = PAGAMENTOS_PENDENTE_COL && precisaConfirmacaoDoPagador(e.eventoId);
+                const rotuloPago = pendenteConf ? '\ud83d\udd14 Pedir confirma\u00e7\u00e3o' : '\u2714 Dar como pago';
+                acaoHtml += '<button class="btn-marcar-pago" onclick="event.stopPropagation();abrirPagamentoPrePreenchido(\'' + pessoaEsc + '\',' + e.eventoId + ')">' + rotuloPago + '</button>';
             }
             return '<div class="saldo-evento-row">'
                 + '<div class="saldo-evento-info">'
@@ -4386,6 +4390,19 @@ async function registarPagamento() {
         return;
     }
 
+    // Quem regista não é sempre quem recebeu: se o pagador do evento tem
+    // conta ligada, só ele confirma que o dinheiro chegou (ver
+    // precisaConfirmacaoDoPagador) — fica pendente em vez de definitivo.
+    if (PAGAMENTOS_PENDENTE_COL && precisaConfirmacaoDoPagador(eventoId)) {
+        const okCriado = await _criarPedidoPagamento(pessoa, eventoId, valor, () => { renderContas(); renderHistoricoDropdown(); });
+        document.getElementById('pgto-evento').value = '';
+        document.getElementById('pgto-data').value = '';
+        document.getElementById('pgto-info').style.display = 'none';
+        fecharFabPanel();
+        if (okCriado) mostrarPgtoMsg('🔔 Pedido enviado — fica pendente da confirmação de quem recebeu.', true);
+        return;
+    }
+
     // Use user-provided date, fallback to now
     const dataInput = document.getElementById('pgto-data');
     const dataPgto = dataInput && dataInput.value.trim()
@@ -4518,27 +4535,25 @@ function mostrarPgtoMsg(msg, ok) {
    calcularSaldos) até quem pagou a conta (ou o admin, como alternativa)
    confirmar (vira tipo='evento') ou rejeitar (é removido). Precisa da
    migração db/pagamentos-pendentes.sql — sem ela PAGAMENTOS_PENDENTE_COL
-   fica false e os controlos escondem-se (volta ao registo direto). */
+   fica false e os controlos escondem-se (volta ao registo direto).
+   O mesmo caminho serve o "Dar como pago" de terceiros (admin/substituto a
+   marcar a dívida de outra pessoa): quem recebeu de verdade é o pagador do
+   evento, não quem carrega no botão, por isso se o pagador tiver conta
+   ligada também fica pendente da confirmação dele (ver
+   precisaConfirmacaoDoPagador em registarPagamento). Só regista logo,
+   sem pedido, quando o pagador NÃO tem conta — aí não há mais ninguém que o
+   possa confirmar e o admin/substituto continua a tratar por ele. */
 
 function refrescarInicioSeVisivel() {
     try { if (typeof renderInicio === 'function') renderInicio(); } catch(e) {}
 }
 
-async function declararPagamento(pessoa, eventoId, valor) {
-    if (!PAGAMENTOS_PENDENTE_COL) { mostrarMensagem('⚠️ Funcionalidade indisponível — falta uma migração na BD', false); return; }
-    if (!ehEu(pessoa)) { mostrarMensagem('⚠️ Só podes declarar os teus próprios pagamentos', false); return; }
-    const jaPendente = pagamentos.find(p => p.tipo === 'pendente' && p.pessoa === pessoa && String(p.eventoId) === String(eventoId));
-    if (jaPendente) { mostrarMensagem('⏳ Já enviaste este pedido — aguarda confirmação de quem recebeu.', false); return; }
-
-    const ok = await mostrarModal({
-        icon: '💸',
-        title: 'Já pagaste?',
-        msg: 'Confirmas que já pagaste os <strong>€' + valor.toFixed(2) + '</strong>?<br><br>Fica pendente até quem recebeu confirmar — não é definitivo.',
-        confirmText: 'Sim, já paguei',
-        cancelText: 'Cancelar'
-    });
-    if (!ok) return;
-
+// Cria o pagamento tipo='pendente' e notifica quem tem de o confirmar (o
+// pagador do evento) — partilhado entre o "Já paguei?" (o próprio devedor a
+// declarar) e o "Dar como pago" de terceiros quando precisaConfirmacaoDoPagador()
+// diz que o pagador tem conta e por isso tem de validar. `render` fica a
+// cargo de quem chama, porque os dois ecrãs redesenham coisas diferentes.
+async function _criarPedidoPagamento(pessoa, eventoId, valor, render) {
     const novo = {
         id: nextId(),
         pessoa, valor, tipo: 'pendente',
@@ -4558,14 +4573,31 @@ async function declararPagamento(pessoa, eventoId, valor) {
     if (!okSb) {
         pagamentos = pagamentos.filter(p => p.id !== novo.id);
         salvarPagamentos();
-        renderContas();
-        refrescarInicioSeVisivel();
-        return;
+        render();
+        return false;
     }
-    renderContas();
-    refrescarInicioSeVisivel();
+    render();
     sbNotificarPagamentoDeclarado(pessoa, novo.eventoId, valor);  // fire-and-forget, não bloqueia UI
-    mostrarMensagem('✓ Pedido enviado — aguarda confirmação de quem recebeu.', true);
+    return true;
+}
+
+async function declararPagamento(pessoa, eventoId, valor) {
+    if (!PAGAMENTOS_PENDENTE_COL) { mostrarMensagem('⚠️ Funcionalidade indisponível — falta uma migração na BD', false); return; }
+    if (!ehEu(pessoa)) { mostrarMensagem('⚠️ Só podes declarar os teus próprios pagamentos', false); return; }
+    const jaPendente = pagamentos.find(p => p.tipo === 'pendente' && p.pessoa === pessoa && String(p.eventoId) === String(eventoId));
+    if (jaPendente) { mostrarMensagem('⏳ Já enviaste este pedido — aguarda confirmação de quem recebeu.', false); return; }
+
+    const ok = await mostrarModal({
+        icon: '💸',
+        title: 'Já pagaste?',
+        msg: 'Confirmas que já pagaste os <strong>€' + valor.toFixed(2) + '</strong>?<br><br>Fica pendente até quem recebeu confirmar — não é definitivo.',
+        confirmText: 'Sim, já paguei',
+        cancelText: 'Cancelar'
+    });
+    if (!ok) return;
+
+    const okCriado = await _criarPedidoPagamento(pessoa, eventoId, valor, () => { renderContas(); refrescarInicioSeVisivel(); });
+    if (okCriado) mostrarMensagem('✓ Pedido enviado — aguarda confirmação de quem recebeu.', true);
 }
 
 // Anula a própria declaração (antes de o admin decidir). Só quem a fez pode.
@@ -6541,6 +6573,18 @@ function ehPagadorDoEvento(eventoId) {
 // pagamentos a si mesmo.
 function podeRegistarDiretamente(pessoa, eventoId) {
     return (podeEditarPagamentoDoEvento(eventoId) || ehPagadorDoEvento(eventoId)) && !(ehEu(pessoa) && PAGAMENTOS_PENDENTE_COL);
+}
+// "Dar como pago" pelo admin/substituto não é sempre definitivo: quem
+// recebeu de verdade é o pagador do evento, e só ele sabe se o dinheiro
+// chegou. Quando o pagador tem conta ligada, a marcação fica pendente da
+// confirmação dele — o mesmo fluxo do "Já paguei?", só que declarado por
+// outra pessoa. Só quando o pagador NÃO tem conta (ninguém para confirmar)
+// é que continua a registar-se logo, como sempre foi. O próprio pagador a
+// marcar (ehPagadorDoEvento) nunca precisa disto: é ele a confirmar.
+function precisaConfirmacaoDoPagador(eventoId) {
+    if (ehPagadorDoEvento(eventoId)) return false;
+    const ev = historico.find(h => String(h.id) === String(eventoId));
+    return !!(ev && ev.pagador && amigoUsers[ev.pagador]);
 }
 // Pode confirmar/rejeitar pedidos de pagamento deste evento? Substituto
 // sempre; o pagador só para os pedidos DESTE evento — não ganha acesso aos
