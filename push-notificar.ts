@@ -34,9 +34,11 @@
 // dessa pessoa. Subscriptions que já não existem do lado do browser
 // (404/410) são apagadas aqui mesmo. O texto da notificação é sempre
 // escolhido AQUI (por `tipo`), nunca vindo livre do cliente — só os nomes/
-// valores são interpolados, e a `hora` do 'hora_sa'/'mesa_marcada' só entra
-// depois de passar pelo formato HH:MM (é o único campo de texto que o cliente
-// escolhe).
+// valores são interpolados, a `hora` do 'hora_sa'/'mesa_marcada' só entra
+// depois de passar pelo formato HH:MM (é o único campo de TEXTO que o
+// cliente escolhe), e o `pessoasMesa` do 'mesa_marcada' (nº de pessoas da
+// mesa) só entra sendo um inteiro 1–99 — opcional, fica de fora da frase
+// sem ele.
 //
 // Chamada pelo browser com o JWT do utilizador (verify_jwt fica LIGADO no
 // deploy). Por cima disso confirma-se que o email consta de
