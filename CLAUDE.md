@@ -18,7 +18,7 @@ App pessoal de divisão de contas ("dia de jogo").
 - **Não leias o `app.js` inteiro.** Está dividido em secções com comentários `/* ── título ── */`. Para achar algo, faz `grep` pelo título e lê só esse troço. Secções:
   Custom confirm modal · **Pagador & Contas (dívidas)** · Page switching · FAB · **Core: cálculo de saldos** (dívidas + pagamentos) · Render · **Ecrã do evento** (quadrantes, folhas, o + em dois passos) · Payment form · Edit Ordem inline · **Importar Fatura** (foto/PDF → Gemini → conferência artigo a artigo) · **Calendário do Sporting** (ler `goals.jogos`, guardar o mínimo cá) · **Jogo aberto & presenças** (abrir o jogo, vou/não vou, hora do Sá) · Configs · **Supabase** (+ Sessão/refresh do token, Permissões, Agregação global, IDs únicos, Equivalências amigo↔conta)
 - `fatura-restaurante.ts` — Edge Function (Deno) que lê a fatura com o Gemini. **Não corre no site**: vive no Supabase, faz-se deploy à parte (`supabase functions deploy fatura-restaurante`). É irmã da `fatura-ocr` da FestasBV — mesmo projeto Supabase, schema e prompt diferentes.
-- `push-notificar.ts` — a outra Edge Function, a das notificações Web Push. Também **não corre no site** (`supabase functions deploy push-notificar`): se mexeres nos `tipo` daqui, o texto novo só aparece depois desse deploy. O corpo da notificação é escolhido **lá**, nunca vem livre do cliente — só nomes, valores e as horas (a do Sá e a da mesa, validadas `HH:MM` dos dois lados) são interpoladas.
+- `push-notificar.ts` — a outra Edge Function, a das notificações Web Push. Também **não corre no site** (`supabase functions deploy push-notificar`): se mexeres nos `tipo` daqui, o texto novo só aparece depois desse deploy. O corpo da notificação é escolhido **lá**, nunca vem livre do cliente — só nomes, valores, as horas (a do Sá e a da mesa, validadas `HH:MM` dos dois lados) e o nº de pessoas da mesa (validado inteiro 1–99 dos dois lados, opcional) são interpolados.
 - **Fatura guardada:** o detalhe lido fica em `estado.fatura` e persiste na coluna `eventos.fatura` (jsonb, `db/fatura-detalhe.sql`). A correspondência linha-da-fatura ↔ artigo do menu **não** se guarda — é recalculada a cada render (`faturaConferir()`), de propósito: se o menu do evento mudar, a conferência acompanha. Sem a migração, `FATURA_COL=false` e a fatura fica só no localStorage.
 - **Convocados e menu do evento:** persistem nas colunas `eventos.amigos` / `eventos.menu` (jsonb, `db/convocados-menu.sql`). `ev.amigos` é a lista de **candidatos** (quem foi convocado); quem **consumiu** está em `ordem_amigos`/`oferta_para` — não confundir (`presentesNoEvento()` usa o segundo). Ao carregar da BD faz-se a união das duas (`convocadosDoEvento()`), para os eventos anteriores à migração não ficarem vazios. Sem a migração, `AMIGOS_COL`/`MENU_COL=false` e ficam só no localStorage.
 - Excepção conhecida: o **ecrã inicial** (hub) tem o CSS todo num
@@ -254,6 +254,18 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   e a folha volta a mostrar só o resumo dos votos (sem o botão). O formato
   `HH:MM` é validado nos **dois** lados: é o único texto escolhido pelo
   utilizador que chega ao corpo de uma notificação.
+- **O nº de pessoas da mesa** (`db/mesa-pessoas.sql`, coluna
+  `eventos.mesa_pessoas`, inteiro 1–99, **opcional** — nem sempre se sabe ao
+  telefone): irmã da hora, gravada pela MESMA `marcar_mesa_hora` (agora com um
+  terceiro parâmetro, `p_pessoas`) e no MESMO diálogo "Marcar mesa" — não faria
+  sentido dois sítios para uma decisão tomada num só telefonema. Desmarcar a
+  mesa (`p_hora` a `NULL`) limpa o nº de pessoas com ela — uma mesa por marcar
+  não tem gente combinada para lado nenhum (`mesaPessoasEvento`). No resumo da
+  folha aparece por baixo da hora (`.jf-mesa-pax`) só quando há valor; a
+  notificação (`pessoasMesa` no corpo do pedido a `push-notificar.ts`, **nunca**
+  a chave `pessoas`, que já é a lista de destinatários do push) só o menciona
+  quando é um inteiro válido — sem ele a frase fica igual à de antes. Sem a
+  migração, `MESA_PESSOAS_COL=false` e o campo esconde-se, ficando só a hora.
 - O cartão do jogo por abrir tem cor própria (`.sbi-fut`, dourado/creme). O verde
   (`.sbi-open`) é do jogo em aberto: são coisas diferentes e não se podem
   confundir.

@@ -704,6 +704,8 @@ html,body{touch-action:pan-x pan-y}
             border-radius: 9px; padding: 4px 9px;
         }
         .jf-mesa-input.on { color: #0E5C3F; }
+        .jf-mesa-input[type="number"] { width: 52px; text-align: right; }
+        .jf-mesa-pax { margin-top: 2px; font-size: 11.5px; color: #4C7A64; }
         .jf-mesa-nada { margin-top: 8px; font-size: 11.5px; color: #5B6661; line-height: 1.4; }
         .jf-mesa-horas + .jf-mesa-res, .jf-mesa-nada + .jf-mesa-res { margin-top: 9px; }
         .jf-mesa-horas { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }

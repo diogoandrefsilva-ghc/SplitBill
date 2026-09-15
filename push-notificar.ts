@@ -159,7 +159,14 @@ type Tipo =
 // Nem todos os momentos falam de dinheiro: 'gamebox', 'hora_sa' e
 // 'mesa_marcada' vêm sem valor (ou com zero), e um .toFixed() direto num
 // undefined rebentava a função toda.
-function montarMensagem(tipo: Tipo, p: Pessoa, descricao?: string, quem?: string, hora?: string) {
+function montarMensagem(
+  tipo: Tipo,
+  p: Pessoa,
+  descricao?: string,
+  quem?: string,
+  hora?: string,
+  pessoasMesa?: number,
+) {
   const suf = descricao ? ` — ${descricao}` : "";
   const valor = (p.valor ?? 0).toFixed(2);
   if (tipo === "gamebox") {
@@ -175,9 +182,12 @@ function montarMensagem(tipo: Tipo, p: Pessoa, descricao?: string, quem?: string
     };
   }
   if (tipo === "mesa_marcada") {
+    // O nº de pessoas é opcional — nem sempre se sabe ao telefone — por isso
+    // só entra na frase quando vem um valor válido.
+    const pax = pessoasMesa ? ` para ${pessoasMesa} pessoas` : "";
     return {
       title: "🍽️ Mesa marcada no Sá",
-      body: `${quem || "Alguém"} marcou a mesa para as ${hora}${suf}`,
+      body: `${quem || "Alguém"} marcou a mesa para as ${hora}${pax}${suf}`,
     };
   }
   if (tipo === "pagamento_declarado") {
@@ -211,13 +221,14 @@ Deno.serve(async (req) => {
     const emailChamador = await emailDoToken(auth);
     if (!emailChamador) return json({ error: "não autorizado" }, 403);
 
-    const { pessoas, descricao, quem, tipo, email, hora } = (await req.json()) as {
+    const { pessoas, descricao, quem, tipo, email, hora, pessoasMesa } = (await req.json()) as {
       pessoas?: Pessoa[];
       descricao?: string;
       quem?: string;
       tipo?: Tipo;
       email?: string;
       hora?: string;
+      pessoasMesa?: number;
     };
 
     // 'pedido_acesso': único caso em que NÃO se exige allowed_users — é
@@ -244,6 +255,12 @@ Deno.serve(async (req) => {
     if ((tipoOk === "hora_sa" || tipoOk === "mesa_marcada") && !horaOk) {
       return json({ error: "hora inválida" }, 400);
     }
+    // `pessoasMesa` é sempre um número (nunca texto livre) — opcional, e só
+    // entra na frase quando é um inteiro positivo razoável.
+    const pessoasMesaOk =
+      Number.isInteger(pessoasMesa) && (pessoasMesa as number) > 0 && (pessoasMesa as number) <= 99
+        ? (pessoasMesa as number)
+        : undefined;
 
     // amigo → email (só os amigos pedidos)
     const nomes = [...new Set(pessoas.map((p) => p.amigo).filter(Boolean))];
@@ -267,7 +284,7 @@ Deno.serve(async (req) => {
         const emailP = emailPorAmigo.get(p.amigo);
         if (!emailP) return;
         const payload = JSON.stringify({
-          ...montarMensagem(tipoOk, p, descricao, quem, horaOk),
+          ...montarMensagem(tipoOk, p, descricao, quem, horaOk, pessoasMesaOk),
           url: "/SplitBill/",
         });
         const r = await enviarParaSubs(subs.filter((s) => s.email === emailP), payload);
