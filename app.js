@@ -1789,6 +1789,16 @@ function mostrarModal(opts) {
             extraBtn.onclick = () => { fecharModalComResultado('extra'); };
             actions.appendChild(extraBtn);
         }
+        // Quarta escolha opcional, irmã da anterior (ex.: a folha do jogo por
+        // abrir tem "Preparar" e "Marcar mesa" ao mesmo tempo) — resolve
+        // 'extra2', sem mexer nas outras.
+        if (opts.extraText2) {
+            const extraBtn2 = document.createElement('button');
+            extraBtn2.className = 'modal-cancel';
+            extraBtn2.textContent = opts.extraText2;
+            extraBtn2.onclick = () => { fecharModalComResultado('extra2'); };
+            actions.appendChild(extraBtn2);
+        }
         const confirmBtn = document.createElement('button');
         confirmBtn.className = opts.danger ? 'modal-danger' : 'modal-confirm';
         confirmBtn.textContent = opts.confirmText || 'Confirmar';
@@ -6124,16 +6134,15 @@ function _horasResumoHTML(ev) {
         return '<div class="jf-mesa vazia">Ainda ninguém disse a que horas pode chegar.</div>';
     }
     let h = '<div class="jf-mesa' + (marcada ? ' marcada' : '') + '">';
-    // A hora da mesa é a que manda quando existe — os votos são o que ajudou a
-    // escolhê-la. Só quem trata da marcação vê o campo; para os outros, uma
-    // mesa por marcar simplesmente não ocupa linha nenhuma.
-    if (marcada || posso) {
+    // Só LEITURA aqui — marcar/mudar a mesa é o botão próprio "Marcar mesa" da
+    // folha (jogoSheetMarcarMesa), não um campo ao lado de "Podes estar às":
+    // eram dois <input type="time"> na mesma folha e picar a mesa a mais em
+    // vez da hora de cada um já aconteceu, sem volta atrás (avisa o grupo).
+    if (marcada) {
         h += '<div class="jf-mesa-res"><span class="jf-mesa-lbl">Mesa marcada para</span>'
-           + (posso
-               ? '<input type="time" class="jf-mesa-input' + (marcada ? ' on' : '') + '" id="jf-mesa-input"'
-                 + ' step="300" value="' + _calEsc(marcada) + '" onblur="jogoSheetMesaHora(' + ev.id + ')">'
-               : '<strong>' + _calEsc(marcada) + '</strong>')
-           + '</div>';
+           + '<strong>' + _calEsc(marcada) + '</strong></div>';
+    } else if (posso) {
+        h += '<div class="jf-mesa-res"><span class="jf-mesa-lbl">Mesa por marcar</span></div>';
     }
     if (grupos.length) {
         const semHora = horasSaEvento(ev).filter(l => !l.hora).length;
@@ -6350,19 +6359,47 @@ async function jogoSheetHoraSa(id) {
     mostrarMensagem(valor ? '✓ Horas guardadas' : '✓ Horas apagadas', true);
 }
 
-// Irmã da anterior para a hora da MESA (input#jf-mesa-input), com a mesma
-// razão para gravar ao sair do campo em vez de a cada roda do seletor.
-async function jogoSheetMesaHora(id) {
-    const input = document.getElementById('jf-mesa-input');
+// Botão próprio da folha ("Marcar mesa" / "Mudar mesa"), a par de Preparar e
+// Abrir jogo — de propósito FORA do cartão de respostas, para não ficar ao
+// lado de "Podes estar às" (a hora de CADA UM): os dois eram dois
+// <input type="time"> lado a lado na mesma folha, e já aconteceu picar a
+// mesa a mais em vez da própria hora. Aqui exige um Guardar explícito em vez
+// de gravar ao sair do campo — gravar a mesa avisa o grupo todo, e um toque
+// a mais não tinha volta.
+async function jogoSheetMarcarMesa(id) {
     const ev = historico.find(e => String(e.id) === String(id));
-    if (!input || !ev) return;
-    const valor = input.value || '';
-    if (valor === mesaHoraEvento(ev)) return;
-    const ok = await marcarMesaHora(id, valor);
-    if (!ok) return;
-    const box = document.getElementById('modal-msg');
-    if (box) box.innerHTML = _jogoSheetHTML(ev);
-    mostrarMensagem(valor ? '✓ Mesa marcada para as ' + valor : '✓ Mesa desmarcada', true);
+    if (!ev) return;
+    const marcada = mesaHoraEvento(ev);
+    const grupos = _horasAgrupadas(ev);
+    const votos = grupos.length
+        ? '<div class="jf-mesa-horas">' + grupos.map(g => '<span>' + _calEsc(g.hora) + (g.n > 1 ? '<em>(' + g.n + 'p)</em>' : '') + '</span>').join('') + '</div>'
+        : '<div class="jf-mesa-nada">Ainda ninguém disse a que horas pode chegar.</div>';
+    const r = await mostrarModal({
+        icon: '🍽️',
+        title: marcada ? 'Mudar a hora da mesa' : 'Marcar a mesa',
+        msg: '<div class="jf-mesa">'
+           + '<span class="jf-mesa-lbl">A partir de que horas podem chegar</span>' + votos
+           + '<div class="jf-mesa-res"><span class="jf-mesa-lbl">Hora da mesa</span>'
+           + '<input type="time" class="jf-mesa-input on" id="jf-mesa-dialog-input" step="300" value="' + _calEsc(marcada) + '"></div>'
+           + '</div>'
+           + '<div class="jf-aviso">Vai avisar todo o grupo assim que gravares.</div>',
+        confirmText: 'Guardar',
+        cancelText: 'Cancelar',
+        extraText: marcada ? 'Desmarcar' : ''
+    });
+    if (r === true) {
+        const input = document.getElementById('jf-mesa-dialog-input');
+        const valor = (input && input.value) || '';
+        if (valor !== marcada) {
+            const ok = await marcarMesaHora(id, valor);
+            if (ok) mostrarMensagem(valor ? '✓ Mesa marcada para as ' + valor : '✓ Mesa desmarcada', true);
+        }
+    } else if (r === 'extra') {
+        const ok = await marcarMesaHora(id, '');
+        if (ok) mostrarMensagem('✓ Mesa desmarcada', true);
+    }
+    // Volta à folha, para quem marcou a mesa continuar onde estava.
+    await abrirFolhaJogo(id);
 }
 
 // Muda a data de um jogo por abrir, direto na folha (input#jf-data-input).
@@ -6415,10 +6452,15 @@ async function abrirFolhaJogo(id) {
         confirmText: podeAbrir ? 'Abrir jogo' : 'Fechar',
         cancelText: 'Fechar',
         semCancelar: !podeAbrir,
-        extraText: _podeGerirJogo(ev) ? 'Preparar' : ''
+        extraText: _podeGerirJogo(ev) ? 'Preparar' : '',
+        extraText2: podeMarcarMesa(ev) ? (mesaHoraEvento(ev) ? 'Mudar mesa' : 'Marcar mesa') : ''
     });
     // "Preparar" leva à página do evento SEM o abrir: o jogo continua em agenda.
     if (r === 'extra') { await navegarHistorico(ev.id); return; }
+    // "Marcar mesa" abre o diálogo próprio (jogoSheetMarcarMesa), que devolve
+    // a esta folha no final — botão à parte de propósito, para não se
+    // confundir com "Podes estar às" (ver essa função).
+    if (r === 'extra2') { await jogoSheetMarcarMesa(ev.id); return; }
     if (r === true && podeAbrir) await abrirJogo(ev.id);
 }
 

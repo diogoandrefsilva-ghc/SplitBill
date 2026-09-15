@@ -139,19 +139,24 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   `jogosPorAbrir()` (ordenados por data), `podeAbrirJogo()` — **só o primeiro**
   da lista se pode abrir, abrir o de daqui a dois meses seria sempre engano —,
   `abrirJogo()` e a folha que se abre ao tocar no cartão (`abrirFolhaJogo`).
-  A folha tem até três botões: Fechar · **Preparar** (admin/substituto, abre a
-  página do evento sem abrir o jogo) · **Abrir jogo** (só no primeiro). O
-  "Preparar" usa o `extraText` do `mostrarModal`.
+  A folha tem até quatro botões: Fechar · **Preparar** (admin/substituto, abre a
+  página do evento sem abrir o jogo) · **Marcar mesa** / **Mudar mesa** (quem
+  pode marcar a mesa, ver abaixo) · **Abrir jogo** (só no primeiro). "Preparar"
+  usa o `extraText` do `mostrarModal`, "Marcar mesa" o `extraText2` — irmão
+  novo do primeiro, para as duas escolhas poderem aparecer ao mesmo tempo.
 - **A folha tem de caber num ecrã** (`_jogoSheetHTML`): quem a abre vem
   responder e ver a que horas é a mesa, e isso não pode estar atrás de scroll.
   Daí o desenho actual — a data numa linha de leitura com um lápis
   (`jogoSheetMostrarData`) em vez de um campo sempre à vista, as perguntas
   como linhas de um cartão (`_jfLinha`/`_jfSeg`) em vez de títulos com
   botões de largura inteira — e as duas que só interessam a parte do grupo (a
-  hora do Sá, a gamebox) só a essa parte aparecem, a data e a hora a gravar **ao sair do campo**
-  (`onblur`) em vez de um botão Guardar cada — o `change` do seletor dispara a
-  cada roda que se mexe, e gravar aí era um PATCH e uma notificação por volta,
-  com o redesenho a fechar o seletor na cara de quem o estava a usar; e quem vai numa **tabela só** — nome · Sá · horas · jogo · box
+  hora do Sá, a gamebox) só a essa parte aparecem, a data e a hora do Sá a gravar
+  **ao sair do campo** (`onblur`) em vez de um botão Guardar cada — o `change`
+  do seletor dispara a cada roda que se mexe, e gravar aí era um PATCH e uma
+  notificação por volta, com o redesenho a fechar o seletor na cara de quem o
+  estava a usar. A hora da MESA é a exceção: fica noutro sítio (ver abaixo),
+  de propósito longe da hora do Sá, e só grava com um "Guardar" explícito; e
+  quem vai numa **tabela só** — nome · Sá · horas · jogo · box
   (`_jfTabelaHTML`) — **dobrada** (`_jfFoldHTML`, estado em `_jfFold` para não
   fechar a cada resposta). A tabela substituiu duas listas para as mesmas
   pessoas: quem ia ao jogo sem ir ao Sá aparecia numa e faltava na outra, e
@@ -226,19 +231,29 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   marcação (`GESTOR_MESA_SA`), o admin ou o substituto do evento — é uma hora
   do grupo, não uma resposta pessoal, daí a permissão apertada
   (`podeMarcarMesa`, e do lado do servidor a `marcar_mesa_hora`, que confirma o
-  mesmo). Na folha fica **em destaque** por cima dos votos, e com ela marcada
-  os votos ficam mais discretos (`.jf-mesa.marcada`): já cumpriram o que
-  tinham a cumprir. Quem não a pode marcar não vê linha nenhuma enquanto a mesa
-  estiver por marcar. **Se a mesa passar a ser de outra pessoa muda-se em dois
-  sítios:** `GESTOR_MESA_SA` no `app.js` (quem recebe a notificação das horas) e
-  a chave `gestor_mesa` em `splitbill.config` (quem pode gravar). Marcar a mesa
-  **notifica o grupo** (`sbNotificarMesa`, tipo `mesa_marcada` na
-  `push-notificar.ts`) — é o inverso do `hora_sa`, que recolhe: este anuncia, e
-  é a resposta que toda a gente esperava. Só na **mudança** para uma hora nova:
-  desmarcar não toca em telemóvel nenhum, e gravar a mesma hora outra vez
-  também não. Sem a migração, `MESA_HORA_COL=false` e a folha volta a mostrar
-  só o resumo dos votos. O formato `HH:MM` é validado nos **dois** lados: é o único
-  texto escolhido pelo utilizador que chega ao corpo de uma notificação.
+  mesmo). Na folha, o **resumo** (`_horasResumoHTML`) é só leitura — "Mesa
+  marcada para" ou "Mesa por marcar" — em destaque por cima dos votos, e com
+  ela marcada os votos ficam mais discretos (`.jf-mesa.marcada`): já cumpriram
+  o que tinham a cumprir. Quem não a pode marcar não vê linha nenhuma enquanto
+  a mesa estiver por marcar.
+  **Marcar/mudar é o botão próprio "Marcar mesa"/"Mudar mesa" da folha**
+  (`jogoSheetMarcarMesa`, ver acima), **não** um campo ao lado de "Podes estar
+  às": os dois já foram dois `<input type="time">` na mesma folha, e picar a
+  mesa a mais em vez da própria hora já aconteceu — sem volta atrás, porque
+  gravar avisa o grupo todo. O botão abre um diálogo à parte com os votos por
+  referência, um `Guardar` explícito (nada de gravar `onblur`) e um
+  `Desmarcar` quando já há hora — a `extraText` desse diálogo, sem confundir
+  com o `extraText2` da folha que o abre. **Se a mesa passar a ser de outra
+  pessoa muda-se em dois sítios:** `GESTOR_MESA_SA` no `app.js` (quem recebe a
+  notificação das horas) e a chave `gestor_mesa` em `splitbill.config` (quem
+  pode gravar). Marcar a mesa **notifica o grupo** (`sbNotificarMesa`, tipo
+  `mesa_marcada` na `push-notificar.ts`) — é o inverso do `hora_sa`, que
+  recolhe: este anuncia, e é a resposta que toda a gente esperava. Só na
+  **mudança** para uma hora nova: desmarcar não toca em telemóvel nenhum, e
+  gravar a mesma hora outra vez também não. Sem a migração, `MESA_HORA_COL=false`
+  e a folha volta a mostrar só o resumo dos votos (sem o botão). O formato
+  `HH:MM` é validado nos **dois** lados: é o único texto escolhido pelo
+  utilizador que chega ao corpo de uma notificação.
 - O cartão do jogo por abrir tem cor própria (`.sbi-fut`, dourado/creme). O verde
   (`.sbi-open`) é do jogo em aberto: são coisas diferentes e não se podem
   confundir.
