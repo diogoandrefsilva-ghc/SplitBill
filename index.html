@@ -434,6 +434,15 @@ window.sbEsconderSplash = function(){
                 <div class="section-body">
                     <select id="item" style="display:none;"><option value="">-- Seleciona um item --</option></select>
                     <select id="quantidade" style="display:none;" onchange="atualizarBotaoOrdem()"><option value="0" selected>0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option></select>
+                    <!-- Oferta da casa: guarda-se na checkbox (escondida, como os
+                         selects acima) e mostra-se no segmento — ver evCasaNova(). -->
+                    <input type="checkbox" id="ordem-casa" style="display:none;">
+                    <span class="ev-lab">Quem paga isto?</span>
+                    <div class="ev-seg" id="ev-casa-seg">
+                        <button type="button" class="on" onclick="evCasaNova(false)">A mesa</button>
+                        <button type="button" onclick="evCasaNova(true)">🏠 A casa</button>
+                    </div>
+                    <span class="ev-hint ev-hint-casa" id="ev-casa-nota" style="display:none;">Fica registada com quem consumiu, mas não conta para a mesa. Se a fatura a cobrar, é abri-la e pô-la de volta na conta.</span>
                     <span class="ev-lab">Quem consumiu?</span>
                     <div class="amigos-grid ev-big" id="amigos-grid"></div>
                     <button id="btn-adicionar-ordem" onclick="adicionarOrdem()" style="display:none;" disabled>✓ Adicionar Ordem</button>

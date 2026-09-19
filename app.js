@@ -296,6 +296,41 @@ function _sincronizarOrdensNoHistorico() {
     salvarHistoricoLocal();
 }
 
+/* ── OFERTA DA CASA ────────────────────────────────────────────────────────
+   Um artigo que o Sá ofereceu à mesa. Regista-se como qualquer outro — é
+   preciso saber QUEM consumiu, e a fatura pode muito bem acabar por o cobrar —
+   mas não custa nada a ninguém.
+   NÃO tem flag própria nem coluna nova: o `precoUnitario` continua a ser o que
+   o artigo custaria e o `precoTotal` é ZERO. É só isso que a distingue, e é de
+   propósito — as colunas já existem (sobrevive à recarga da BD sem migração
+   nenhuma) e as contas que já somavam `precoTotal` ficam todas certas sem um
+   segundo sítio a decidir quanto é que a ordem vale. Um artigo a €0.00 no menu
+   não é oferta da casa: aí o `precoUnitario` também é zero.
+   Voltar a pôr na conta é devolver o `precoTotal` (ver evCasaOrdem) — é o que
+   se faz quando a fatura chega e afinal lá está o artigo. */
+function ordemOfertaCasa(o) {
+    return !!o && Number(o.precoUnitario) > 0 && !(Number(o.precoTotal) > 0);
+}
+
+// O que a ordem custaria se fosse à conta — o valor a devolver quando se
+// desfaz a oferta, e o que se mostra rasurado ao lado do "Grátis".
+function ordemValorCheio(o) {
+    return (Number(o.precoUnitario) || 0) * (Number(o.quantidade) || 0);
+}
+
+// O valor de uma ordem, já escrito: é por aqui que passam os sítios que o
+// mostram (quadrante, zoom, folha da linha, folha do artigo). Um só sítio a
+// decidir a palavra, senão "Grátis" acabava escrito de três maneiras.
+function _evValorOrdem(o) {
+    return ordemOfertaCasa(o) ? '<i class="ev-gratis">Grátis</i>' : '€' + o.precoTotal.toFixed(2);
+}
+
+// O mesmo para um artigo somado (Por item): unidades marcadas sem um cêntimo
+// na mesa só podem ser ofertas da casa — "€0.00" ali parecia engano.
+function _evPrecoItem(total, qtd) {
+    return (qtd > 0 && !(total > 0)) ? '<i class="ev-gratis">Grátis</i>' : '€' + total.toFixed(2);
+}
+
 function adicionarOrdem() {
     const item = document.getElementById('item').value.trim();
     const quantidade = parseInt(document.getElementById('quantidade').value || 1);
@@ -324,7 +359,11 @@ function adicionarOrdem() {
     }
 
     const precoUnitario = menu[item];
-    const precoTotal = precoUnitario * quantidade;
+    // Oferta da casa: o preço unitário fica (é o que o artigo custaria, e é
+    // por ele que se volta a pôr na conta), o total vai a zero. Ver a nota em
+    // ordemOfertaCasa().
+    const casa = !!(document.getElementById('ordem-casa') || {}).checked;
+    const precoTotal = casa ? 0 : precoUnitario * quantidade;
 
     const ordem = {
         id: nextId(),
@@ -349,11 +388,12 @@ function adicionarOrdem() {
     // Limpar formulário
     document.getElementById('item').value = '';
     document.getElementById('quantidade').value = '0'; atualizarBotaoOrdem();
+    evCasaNova(false);
     document.querySelectorAll('.amigo-btn').forEach(btn => btn.classList.remove('selected'));
     estado.amigosSelecionados.clear();
     atualizarPreco();
 
-    mostrarMensagem('✓ Ordem adicionada!', true);
+    mostrarMensagem(casa ? '🏠 Ordem adicionada — oferta da casa' : '✓ Ordem adicionada!', true);
 }
 
 function removerOrdem(id) {
@@ -491,8 +531,11 @@ function _atualizarUIInner() {
             "evAbrirLinha('ordem'," + o.id + ")",
             o.quantidade + '× ' + _evEsc(o.item),
             _evNomes(o.amigos, temOfertas ? 3 : 99),
-            '€' + o.precoTotal.toFixed(2),
-            '',
+            // Oferta da casa: "Grátis" onde estava o valor, e o que custaria
+            // rasurado por baixo — no mesmo sítio onde o Por pessoa já põe o
+            // que se pagaria sem oferta.
+            _evValorOrdem(o),
+            ordemOfertaCasa(o) ? '€' + ordemValorCheio(o).toFixed(2) : '',
             temOfertas ? '' : o.hora
         )).join('');
     }
@@ -536,7 +579,7 @@ function _atualizarUIInner() {
             "evAbrirLinha('item'," + i + ")",
             _evEsc(item) + ' <i>' + qtdPorItem[item] + '×</i>',
             '',
-            '€' + totalPorItem[item].toFixed(2)
+            _evPrecoItem(totalPorItem[item], qtdPorItem[item])
         )).join('');
     }
     document.getElementById('ev-n-itens').textContent = _evItensKeys.length;
@@ -841,17 +884,24 @@ function evAbrirLinha(tipo, chave) {
     if (tipo === 'ordem') {
         const o = estado.ordens.find(x => x.id === chave);
         if (!o) return;
+        const casa = ordemOfertaCasa(o);
         const quota = o.precoTotal / o.amigos.length;
         tit.textContent = o.quantidade + '× ' + o.item;
-        sub.textContent = '€' + o.precoTotal.toFixed(2) + (o.hora ? ' · ' + o.hora : '');
+        sub.textContent = (casa ? '🏠 Oferta da casa' : '€' + o.precoTotal.toFixed(2)) + (o.hora ? ' · ' + o.hora : '');
         body.innerHTML = '<div class="ev-card">'
-            + o.amigos.map(n => _evDrow(_evEsc(n), '', '€' + quota.toFixed(2))).join('')
+            + o.amigos.map(n => _evDrow(_evEsc(n), '', casa ? '<i class="ev-gratis">Grátis</i>' : '€' + quota.toFixed(2), casa ? 'ev-casa' : '')).join('')
+            + (casa ? _evDrow('Se a fatura a cobrar', 'é o que esta ordem passa a valer',
+                '€' + ordemValorCheio(o).toFixed(2), 'ev-casa') : '')
             + '</div><div id="ordem-' + o.id + '"></div>';
         const ev = historico.find(h => h.id === eventoAtualId);
         if (!modoReadOnly && (podeEditarEventoAtual() || ehOrdemPropria(o, ev))) {
             foot.style.display = 'flex';
             foot.innerHTML = '<button class="ev-btn ev-btn-red" onclick="evApagarLinha(\'ordem\',' + o.id + ')" aria-label="Apagar">'
                 + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h15"/><path d="M9 6.5V4.4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2.1"/><path d="M6.5 6.5 7.4 20a1 1 0 0 0 1 .9h7.2a1 1 0 0 0 1-.9l.9-13.5"/></svg></button>'
+                // É aqui que se desfaz a oferta quando a fatura afinal a cobra:
+                // no mesmo sítio onde se apaga e se edita a ordem.
+                + '<button class="ev-btn ev-btn-casa' + (casa ? ' on' : '') + '" onclick="evCasaOrdem(' + o.id + ')">'
+                + (casa ? 'Pôr na conta' : '🏠 Oferta da casa') + '</button>'
                 + '<button class="ev-btn" onclick="toggleEditOrdem(' + o.id + ')">Editar</button>';
         }
     } else if (tipo === 'oferente') {
@@ -878,10 +928,13 @@ function evAbrirLinha(tipo, chave) {
         const linhas = estado.ordens.filter(o => o.item === item);
         const qtd = linhas.reduce((s, o) => s + o.quantidade, 0);
         const tot = linhas.reduce((s, o) => s + o.precoTotal, 0);
+        const qtdCasa = linhas.filter(ordemOfertaCasa).reduce((s, o) => s + o.quantidade, 0);
         tit.textContent = item;
-        sub.textContent = qtd + (qtd === 1 ? ' unidade' : ' unidades') + ' · €' + tot.toFixed(2);
+        sub.textContent = qtd + (qtd === 1 ? ' unidade' : ' unidades') + ' · €' + tot.toFixed(2)
+            + (qtdCasa ? ' · ' + qtdCasa + ' da casa' : '');
         body.innerHTML = '<div class="ev-card">'
-            + linhas.slice().reverse().map(o => _evDrow(o.quantidade + '× ' + _evNomes(o.amigos, 2), o.hora || '', '€' + o.precoTotal.toFixed(2))).join('')
+            + linhas.slice().reverse().map(o => _evDrow(o.quantidade + '× ' + _evNomes(o.amigos, 2), o.hora || '',
+                _evValorOrdem(o), ordemOfertaCasa(o) ? 'ev-casa' : '')).join('')
             + '</div><span class="ev-hint">É esta lista que a fatura confere, artigo a artigo.</span>';
     } else if (tipo === 'pessoa') {
         const pessoa = _evPessoasKeys[chave];
@@ -899,8 +952,10 @@ function evAbrirLinha(tipo, chave) {
             // para 3 mostra-se pelo que foi pedido (1×) com a divisão por baixo,
             // que "0.3× Costeletão" não é coisa que alguém tenha comido.
             const inteiro = Number.isInteger(q);
+            const casa = ordemOfertaCasa(o);
             linhas.push(_evDrow((inteiro ? q : o.quantidade) + '× ' + _evEsc(o.item),
-                inteiro ? '' : 'a dividir por ' + o.amigos.length, '€' + quota.toFixed(2)));
+                casa ? 'oferta da casa' : (inteiro ? '' : 'a dividir por ' + o.amigos.length),
+                casa ? '<i class="ev-gratis">Grátis</i>' : '€' + quota.toFixed(2), casa ? 'ev-casa' : ''));
         });
         // Rodadas agrupadas por artigo: duas canecas oferecidas à mesma pessoa
         // são uma linha, não duas. A dourado, como no resto das ofertas.
@@ -954,6 +1009,46 @@ function evAbrirLinha(tipo, chave) {
     }
 
     evAbrirSheet('ev-sheet-linha');
+}
+
+/* Marcar/desmarcar uma ordem JÁ LANÇADA como oferta da casa. É o botão do meio
+   da folha da linha, e é o caminho que interessa quando a fatura chega: o que
+   o Sá disse que oferecia aparece lá cobrado, toca-se aqui e a ordem volta à
+   conta pelo preço a que foi registada (`precoUnitario`, congelado desde
+   então — mexer no menu entretanto não lhe toca).
+   As RODADAS picadas nesta ordem vão-se embora quando ela passa a grátis: uma
+   rodada é assumir o que alguém consumiu, e não há nada para assumir numa
+   oferta da casa. As antigas (sem `ordemId`) não se tocam, como em toda a
+   parte — ver _evRepararOfertas. */
+function evCasaOrdem(id) {
+    if (modoReadOnly) return;
+    const ordem = estado.ordens.find(o => o.id === id);
+    if (!ordem) return;
+    const ev = historico.find(h => h.id === eventoAtualId);
+    const podeTudo = podeEditarEventoAtual();
+    if (!podeTudo && !ehOrdemPropria(ordem, ev)) {
+        mostrarMensagem('⚠️ Só podes mexer nas tuas próprias ordens', false);
+        return;
+    }
+    const casa = ordemOfertaCasa(ordem);
+    if (!casa && !(Number(ordem.precoUnitario) > 0)) {
+        evToast('Este artigo já está a €0.00 no menu', false);
+        return;
+    }
+    ordem.precoTotal = casa ? ordemValorCheio(ordem) : 0;
+    if (!casa) estado.ofertas = estado.ofertas.filter(o => o.ordemId !== id);
+    _evRepararOfertas();
+    if (podeTudo) {
+        salvarNoLocalStorage();
+    } else {
+        _sincronizarOrdensNoHistorico();
+        sbAtualizarOrdemPropria(ordem);
+    }
+    atualizarUI();
+    evAbrirLinha('ordem', id);   // a folha fica aberta, já com o estado novo
+    evToast(casa
+        ? '✓ ' + ordem.item + ' de volta à conta (€' + ordem.precoTotal.toFixed(2) + ')'
+        : '🏠 ' + ordem.item + ' marcado como oferta da casa', true);
 }
 
 function evApagarLinha(tipo, id) {
@@ -1022,12 +1117,16 @@ function evRenderZoom() {
 
     if (tipo === 'ordens') {
         const rows = estado.ordens.slice().reverse().map(o => {
+            const casa = ordemOfertaCasa(o);
             const quota = o.precoTotal / o.amigos.length;
             const partes = [_evNomes(o.amigos, 99)];
-            if (o.amigos.length > 1) partes.push('€' + quota.toFixed(2) + ' cada');
+            if (casa) partes.push('oferta da casa');
+            else if (o.amigos.length > 1) partes.push('€' + quota.toFixed(2) + ' cada');
             if (o.hora) partes.push(o.hora);
             return _evZrow("evAbrirLinha('ordem'," + o.id + ")", evIconeArtigo(o.item),
-                o.quantidade + '× ' + _evEsc(o.item), partes.join(' · '), '€' + o.precoTotal.toFixed(2), '', '', 'ev-c-' + evCatArtigo(o.item).cat);
+                o.quantidade + '× ' + _evEsc(o.item), partes.join(' · '), _evValorOrdem(o),
+                casa ? '€' + ordemValorCheio(o).toFixed(2) : '',
+                casa ? 'ev-casa' : '', 'ev-c-' + evCatArtigo(o.item).cat);
         });
         sub.textContent = _evNum(estado.ordens.length, 'ordem', 'ordens') + ' · a última em cima';
         body.innerHTML = _evZlista(rows, cfg.vazio);
@@ -1074,7 +1173,7 @@ function evRenderZoom() {
             return _evZrow("evAbrirLinha('item'," + i + ")", evIconeArtigo(item),
                 _evEsc(item) + ' <i>' + _evQtdStr(g.qtd) + '×</i>',
                 quem + (menu[item] !== undefined ? ' · €' + menu[item].toFixed(2) + ' cada' : ''),
-                '€' + g.total.toFixed(2), '', '', 'ev-c-' + evCatArtigo(item).cat);
+                _evPrecoItem(g.total, g.qtd), '', '', 'ev-c-' + evCatArtigo(item).cat);
         });
         const unidades = _evItensKeys.reduce((s, k) => s + (porItem[k] ? porItem[k].qtd : 0), 0);
         sub.textContent = _evNum(_evItensKeys.length, 'artigo', 'artigos') + ' · o que pesa mais em cima';
@@ -1148,6 +1247,7 @@ function evAbrirNova() {
     _evArtigo = '';
     document.getElementById('item').value = '';
     document.getElementById('quantidade').value = '0';
+    evCasaNova(false);
     estado.amigosSelecionados.clear();
     evAbrirSheet('ev-sheet-nova');
     // Os botões dos amigos só medem bem a largura com a folha já aberta —
@@ -1261,13 +1361,36 @@ function evQtd(d) {
     atualizarBotaoOrdem();
 }
 
+/* O segmento "Vai à conta / Oferta da casa" do passo 2. O estado vive na
+   checkbox escondida do formulário de sempre (#ordem-casa), como o item e a
+   quantidade: é ela que o adicionarOrdem() lê, e assim não há um segundo sítio
+   a guardar a mesma escolha. */
+function evCasaNova(v) {
+    const chk = document.getElementById('ordem-casa');
+    if (chk) chk.checked = !!v;
+    const seg = document.getElementById('ev-casa-seg');
+    if (seg) {
+        const bts = seg.querySelectorAll('button');
+        if (bts[0]) bts[0].classList.toggle('on', !v);
+        if (bts[1]) bts[1].classList.toggle('on', !!v);
+    }
+    const nota = document.getElementById('ev-casa-nota');
+    if (nota) nota.style.display = v ? '' : 'none';
+    // A nota de sempre ("divide-se em partes iguais") não diz nada de uma
+    // ordem que não custa: sai enquanto a oferta estiver escolhida.
+    const notaDiv = document.getElementById('ev-nova-nota');
+    if (notaDiv) notaDiv.style.display = v ? 'none' : '';
+    if (typeof evSyncNova === 'function') evSyncNova();
+}
+
 function evSyncNova() {
     const nome = _evArtigo;
     if (!nome || menu[nome] === undefined) return;
     const preco = menu[nome];
     const qtd = parseInt(document.getElementById('quantidade').value || '0', 10);
     const n = estado.amigosSelecionados.size;
-    const total = preco * (qtd || 0);
+    const casa = !!(document.getElementById('ordem-casa') || {}).checked;
+    const total = casa ? 0 : preco * (qtd || 0);
 
     const ic = document.getElementById('ev-chosen-ic');
     if (ic) {
@@ -1278,17 +1401,19 @@ function evSyncNova() {
     document.getElementById('ev-chosen-nome').textContent = nome;
     document.getElementById('ev-chosen-preco').textContent = '€' + preco.toFixed(2) + ' cada';
     document.getElementById('ev-qtd').textContent = qtd || 0;
-    document.getElementById('ev-nova-total').textContent = '€' + total.toFixed(2);
+    document.getElementById('ev-nova-total').textContent = casa ? 'Grátis' : '€' + total.toFixed(2);
     document.getElementById('ev-nova-linha1').textContent = n > 0
         ? n + (n === 1 ? ' pessoa marcada' : ' pessoas marcadas')
         : 'ninguém marcado';
-    document.getElementById('ev-nova-linha2').textContent = n > 0 && qtd > 0
-        ? '€' + (total / n).toFixed(2) + ' cada'
-        : 'marca quem consumiu';
+    document.getElementById('ev-nova-linha2').textContent = casa
+        ? (qtd > 0 ? 'oferta da casa · €' + (preco * qtd).toFixed(2) + ' se for cobrada' : 'oferta da casa')
+        : (n > 0 && qtd > 0 ? '€' + (total / n).toFixed(2) + ' cada' : 'marca quem consumiu');
 
     const src = document.getElementById('btn-adicionar-ordem');
     const btn = document.getElementById('ev-btn-registar');
     if (src && btn) btn.disabled = src.disabled;
+    const btxt = document.getElementById('ev-btn-registar-txt');
+    if (btxt) btxt.textContent = casa ? 'Registar oferta' : 'Registar';
 }
 
 function evRegistar() {
@@ -1433,10 +1558,14 @@ function evRenderOferta() {
                 const legado = !of && estado.ofertas.some(x => !x.ordemId && x.item === l.o.item && x.para.indexOf(p) >= 0);
                 const minha = of && of.quem === _evOfQuem;
                 const doOutro = of && !minha;
-                const bloqueado = doOutro || legado || !_evOfQuem;
+                // O que a casa ofereceu não se pica: não há nada para assumir,
+                // e assumi-lo era pôr uma rodada de €0.00 na conta de alguém.
+                const daCasa = ordemOfertaCasa(l.o);
+                const bloqueado = doOutro || legado || daCasa || !_evOfQuem;
                 let nota = '';
                 if (doOutro) nota = 'oferecido por ' + _evEsc(of.quem);
                 else if (legado) nota = 'já coberto por uma oferta antiga';
+                else if (daCasa) nota = 'oferta da casa';
                 const q = l.o.quantidade / l.o.amigos.length;
                 return '<button type="button" class="ev-of-linha' + (minha ? ' on' : '') + (bloqueado ? ' off' : '') + '"'
                     + (bloqueado ? ' disabled' : '')
@@ -1446,7 +1575,7 @@ function evRenderOferta() {
                         : '') + '</span>'
                     + '<span class="ev-of-t">' + _evQtdStr(q) + '× ' + _evEsc(l.o.item)
                     + (nota ? '<i>' + nota + '</i>' : '') + '</span>'
-                    + '<span class="ev-of-v">€' + l.valor.toFixed(2) + '</span></button>';
+                    + '<span class="ev-of-v">' + (daCasa ? 'Grátis' : '€' + l.valor.toFixed(2)) + '</span></button>';
             }).join('');
             return '<div class="ev-of-grupo"><div class="ev-of-cab"><span>' + _evEsc(p) + '</span>'
                 + '<span>€' + tot.toFixed(2) + '</span></div>' + corpo + '</div>';
@@ -1504,6 +1633,10 @@ function evToggleOferta(pi, ordemId) {
     const ordem = estado.ordens.find(o => o.id === ordemId);
     if (!pessoa || !ordem) return;
 
+    if (ordemOfertaCasa(ordem) && !_evOfertaDe(ordemId, pessoa)) {
+        evToast('Essa é uma oferta da casa — não há nada para assumir', false);
+        return;
+    }
     const existente = _evOfertaDe(ordemId, pessoa);
     if (existente) {
         if (existente.quem !== _evOfQuem) return;   // é oferta de outra pessoa
@@ -2303,10 +2436,12 @@ function exportarPDFConta() {
 
     const totalPorItem = {};
     const qtdPorItem = {};
+    const casaPorItem = {};
     estado.ordens.forEach(o => {
-        if (!totalPorItem[o.item]) { totalPorItem[o.item] = 0; qtdPorItem[o.item] = 0; }
+        if (!totalPorItem[o.item]) { totalPorItem[o.item] = 0; qtdPorItem[o.item] = 0; casaPorItem[o.item] = 0; }
         totalPorItem[o.item] += o.precoTotal;
         qtdPorItem[o.item] += o.quantidade;
+        if (ordemOfertaCasa(o)) casaPorItem[o.item] += o.quantidade;
     });
     const itens = Object.keys(totalPorItem).sort();
 
@@ -2318,12 +2453,12 @@ function exportarPDFConta() {
                 <td style="padding:8px 10px;font-weight:600;">${o.item}</td>
                 <td style="padding:8px 10px;text-align:center;">${o.quantidade}x</td>
                 <td style="padding:8px 10px;font-size:12px;color:#4A534E;">${o.amigos.join(', ')}</td>
-                <td style="padding:8px 10px;text-align:right;font-weight:700;color:#0E7A4F;">€${o.precoTotal.toFixed(2)}</td>
+                <td style="padding:8px 10px;text-align:right;font-weight:700;color:${ordemOfertaCasa(o) ? '#B8911F' : '#0E7A4F'};">${ordemOfertaCasa(o) ? '🏠 oferta da casa' : '€' + o.precoTotal.toFixed(2)}</td>
             </tr>`).join('');
 
     const linhasItens = itens.map((item, i) => `
         <tr style="background:${i % 2 === 0 ? '#fff' : '#F7F8F4'}">
-            <td style="padding:9px 14px;font-weight:600;">${item}</td>
+            <td style="padding:9px 14px;font-weight:600;">${item}${casaPorItem[item] ? `<span style="font-weight:600;color:#B8911F;font-size:11px;"> · ${casaPorItem[item]}x da casa</span>` : ''}</td>
             <td style="padding:9px 14px;text-align:center;color:#4A534E;">${qtdPorItem[item]}x</td>
             <td style="padding:9px 14px;text-align:right;font-weight:700;color:#0E7A4F;">€${totalPorItem[item].toFixed(2)}</td>
         </tr>`).join('');
@@ -2954,14 +3089,22 @@ function faturaConferir() {
     const r = estado.fatura;
     if (!r) return null;
 
-    // Consumo marcado, agregado por artigo
+    // Consumo marcado, agregado por artigo. As OFERTAS DA CASA ficam de fora da
+    // contagem que se compara com a fatura — é isso que se espera delas: não
+    // serem cobradas. Contam-se à parte (`gratis`), e é essa contagem que
+    // explica a linha quando a fatura afinal as traz.
     const cons = {};
     estado.ordens.forEach(o => {
-        const c = cons[o.item] || (cons[o.item] = { item: o.item, qtd: 0, total: 0 });
+        const c = cons[o.item] || (cons[o.item] = { item: o.item, qtd: 0, total: 0, gratis: 0, unitRef: 0 });
+        if (ordemOfertaCasa(o)) {
+            c.gratis += o.quantidade;
+            if (!c.unitRef) c.unitRef = Number(o.precoUnitario) || 0;
+            return;
+        }
         c.qtd += o.quantidade;
         c.total += o.precoTotal;
     });
-    Object.keys(cons).forEach(k => { cons[k].unit = cons[k].qtd ? _frR2(cons[k].total / cons[k].qtd) : 0; });
+    Object.keys(cons).forEach(k => { cons[k].unit = cons[k].qtd ? _frR2(cons[k].total / cons[k].qtd) : cons[k].unitRef; });
     const porChave = {};
     Object.keys(menu).forEach(k => { porChave[faturaKey(k)] = k; });
     Object.keys(cons).forEach(k => { porChave[faturaKey(k)] = k; });   // consumido manda sobre o menu
@@ -3010,7 +3153,7 @@ function faturaConferir() {
         const du = _frR2(f.unit - c.unit);
         rows.push({
             tipo: Math.abs(dq) > 0.001 ? 'qtd' : (Math.abs(du) >= 0.01 ? 'preco' : 'ok'),
-            item: f.item, nome: f.item, nomesFatura: f.nomes,
+            item: f.item, nome: f.item, nomesFatura: f.nomes, gratis: c.gratis,
             qtdF: f.qtd, qtdC: c.qtd, unitF: f.unit, unitC: c.unit,
             totF: f.total, totC: _frR2(c.total), dq, du
         });
@@ -3020,7 +3163,11 @@ function faturaConferir() {
     Object.keys(fat).forEach(k => { if (fat[k].item) naFatura[fat[k].item] = true; });
     Object.keys(cons).forEach(it => {
         if (naFatura[it]) return;
-        rows.push({ tipo: 'falta', item: it, nome: it, qtdC: cons[it].qtd, unitC: cons[it].unit, totC: _frR2(cons[it].total) });
+        // Só ofertas da casa e a fatura não as traz: é o que devia acontecer,
+        // não é uma falta.
+        if (!cons[it].qtd && cons[it].gratis) return;
+        rows.push({ tipo: 'falta', item: it, nome: it, gratis: cons[it].gratis,
+                    qtdC: cons[it].qtd, unitC: cons[it].unit, totC: _frR2(cons[it].total) });
     });
 
     // Problemas primeiro, depois preços, e o que está certo por último
@@ -3130,6 +3277,12 @@ function faturaRenderRecon() {
             if (podeMexer) acao = '<button class="fr-acao" onclick="faturaMarcarExtra(' + i + ')">➕ Marcar</button>';
         } else {
             det = 'marcado: ' + x.qtdC + ' × €' + x.unitC.toFixed(2) + ' = €' + x.totC.toFixed(2) + ' · não aparece na fatura';
+        }
+        // O que está marcado como oferta da casa não entra na contagem acima —
+        // dizê-lo é o que explica um "marcado 0" ou uma diferença de unidades.
+        if (x.gratis) {
+            det += ' · <span class="fr-casa">🏠 ' + x.gratis
+                + (x.gratis === 1 ? ' un. marcada como oferta da casa' : ' un. marcadas como oferta da casa') + '</span>';
         }
         // Nome(s) que vieram impressos, quando diferem do artigo da app. Com
         // permissão, cada um vira um <select> — é o que deixa desfazer um
@@ -3248,8 +3401,13 @@ async function faturaCorrigirPrecoItem(i) {
     if (!soMenu) {
         estado.ordens.forEach(o => {
             if (o.item !== x.item) return;
+            // Uma oferta da casa fica oferta: o preço novo guarda-se no
+            // unitário (é por ele que volta à conta, se voltar), mas o total
+            // não pode passar a zero para diferente de zero por aqui — isso
+            // é uma decisão de quem lê a fatura, no botão da folha da linha.
+            const casa = ordemOfertaCasa(o);
             o.precoUnitario = x.unitF;
-            o.precoTotal = _frR2(x.unitF * o.quantidade);
+            o.precoTotal = casa ? 0 : _frR2(x.unitF * o.quantidade);
         });
     }
     salvarNoLocalStorage();
@@ -3284,6 +3442,9 @@ function faturaMarcarExtra(i) {
     if (sel) sel.value = x.nome;
     const q = document.getElementById('quantidade');
     if (q) q.value = String(Math.min(10, Math.max(1, Math.round(x.qtdF))));
+    // Veio da fatura, logo vai à conta: nunca herda uma oferta da casa deixada
+    // no formulário.
+    evCasaNova(false);
     atualizarPreco();
     atualizarBotaoOrdem();
     const sec = document.getElementById('section-adicionar');

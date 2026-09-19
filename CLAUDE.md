@@ -511,6 +511,43 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
   folha fechada a mensagem não se via, por isso o `mostrarMensagem()` passa a
   um aviso flutuante quando o `#mensagem` está escondido.
 
+## A oferta da casa: regista-se na mesma, mas não custa nada
+O Sá oferece o prato à mesa. A ordem tem de ser lançada à mesma — é preciso
+saber **quem consumiu**, e quando a fatura chega o artigo pode muito bem lá
+estar cobrado — mas não pode entrar para a conta de ninguém.
+- **Não tem flag própria nem coluna nova** (`ordemOfertaCasa`, no `app.js`): o
+  `precoUnitario` continua a ser o que o artigo custaria e o `precoTotal` é
+  **zero**. É só isso que a distingue, e é de propósito — as colunas `ordens`
+  já existem (sobrevive à recarga da BD **sem migração nenhuma**) e as contas
+  que já somavam `precoTotal` (total da mesa, por item, por pessoa, divisão,
+  rácio da fatura, PDFs) ficam todas certas sem um segundo sítio a decidir
+  quanto é que a ordem vale. Um artigo a €0.00 no menu **não** é oferta da
+  casa: aí o `precoUnitario` também é zero.
+- **Não confundir com a rodada** (`estado.ofertas`): a rodada muda a conta
+  **entre amigos** — quem oferece paga mais, quem recebe paga menos, o total da
+  mesa fica igual. A oferta da casa **tira o artigo da mesa**: ninguém o paga.
+  Por isso não entra pelo botão dourado do Oferecer, entra pelo **+**, que é
+  por onde se lança consumo. As duas partilham a cor (dourado) mas não o
+  símbolo: a rodada é 🎁, a casa é 🏠.
+- **Onde se marca:** segmento "Quem paga isto? · A mesa | 🏠 A casa" no passo 2
+  do + (a escolha vive na checkbox escondida `#ordem-casa`, como o item e a
+  quantidade vivem nos selects escondidos — é ela que o `adicionarOrdem()` lê,
+  para não haver um segundo sítio a guardar a mesma resposta; ver `evCasaNova`).
+- **Onde se desfaz:** botão **"Pôr na conta"** na folha da linha da ordem
+  (`evCasaOrdem`), ao lado do Apagar e do Editar. É o caminho que interessa
+  quando a fatura chega e lá está o que o Sá disse que oferecia: a ordem volta
+  à conta pelo `precoUnitario` que tinha quando foi registada. As **rodadas**
+  picadas nessa ordem vão-se embora quando ela passa a grátis — não há nada
+  para assumir numa oferta da casa — e o ecrã de picar bloqueia essas linhas.
+- **A conferência da fatura conta-as à parte** (`faturaConferir`): as unidades
+  oferecidas ficam fora do que se compara com a fatura (é isso que se espera
+  delas, não serem cobradas) e contam-se em `gratis`. Se a fatura as trouxer, a
+  linha aparece como diferença de quantidade com a nota "🏠 N un. marcadas como
+  oferta da casa" — é o aviso para ir pôr a ordem de volta na conta. Se não as
+  trouxer, não há linha nenhuma em falta. E o 🔄 de corrigir preço pela fatura
+  **nunca** ressuscita uma oferta: atualiza o unitário e deixa o total a zero,
+  porque pôr de volta na conta é decisão de quem lê a fatura, não do preço.
+
 ## O que os outros lançam aparece sozinho (secção `REFRESCO`)
 A mesa é escrita por várias pessoas ao mesmo tempo, mas a app só lia o servidor
 no arranque: quem estivesse no ecrã do evento ficava com a lista de quando lá
