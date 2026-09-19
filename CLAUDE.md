@@ -16,7 +16,7 @@ App pessoal de divisão de contas ("dia de jogo").
 
 ## Como NÃO gastar tokens à toa (importante)
 - **Não leias o `app.js` inteiro.** Está dividido em secções com comentários `/* ── título ── */`. Para achar algo, faz `grep` pelo título e lê só esse troço. Secções:
-  Custom confirm modal · **Pagador & Contas (dívidas)** · Page switching · FAB · **Core: cálculo de saldos** (dívidas + pagamentos) · Render · **Ecrã do evento** (quadrantes, folhas, o + em dois passos) · Payment form · Edit Ordem inline · **Importar Fatura** (foto/PDF → Gemini → conferência artigo a artigo) · **Calendário do Sporting** (ler `goals.jogos`, guardar o mínimo cá) · **Jogo aberto & presenças** (abrir o jogo, vou/não vou, hora do Sá) · Configs · **Supabase** (+ Sessão/refresh do token, Permissões, Agregação global, IDs únicos, Equivalências amigo↔conta)
+  Custom confirm modal · **Pagador & Contas (dívidas)** · Page switching · FAB · **Core: cálculo de saldos** (dívidas + pagamentos) · Render · **Ecrã do evento** (quadrantes, folhas, o + em dois passos) · Payment form · Edit Ordem inline · **Importar Fatura** (foto/PDF → Gemini → conferência artigo a artigo) · **Calendário do Sporting** (ler `goals.jogos`, guardar o mínimo cá) · **Jogo aberto & presenças** (abrir o jogo, vou/não vou, hora do Sá) · Configs · **Supabase** (+ Sessão/refresh do token, Permissões, **Refresco** do evento no ecrã, Agregação global, IDs únicos, Equivalências amigo↔conta)
 - `fatura-restaurante.ts` — Edge Function (Deno) que lê a fatura com o Gemini. **Não corre no site**: vive no Supabase, faz-se deploy à parte (`supabase functions deploy fatura-restaurante`). É irmã da `fatura-ocr` da FestasBV — mesmo projeto Supabase, schema e prompt diferentes.
 - `push-notificar.ts` — a outra Edge Function, a das notificações Web Push. Também **não corre no site** (`supabase functions deploy push-notificar`): se mexeres nos `tipo` daqui, o texto novo só aparece depois desse deploy. O corpo da notificação é escolhido **lá**, nunca vem livre do cliente — só nomes, valores, as horas (a do Sá e a da mesa, validadas `HH:MM` dos dois lados) e o nº de pessoas da mesa (validado inteiro 1–99 dos dois lados, opcional) são interpolados.
 - **Fatura guardada:** o detalhe lido fica em `estado.fatura` e persiste na coluna `eventos.fatura` (jsonb, `db/fatura-detalhe.sql`). A correspondência linha-da-fatura ↔ artigo do menu **não** se guarda — é recalculada a cada render (`faturaConferir()`), de propósito: se o menu do evento mudar, a conferência acompanha. Sem a migração, `FATURA_COL=false` e a fatura fica só no localStorage.
@@ -510,6 +510,36 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
 - `evToast()`: o `#mensagem` de sempre vive agora dentro da folha do +. Com a
   folha fechada a mensagem não se via, por isso o `mostrarMensagem()` passa a
   um aviso flutuante quando o `#mensagem` está escondido.
+
+## O que os outros lançam aparece sozinho (secção `REFRESCO`)
+A mesa é escrita por várias pessoas ao mesmo tempo, mas a app só lia o servidor
+no arranque: quem estivesse no ecrã do evento ficava com a lista de quando lá
+entrou, e nem o refresh à página a trazia — recarregava a app, mas o GET ao
+PostgREST era o mesmo URL de sempre e vinha da **cache do browser**. Daí o
+`cache:'no-store'` em todas as leituras do `sbFetch()`: uma leitura nunca pode
+vir da cache.
+- **Só o evento que está no ecrã** (`refrescarEventoAtual`): três pedidos
+  pequenos (a linha do evento, as ordens, as ofertas) e não a carga toda, que
+  puxa pagamentos, divisões e configurações que não mudam a meio de um jogo.
+- **Quando:** de 30 em 30s (`REFRESCO_MS`), quando a app volta à frente, quando
+  a rede volta e ao entrar na página do evento (`mudarPagina`). O `refrescoTick`
+  ignora um pedido se acabou de ler (5s), para os gatilhos não caírem uns em
+  cima dos outros.
+- **Nunca apanha ninguém a meio** (`_refrescoLivre`): com uma folha aberta, um
+  painel/modal por cima, o cursor num campo ou uma gravação a caminho do
+  servidor (`_sbEscritas`, contadas no `sbFetch`), o tick não corre. Recarregar
+  o evento troca `amigos`, `menu`, `estado.ordens` e fecha a conferência da
+  fatura — a meio de uma edição era deitar fora o que a pessoa estava a fazer.
+- **Silencioso**, e só redesenha quando alguma coisa mudou mesmo
+  (`_evAssinatura`, que deixa de fora as `dividas` e o que só existe deste lado).
+- **`eventoDaBD()`** é o mapa linha-da-BD → evento, partilhado pela carga toda
+  (`sbCarregarDados`) e pelo refresco: dois sítios a reconstruir o mesmo evento
+  davam dois eventos diferentes à primeira coluna que faltasse.
+- **`evRedesenharTudo()`** é a sequência de renders que o `navegarHistorico()` e
+  o `sbiAbrirEvento()` já faziam à mão — é por passar por ela que sair e entrar
+  no evento mostrava o que havia de novo. Carregar o evento só mexe na memória:
+  **quem carrega um evento fora do arranque redesenha a seguir**, senão fica
+  outra vez o ecrã de antes.
 
 ## Armadilhas do CSS (já mordidas)
 - **`input, select { appearance: none }`** (para os campos de texto) apaga o
