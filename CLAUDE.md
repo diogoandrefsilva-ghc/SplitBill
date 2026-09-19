@@ -20,6 +20,22 @@ App pessoal de divisão de contas ("dia de jogo").
 - `fatura-restaurante.ts` — Edge Function (Deno) que lê a fatura com o Gemini. **Não corre no site**: vive no Supabase, faz-se deploy à parte (`supabase functions deploy fatura-restaurante`). É irmã da `fatura-ocr` da FestasBV — mesmo projeto Supabase, schema e prompt diferentes.
 - `push-notificar.ts` — a outra Edge Function, a das notificações Web Push. Também **não corre no site** (`supabase functions deploy push-notificar`): se mexeres nos `tipo` daqui, o texto novo só aparece depois desse deploy. O corpo da notificação é escolhido **lá**, nunca vem livre do cliente — só nomes, valores, as horas (a do Sá e a da mesa, validadas `HH:MM` dos dois lados) e o nº de pessoas da mesa (validado inteiro 1–99 dos dois lados, opcional) são interpolados.
 - **Fatura guardada:** o detalhe lido fica em `estado.fatura` e persiste na coluna `eventos.fatura` (jsonb, `db/fatura-detalhe.sql`). A correspondência linha-da-fatura ↔ artigo do menu **não** se guarda — é recalculada a cada render (`faturaConferir()`), de propósito: se o menu do evento mudar, a conferência acompanha. Sem a migração, `FATURA_COL=false` e a fatura fica só no localStorage.
+- **Equivalência de nomes sugerida** (`_frSugestoesEquiv`): quando o talão escreve
+  um nome que não se parece com nada ("Lacrau Moscat" para o que na app é "Villa
+  Platanus Branco"), o emparelhamento por nome falha e a conferência parte o
+  artigo em duas linhas — um `extra` e uma `falta`. A pista que sobra é a
+  **quantidade**: X un a mais de um lado e X a menos do outro. A app **propõe** o
+  par e quem lê o talão é que aprova; aprovar escreve o mesmo
+  `estado.fatura.overrides` que o `<select>` de reatribuição já escrevia, e o
+  "não é" fica em `estado.fatura.semEquiv` (mesmo jsonb, **sem migração**), preso
+  a esta leitura. O emparelhamento é **ganancioso e por rondas**: de cada vez sai
+  o par com melhor semelhança de nome entre os que a quantidade permite, e só se
+  nenhum outro candidato disputar esse extra ou essa falta com a mesma pontuação
+  — é isso que resolve primeiro os nomes truncados pelo talão ("Lagartos Grel") e
+  deixa o que não se parece com nada sozinho e já proponível. Tudo empatado a
+  disputar os mesmos lados = não se propõe nada, e faz-se à mão no `<select>` da
+  linha, que agora também aparece nas linhas `extra` sem par (antes só havia
+  select quando já existia um emparelhamento para desfazer).
 - **Convocados e menu do evento:** persistem nas colunas `eventos.amigos` / `eventos.menu` (jsonb, `db/convocados-menu.sql`). `ev.amigos` é a lista de **candidatos** (quem foi convocado); quem **consumiu** está em `ordem_amigos`/`oferta_para` — não confundir (`presentesNoEvento()` usa o segundo). Ao carregar da BD faz-se a união das duas (`convocadosDoEvento()`), para os eventos anteriores à migração não ficarem vazios. Sem a migração, `AMIGOS_COL`/`MENU_COL=false` e ficam só no localStorage.
 - Excepção conhecida: o **ecrã inicial** (hub) tem o CSS todo num
   `<style id="sbi-css">` dentro do `index.html`, junto do `renderInicio` que o
