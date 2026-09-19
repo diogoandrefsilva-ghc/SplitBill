@@ -356,13 +356,29 @@ paga chama **`divisaoDoEvento(ev)`** — e mais nada.
 - **Cuidado:** ao carregar do Supabase o `ev.dividas` vem **sempre vazio**
   (`evDividas = {}`), por isso quem só olhasse para aí caía no rácio e ficava a um
   cêntimo. É `divisoes` que sobrevive à recarga.
+- **Quem pergunta é sempre a divisão, nunca o `estado`** (`eventoParaDivisao`):
+  a linha do histórico e o `estado` são duas cópias do mesmo evento e há
+  instantes em que discordam — o fecho mexe primeiro no `estado`, e o refresco
+  com uma folha aberta troca a linha do histórico sem tocar no `estado`. A
+  `contaFinalFixada()` perguntava ao `estado` e ao histórico ao mesmo tempo
+  (e com `===` num `id` que pode vir da BD ou do localStorage): bastava um dos
+  lados não ter ainda a fatura para devolver `null` — e `null` aqui **não** quer
+  dizer "conta aberta", quer dizer que o ecrã cai no rácio. Era assim que o
+  mesmo Diogo aparecia a **€24.70 na notificação e no zoom e a €24.69 no
+  quadrante**, com a coluna a somar €147.08 em vez dos €147.10 da fatura.
+  Agora os dois lados juntam-se antes de perguntar, e a resposta é uma só.
 - No **ecrã do evento** é a `contaFinalFixada()` que a embrulha, e o **pagador**
   (que não tem dívida) fica com o **resto da fatura** — é ele que absorve o
   cêntimo da sobra, como no fecho, e é isso que faz a soma das pessoas dar
-  exactamente a fatura. Os quatro sítios que mostram o valor (quadrante Por
-  pessoa, o seu zoom, a folha da pessoa, o PDF da divisão) passam todos pelo
-  `_evValorFinalPessoa`. **Sítio novo que mostre o que alguém paga = passa por
-  aqui**, senão volta a haver dois números para a mesma pessoa.
+  exactamente a fatura. Os cinco sítios que mostram o valor (quadrante Por
+  pessoa, o seu zoom, a folha da pessoa, o PDF da divisão, a lista do
+  `atualizarAjuste()` dentro da Conta) passam todos pela mesma divisão.
+  **Sítio novo que mostre o que alguém paga = passa por aqui**, senão volta a
+  haver dois números para a mesma pessoa.
+- O `atualizarAjuste()` é a excepção com regra: enquanto se **escreve** uma
+  fatura nova, a divisão fixada ainda é a da anterior e não serve de previsão,
+  por isso aí (e só aí) mostra-se o proporcional — o mesmo que o fecho vai
+  usar. Com a fatura já fechada nesse valor, manda a divisão.
 - A folha da pessoa lista o **consumo** e, num cartão à parte, os **dois
   totais**: `Consumo` (aos preços do menu) · `Acerto da fatura` · `Total final`.
   Com um só total o número do cabeçalho não se explicava a partir das linhas de

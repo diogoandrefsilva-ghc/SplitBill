@@ -455,25 +455,35 @@ function removerOrdem(id) {
    lê — é isso que faz o quadrante, o zoom, a folha e o PDF dizerem todos o
    mesmo número. O PAGADOR não tem dívida, por isso fica com o que sobra da
    fatura depois das dos outros: é ele que absorve o cêntimo da sobra (como no
-   fecho) e é assim que a soma das pessoas dá exactamente a fatura. */
+   fecho) e é assim que a soma das pessoas dá exactamente a fatura.
+   NÃO pergunta ao `estado` se a conta está fechada: pergunta à divisão, pela
+   mesma `eventoParaDivisao()` que a página das dívidas e as notificações usam.
+   Perguntar ao `estado` (ou só à linha do histórico) devolvia `null` sempre que
+   os dois discordassem por um instante, e um `null` aqui não é "conta aberta" —
+   é o ecrã a cair no rácio e a mostrar um cêntimo diferente do que foi
+   notificado ao grupo. Ver `eventoParaDivisao`. */
 function contaFinalFixada() {
-    if (!estado.totalFatura || !estado.pagador) return null;
-    const div = divisaoDoEvento(historico.find(h => h.id === eventoAtualId));
+    if (eventoAtualId == null) return null;
+    const ev = eventoParaDivisao(historico.find(h => h.id == eventoAtualId) || { id: eventoAtualId });
+    const div = divisaoDoEvento(ev);
     if (!div) return null;
     const conta = {};
     let somaOutros = 0;
     Object.keys(div).forEach(p => {
-        if (p === estado.pagador) return;
+        if (p === ev.pagador) return;
         conta[p] = div[p];
         somaOutros += div[p];
     });
-    conta[estado.pagador] = Math.round((estado.totalFatura - somaOutros) * 100) / 100;
+    conta[ev.pagador] = Math.round((ev.totalFatura - somaOutros) * 100) / 100;
     return conta;
 }
 
 // O valor de UMA pessoa: o fixado quando existe; senão o bruto ajustado pelo
-// rácio da fatura (conta aberta, ou alguém que ficou de fora da divisão por
-// não dever nada).
+// rácio da fatura. Com a `contaFinalFixada()` a nunca falhar por desencontro
+// entre o `estado` e o histórico, este segundo ramo já só apanha dois casos, e
+// em nenhum deles há um valor fixado com que discordar: a conta AINDA ABERTA
+// (sem fatura, `racio` nulo — mostra-se o consumo, igual em todo o lado) e quem
+// ficou de fora da divisão por não dever nada.
 function _evValorFinalPessoa(pessoa, totalBruto, racio, fixada) {
     if (fixada && fixada[pessoa] != null) return fixada[pessoa];
     return racio ? totalBruto * racio : totalBruto;
@@ -2809,7 +2819,15 @@ function atualizarAjuste() {
     const consumoLiquido = {};
     setPessoas.forEach(p => consumoLiquido[p] = consumoBruto[p] + (saldoOfertas[p] || 0));
 
-    // Ajuste proporcional
+    // Ajuste proporcional. Com a conta JÁ FECHADA nesta mesma fatura, o número
+    // não se recalcula aqui: vem da divisão fixada (`contaFinalFixada`), que é
+    // o que fica a pagamento e o que foi notificado ao grupo — recalcular pelo
+    // rácio arredondava cada pessoa isolada e deixava esta lista um cêntimo ao
+    // lado do quadrante Por pessoa. Enquanto se está a ESCREVER uma fatura
+    // nova, a divisão fixada ainda é a da anterior e não serve de previsão:
+    // aí sim, mostra-se o proporcional (o mesmo que o fecho vai usar).
+    const fixadaAj = (estado.totalFatura && Math.abs(fatura - estado.totalFatura) < 0.005)
+        ? contaFinalFixada() : null;
     let base = consumoBruto;
     if (diff < 0) base = consumoLiquido;
     const totalBase = Object.values(base).reduce((a, b) => a + b, 0);
@@ -2818,7 +2836,7 @@ function atualizarAjuste() {
         const original = consumoLiquido[p];
         const part = totalBase > 0 ? (base[p] / totalBase) : 0;
         const ajuste = part * diff;
-        const ajustado = original + ajuste;
+        const ajustado = (fixadaAj && fixadaAj[p] != null) ? fixadaAj[p] : original + ajuste;
         return `
         <div class="pessoa-ajuste">
             <span class="pessoa-nome">${p}</span>
@@ -4984,6 +5002,7 @@ async function rejeitarPedidoPagamento(id) {
    nenhuma delas recalcula-se pelo MESMO Hamilton do fecho, nunca por outro
    arredondamento. O pagador não entra: não tem dívida a ninguém. */
 function divisaoDoEvento(ev) {
+    ev = eventoParaDivisao(ev);
     if (!ev || !ev.totalFatura || !ev.pagador) return null;
     const fix = divisoes[ev.id];
     if (fix && Object.keys(fix).length) return fix;
@@ -4994,6 +5013,24 @@ function divisaoDoEvento(ev) {
     });
     if (Object.keys(legado).length) return legado;
     return calcularDivisaoHamilton(calcularContaFinalEvento(ev), ev.pagador);
+}
+
+/* O evento tal como a DIVISÃO o vê. Para o evento que está no ecrã, a linha do
+   histórico e o `estado` (o que se está a editar) são duas cópias da mesma
+   coisa — e há instantes em que discordam: o fecho mexe primeiro no `estado`, e
+   o refresco com uma folha aberta troca a linha do histórico sem tocar no
+   `estado`. Quem lê só um dos lados vê a conta FECHADA e quem lê o outro vê-a
+   ABERTA — e aí um ecrã mostrava a divisão Hamilton (€24.70) e o outro caía no
+   rácio, que arredonda cada pessoa isolada (€24.69). Aqui juntam-se os dois,
+   para que a mesma pergunta tenha uma só resposta em todo o lado. */
+function eventoParaDivisao(ev) {
+    if (eventoAtualId == null || !ev || ev.id != eventoAtualId) return ev;
+    return Object.assign({}, ev, {
+        totalFatura: estado.totalFatura || ev.totalFatura || null,
+        pagador: estado.pagador || ev.pagador || '',
+        ordens: (estado.ordens && estado.ordens.length) ? estado.ordens : (ev.ordens || []),
+        ofertas: (estado.ofertas && estado.ofertas.length) ? estado.ofertas : (ev.ofertas || [])
+    });
 }
 
 // Calculate final amounts for any event
