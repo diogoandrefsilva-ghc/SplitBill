@@ -3645,7 +3645,9 @@ function mudarPagina(pagina) {
     if (pagina !== 'eventos') evFecharSheet();
     if (pagina === 'pagamentos') renderContas();
     aplicarPermissoesEdicao();
-    if (pagina === 'eventos') { evSyncPermissoes(); setTimeout(evAjustarAltura, 0); }
+    // Entrar no evento é o momento em que se vem ver o que lá está: aproveita-se
+    // para reler o servidor (o tick trata do resto enquanto cá se fica).
+    if (pagina === 'eventos') { evSyncPermissoes(); setTimeout(evAjustarAltura, 0); if (typeof refrescoTick === 'function') setTimeout(refrescoTick, 0); }
 }
 
 function atualizarNavBadge() {
@@ -6549,6 +6551,10 @@ async function sbRefresh() {
 async function sbEnsureFresh() {
     if (_sbSession && _sbSession.refresh_token && tokenQuaseExpirado()) await sbRefresh();
 }
+// Escritas em curso (PATCH/POST/DELETE). O refresco em segundo plano espera por
+// elas: recarregar o evento a meio de uma gravação punha no ecrã a versão do
+// servidor de antes de ela chegar.
+let _sbEscritas = 0;
 // fetch para o REST: garante token fresco e, se ainda assim vier 401, faz refresh + 1 retry
 async function sbFetch(url, opt) {
     opt = opt || {};
@@ -6560,16 +6566,26 @@ async function sbFetch(url, opt) {
         mostrarMensagem('👁️ Modo "ver como": nada é gravado. Sai do modo para editar.', false);
         return new Response('[]', { status: 403, headers: { 'Content-Type': 'application/json' } });
     }
-    await sbEnsureFresh();
-    opt.headers = Object.assign({}, opt.headers, { 'Authorization': `Bearer ${_sbSession?.access_token || SB_KEY}` });
-    let r = await fetch(url, opt);
-    if (r.status === 401 && _sbSession && _sbSession.refresh_token) {
-        if (await sbRefresh()) {
-            opt.headers['Authorization'] = `Bearer ${_sbSession.access_token}`;
-            r = await fetch(url, opt);
+    // Uma LEITURA nunca pode vir da cache do browser: os URLs do PostgREST são
+    // sempre os mesmos e o Safari servia a resposta de há bocado — era isso que
+    // fazia um refresh à página não trazer as ordens que outra pessoa lançou.
+    if (_metodo === 'GET') opt.cache = 'no-store';
+    const _escrita = _metodo !== 'GET' && _metodo !== 'HEAD';
+    if (_escrita) _sbEscritas++;
+    try {
+        await sbEnsureFresh();
+        opt.headers = Object.assign({}, opt.headers, { 'Authorization': `Bearer ${_sbSession?.access_token || SB_KEY}` });
+        let r = await fetch(url, opt);
+        if (r.status === 401 && _sbSession && _sbSession.refresh_token) {
+            if (await sbRefresh()) {
+                opt.headers['Authorization'] = `Bearer ${_sbSession.access_token}`;
+                r = await fetch(url, opt);
+            }
         }
+        return r;
+    } finally {
+        if (_escrita) _sbEscritas--;
     }
-    return r;
 }
 // Refresh preventivo: a cada 10 min e sempre que a PWA volta ao ecrã
 setInterval(() => { sbEnsureFresh(); }, 10 * 60 * 1000);
@@ -7268,6 +7284,68 @@ function convocadosDoEvento(guardados, evOrdens, evOfertas, pagador) {
     return lista;
 }
 
+/* Uma linha da tabela `eventos` (+ as suas ordens e ofertas) no formato que a
+   app usa no `historico`. Vive à parte porque há DOIS sítios a reconstruir um
+   evento: a carga de tudo (sbCarregarDados) e o refresco de um evento só
+   (refrescarEventoAtual). `loc` é o evento como está neste dispositivo: serve de
+   rede às colunas opcionais — enquanto a migração não for corrida o servidor não
+   devolve a fatura, os convocados, o menu nem as presenças, e reconstruir por
+   cima levava-os à frente. */
+function eventoDaBD(ev, ordensDoEv, ofertasDoEv, loc) {
+    const evOrdens = (ordensDoEv || []).map(o => ({
+        id: o.id,
+        item: o.item,
+        quantidade: o.quantidade,
+        precoUnitario: parseFloat(o.preco_unitario),
+        precoTotal: parseFloat(o.preco_total),
+        hora: o.hora,
+        amigos: (o['ordem_amigos'] || []).map(a => a.amigo),
+        criadoPor: o.criado_por || null
+    }));
+    const evOfertas = (ofertasDoEv || []).map(o => ({
+        id: o.id,
+        quem: o.quem,
+        item: o.item,
+        quantidade: o.quantidade,
+        precoUnitario: parseFloat(o.preco_unitario),
+        precoTotal: parseFloat(o.preco_total),
+        hora: o.hora,
+        para: (o['oferta_para'] || []).map(a => a.amigo)
+    }));
+    const _loc = loc || {};
+    const _temObj = v => v && typeof v === 'object' && Object.keys(v).length ? v : null;
+    return {
+        id: ev.id,
+        descricao: ev.descricao,
+        data: ev.data,
+        totalFatura: ev.total_fatura ? parseFloat(ev.total_fatura) : null,
+        pagador: ev.pagador,
+        ordens: evOrdens,
+        ofertas: evOfertas,
+        amigos: convocadosDoEvento(
+            (AMIGOS_COL && Array.isArray(ev.amigos)) ? ev.amigos
+                : ((Array.isArray(_loc.amigos) && _loc.amigos.length) ? _loc.amigos : undefined),
+            evOrdens, evOfertas, ev.pagador),
+        menu: (MENU_COL && ev.menu && typeof ev.menu === 'object') ? ev.menu : (_temObj(_loc.menu) || {}),
+        jogo: (VAI_JOGO_COL && ev.vai_jogo && typeof ev.vai_jogo === 'object') ? ev.vai_jogo : (_temObj(_loc.jogo) || {}),
+        gamebox: (GAMEBOX_COL && ev.gamebox && typeof ev.gamebox === 'object') ? ev.gamebox : (_temObj(_loc.gamebox) || {}),
+        saHora: (SA_HORA_COL && ev.sa_hora && typeof ev.sa_hora === 'object') ? ev.sa_hora : (_temObj(_loc.saHora) || {}),
+        mesaHora: MESA_HORA_COL ? (ev.mesa_hora || '') : (_loc.mesaHora || ''),
+        mesaPessoas: MESA_PESSOAS_COL ? (ev.mesa_pessoas || null) : (_loc.mesaPessoas || null),
+        // as dívidas recalculam-se a partir dos pagamentos
+        dividas: {},
+        fatura: (FATURA_COL && ev.fatura) ? ev.fatura : (_loc.fatura || null),
+        substituto: ev.substituto_email || null,
+        // undefined (coluna ausente) ≠ false: é o que faz jogoAberto()
+        // cair no critério antigo, a data.
+        aberto: ABERTO_COL ? (ev.aberto === null ? undefined : !!ev.aberto) : undefined,
+        // Ligação ao jogo em `goals.jogos` (db/jogo-id.sql). null = evento
+        // criado à mão, ou anterior à migração: a ficha resolve-se por
+        // nome+data (ver jogoGoalsDoEvento).
+        jogoId: JOGO_ID_COL ? (ev.jogo_id ?? null) : null
+    };
+}
+
 async function sbCarregarDados() {
     try {
         // Carregar eventos. `fatura` vem no select=* se a coluna existir; se a
@@ -7332,78 +7410,18 @@ async function sbCarregarDados() {
         // evento — ver menuDoEvento().
         await carregarMenuCatalogo();
 
-        // Reconstruir historico no formato esperado pela app
-        // Faturas já guardadas neste dispositivo: sem a migração o servidor não
-        // as devolve, e o historico é reconstruído por cima — sem isto perdia-se
-        // o detalhe a cada login.
-        // O mesmo vale para os convocados e o menu enquanto db/convocados-menu.sql
-        // não for corrida: sem as colunas, o servidor não os devolve e o histórico
-        // reconstruído por cima levava-os à frente.
-        const faturasLocais = {}, amigosLocais = {}, menusLocais = {}, jogoLocais = {}, gameboxLocais = {}, saHoraLocais = {}, mesaHoraLocais = {}, mesaPessoasLocais = {};
-        (historico || []).forEach(e => {
-            if (!e) return;
-            if (e.fatura) faturasLocais[e.id] = e.fatura;
-            if (Array.isArray(e.amigos) && e.amigos.length) amigosLocais[e.id] = e.amigos;
-            if (e.menu && Object.keys(e.menu).length) menusLocais[e.id] = e.menu;
-            if (e.jogo && Object.keys(e.jogo).length) jogoLocais[e.id] = e.jogo;
-            if (e.gamebox && Object.keys(e.gamebox).length) gameboxLocais[e.id] = e.gamebox;
-            if (e.saHora && Object.keys(e.saHora).length) saHoraLocais[e.id] = e.saHora;
-            if (e.mesaHora) mesaHoraLocais[e.id] = e.mesaHora;
-            if (e.mesaPessoas) mesaPessoasLocais[e.id] = e.mesaPessoas;
-        });
+        // Reconstruir historico no formato esperado pela app. O mapa linha→evento
+        // é o `eventoDaBD()` (ver acima), partilhado com o refresco de um evento
+        // só: dois sítios a reconstruir o mesmo evento davam dois eventos
+        // diferentes à primeira coluna que faltasse.
+        const locais = {};
+        (historico || []).forEach(e => { if (e) locais[e.id] = e; });
 
-        historico = eventos.map(ev => {
-            const evOrdens = ordens.filter(o => o.evento_id === ev.id).map(o => ({
-                id: o.id,
-                item: o.item,
-                quantidade: o.quantidade,
-                precoUnitario: parseFloat(o.preco_unitario),
-                precoTotal: parseFloat(o.preco_total),
-                hora: o.hora,
-                amigos: (o['ordem_amigos'] || []).map(a => a.amigo),
-                criadoPor: o.criado_por || null
-            }));
-            const evOfertas = ofertas.filter(o => o.evento_id === ev.id).map(o => ({
-                id: o.id,
-                quem: o.quem,
-                item: o.item,
-                quantidade: o.quantidade,
-                precoUnitario: parseFloat(o.preco_unitario),
-                precoTotal: parseFloat(o.preco_total),
-                hora: o.hora,
-                para: (o['oferta_para'] || []).map(a => a.amigo)
-            }));
-            const evDividas = {};
-            // recalcular dividas a partir dos pagamentos
-            return {
-                id: ev.id,
-                descricao: ev.descricao,
-                data: ev.data,
-                totalFatura: ev.total_fatura ? parseFloat(ev.total_fatura) : null,
-                pagador: ev.pagador,
-                ordens: evOrdens,
-                ofertas: evOfertas,
-                amigos: convocadosDoEvento(
-                    (AMIGOS_COL && Array.isArray(ev.amigos)) ? ev.amigos : amigosLocais[ev.id],
-                    evOrdens, evOfertas, ev.pagador),
-                menu: (MENU_COL && ev.menu && typeof ev.menu === 'object') ? ev.menu : (menusLocais[ev.id] || {}),
-                jogo: (VAI_JOGO_COL && ev.vai_jogo && typeof ev.vai_jogo === 'object') ? ev.vai_jogo : (jogoLocais[ev.id] || {}),
-                gamebox: (GAMEBOX_COL && ev.gamebox && typeof ev.gamebox === 'object') ? ev.gamebox : (gameboxLocais[ev.id] || {}),
-                saHora: (SA_HORA_COL && ev.sa_hora && typeof ev.sa_hora === 'object') ? ev.sa_hora : (saHoraLocais[ev.id] || {}),
-                mesaHora: MESA_HORA_COL ? (ev.mesa_hora || '') : (mesaHoraLocais[ev.id] || ''),
-                mesaPessoas: MESA_PESSOAS_COL ? (ev.mesa_pessoas || null) : (mesaPessoasLocais[ev.id] || null),
-                dividas: evDividas,
-                fatura: (FATURA_COL && ev.fatura) ? ev.fatura : (faturasLocais[ev.id] || null),
-                substituto: ev.substituto_email || null,
-                // undefined (coluna ausente) ≠ false: é o que faz jogoAberto()
-                // cair no critério antigo, a data.
-                aberto: ABERTO_COL ? (ev.aberto === null ? undefined : !!ev.aberto) : undefined,
-                // Ligação ao jogo em `goals.jogos` (db/jogo-id.sql). null = evento
-                // criado à mão, ou anterior à migração: a ficha resolve-se por
-                // nome+data (ver jogoGoalsDoEvento).
-                jogoId: JOGO_ID_COL ? (ev.jogo_id ?? null) : null
-            };
-        });
+        historico = eventos.map(ev => eventoDaBD(
+            ev,
+            ordens.filter(o => o.evento_id === ev.id),
+            ofertas.filter(o => o.evento_id === ev.id),
+            locais[ev.id]));
 
         pagamentos = pags.map(p => ({
             id: p.id,
@@ -7437,6 +7455,7 @@ async function sbCarregarDados() {
 
         salvarHistoricoLocal();
         salvarPagamentos();
+        _refrescoUltimo = Date.now();
 
         // Re-sincronizar o ESTADO DE TRABALHO com o histórico acabado de
         // reconstruir. Quem chama isto fora do arranque (pull-to-refresh, botão
@@ -7451,13 +7470,152 @@ async function sbCarregarDados() {
             if (atual) carregarEvento(atual);
             else if (historico.length > 0) carregarEvento(eventoPorDefeito());
             else limparEstadoEvento();
-            atualizarReadOnly();
+            // E REDESENHAR. Carregar o evento só mexe no estado em memória: sem
+            // isto o ecrã continuava a mostrar a lista de antes da carga, e a
+            // ordem que outra pessoa lançou só aparecia ao sair e voltar a
+            // entrar no evento (que é o que redesenha).
+            evRedesenharTudo();
         }
     } catch(e) {
         console.error('Erro ao carregar dados do Supabase:', e);
         mostrarMensagem('Erro ao carregar dados!', false);
     }
 }
+
+/* ── REFRESCO: trazer o que os OUTROS lançaram ────────────────────────────
+   O consumo de uma mesa é escrito por várias pessoas ao mesmo tempo, e a app
+   só lia o servidor no arranque: quem estivesse no ecrã do evento ficava com a
+   lista de quando lá entrou. Fazer refresh à página também não chegava —
+   recarregava a app, mas o pedido ao PostgREST era o mesmo URL de sempre e
+   vinha da cache do browser (ver o `no-store` do sbFetch).
+   Agora o evento que está no ecrã volta a ser lido: de X em X segundos, quando
+   a app volta à frente, quando a rede volta e ao entrar na página do evento.
+   Só o evento aberto (3 pedidos pequenos), e não a carga toda: isto corre
+   sozinho e a carga toda puxa pagamentos, divisões e configurações que não
+   mudam a meio de um jogo.
+   REGRA: refrescar NUNCA pode apanhar ninguém a meio de qualquer coisa. Com uma
+   folha aberta, um modal à espera de resposta, o cursor num campo ou uma
+   gravação a caminho do servidor, o tick não corre — volta daqui a pouco. */
+const REFRESCO_MS = 30000;
+let _refrescoACorrer = false;
+let _refrescoUltimo = 0;   // quando o servidor foi lido pela última vez
+
+// Redesenha tudo o que depende do evento carregado. É a sequência que o
+// navegarHistorico()/sbiAbrirEvento() já faziam à mão — sair e entrar no evento
+// mostrava o que havia de novo só porque passava por aqui.
+function evRedesenharTudo() {
+    if (typeof atualizarReadOnly === 'function') atualizarReadOnly();
+    if (typeof renderConfigAmigos === 'function') renderConfigAmigos();
+    if (typeof renderConfigMenu === 'function') renderConfigMenu();
+    if (typeof renderDropdownItens === 'function') renderDropdownItens();
+    if (typeof renderAmigosBotoes === 'function') renderAmigosBotoes();
+    if (typeof renderOfertaDropdowns === 'function') renderOfertaDropdowns();
+    if (typeof renderOfertaAmigos === 'function') renderOfertaAmigos();
+    if (typeof renderPagadorSelect === 'function') renderPagadorSelect();
+    if (typeof atualizarUI === 'function') atualizarUI();
+    if (typeof renderHistoricoDropdown === 'function') renderHistoricoDropdown();
+    if (typeof atualizarNavBadge === 'function') atualizarNavBadge();
+}
+
+// Painéis que vivem por cima da página (admin, convocados, menu, definições…):
+// enquanto um deles está aberto, a pessoa está a mexer noutra coisa.
+const _REFRESCO_OVERLAYS = ['page-admin', 'page-equivalencias', 'page-convocados',
+    'page-menu-artigos', 'page-definicoes', 'novo-evento-overlay', 'push-prompt-overlay'];
+// getComputedStyle e não o style inline: uns abrem-se com display:flex à mão
+// (os painéis), outros com a classe .show (os modais).
+function _refrescoOverlayAberto() {
+    return _REFRESCO_OVERLAYS.some(id => {
+        const el = document.getElementById(id);
+        return !!el && getComputedStyle(el).display !== 'none';
+    });
+}
+
+// Sem a parte do "já está um a correr" — quem tem a resposta do servidor na mão
+// reconfirma com isto que ninguém começou nada entretanto.
+function _refrescoLivre() {
+    if (!_sbSession || eventoAtualId == null) return false;
+    if (typeof document.hidden === 'boolean' && document.hidden) return false;
+    if (navigator.onLine === false) return false;
+    if (typeof _paginaAtual !== 'undefined' && _paginaAtual !== 'eventos') return false;
+    if (_evSheetAberta) return false;           // folha aberta = edição a meio
+    if (_modalResolve) return false;            // pergunta à espera de resposta
+    if (_sbEscritas > 0) return false;          // gravação a caminho do servidor
+    if (_refrescoOverlayAberto()) return false;
+    const foco = document.activeElement;
+    if (foco && /^(INPUT|SELECT|TEXTAREA)$/.test(foco.tagName)) return false;
+    return true;
+}
+function _refrescoPodeCorrer() {
+    return !_refrescoACorrer && _refrescoLivre();
+}
+
+// O que interessa comparar entre duas versões do mesmo evento. As `dividas` não
+// entram (são sempre {} vindas do servidor, e o init() enche-as nos eventos
+// antigos) nem nenhum campo que só exista deste lado: senão o evento dava-se
+// sempre por mudado e o ecrã redesenhava-se de 30 em 30 segundos por nada.
+function _evAssinatura(ev) {
+    if (!ev) return '';
+    return JSON.stringify([ev.ordens, ev.ofertas, ev.totalFatura, ev.pagador, ev.amigos,
+        ev.menu, ev.fatura, ev.aberto, ev.jogo, ev.gamebox, ev.saHora, ev.mesaHora,
+        ev.mesaPessoas, ev.substituto, ev.descricao, ev.data]);
+}
+
+// Relê do servidor SÓ o evento que está no ecrã. Devolve true se mudou alguma
+// coisa. Silencioso de propósito: o que mudou vê-se na lista, e um aviso a cada
+// meio minuto seria ruído.
+async function refrescarEventoAtual() {
+    if (eventoAtualId == null || !_sbSession) return false;
+    const id = eventoAtualId;
+    _refrescoACorrer = true;
+    try {
+        const h = sbHeaders({ 'Accept': 'application/json' });
+        const [evRes, ordRes, ofRes] = await Promise.all([
+            sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${encodeURIComponent(id)}&select=*`, { headers: h }),
+            sbFetch(`${SB_URL}/rest/v1/ordens?evento_id=eq.${encodeURIComponent(id)}&select=*,ordem_amigos(amigo)&order=id.asc`, { headers: h }),
+            sbFetch(`${SB_URL}/rest/v1/ofertas?evento_id=eq.${encodeURIComponent(id)}&select=*,oferta_para(amigo)&order=id.asc`, { headers: h })
+        ]);
+        if (!evRes.ok || !ordRes.ok || !ofRes.ok) return false;
+        const linhas = await evRes.json();
+        const ordens = await ordRes.json();
+        const ofertas = await ofRes.json();
+        if (!Array.isArray(linhas) || linhas.length === 0) return false;   // apagado no servidor: quem trata disso é a carga toda
+        const idx = historico.findIndex(e => e.id == id);
+        if (idx < 0) return false;
+        const novo = eventoDaBD(linhas[0], Array.isArray(ordens) ? ordens : [],
+            Array.isArray(ofertas) ? ofertas : [], historico[idx]);
+        if (_evAssinatura(novo) === _evAssinatura(historico[idx])) return false;
+        // As dívidas do evento são deste lado (init() enche-as nos eventos
+        // antigos): reconstruir o evento não as pode deitar fora.
+        novo.dividas = historico[idx].dividas || {};
+        if (historico[idx].dataManual) novo.dataManual = true;
+        historico[idx] = novo;
+        salvarHistoricoLocal();
+        // Entretanto pode ter-se trocado de evento (ou aberto uma folha): aí só
+        // fica o histórico actualizado, e o ecrã é de outra coisa.
+        if (eventoAtualId !== id || !_refrescoLivre()) return true;
+        carregarEvento(novo);
+        evRedesenharTudo();
+        return true;
+    } catch(e) {
+        console.warn('[SplitBill] refresco do evento falhou:', e);
+        return false;
+    } finally {
+        _refrescoUltimo = Date.now();
+        _refrescoACorrer = false;
+    }
+}
+
+// Os gatilhos são vários (o relógio, voltar à app, entrar na página do evento) e
+// podem cair uns em cima dos outros: uma leitura acabada de fazer chega.
+function refrescoTick() {
+    if (Date.now() - _refrescoUltimo < 5000) return;
+    if (!_refrescoPodeCorrer()) return;
+    refrescarEventoAtual();
+}
+
+setInterval(refrescoTick, REFRESCO_MS);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refrescoTick(); });
+window.addEventListener('online', refrescoTick);
 
 // ── IDs únicos e monotónicos ────────────────────────────────────────────────
 // Date.now() pode repetir-se no mesmo milissegundo (duas ordens em toques
