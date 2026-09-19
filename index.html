@@ -1627,9 +1627,16 @@ if ('serviceWorker' in navigator) {
     if (typeof atualizarUI==='function') atualizarUI();
   };
   window.sbiHistorico = function(){
-    var fechados = getHist().filter(function(ev){ return !!ev.totalFatura; });
-    if (fechados.length && typeof carregarEvento==='function') {
-      carregarEvento(fechados[fechados.length-1]);
+    // O jogo que abre é o PRIMEIRO do painel do histórico: o mais recente por
+    // DATA, o mesmo critério do eventosDoHistorico(). Era o último da lista por
+    // ordem de CRIAÇÃO e isso deixou de querer dizer o jogo mais recente desde
+    // que o calendário do Goals cria os jogos em lotes (os europeus entraram
+    // depois dos da liga, com ids maiores) — o atalho abria o penúltimo jogo.
+    var lista = (typeof eventosDoHistorico==='function')
+        ? eventosDoHistorico()
+        : getHist().filter(function(ev){ return !!ev.totalFatura; }).reverse();
+    if (lista.length && typeof carregarEvento==='function') {
+      carregarEvento(lista[0]);
       // Mesma sequência de refresco do navegarHistorico()/sbiAbrirEvento() — sem
       // isto o ecrã ficava com os amigos e a lista de ordens do evento anterior
       // (o jogo em aberto), só o total é que atualizava (é escrito diretamente
