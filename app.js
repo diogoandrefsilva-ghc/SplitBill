@@ -3176,14 +3176,99 @@ function faturaConferir() {
 
     const n = t => rows.filter(x => x.tipo === t).length;
     const precoRows = rows.filter(x => x.tipo === 'preco');
+    const sugestoes = _frSugestoesEquiv(rows, r);
     return {
-        rows,
+        rows, sugestao: sugestoes[0] || null, nSugestoes: sugestoes.length,
         nOk: n('ok'), nPreco: n('preco'), nQtd: n('qtd'), nExtra: n('extra'), nFalta: n('falta'),
         contagemOk: !n('qtd') && !n('extra') && !n('falta'),
         difPrecos: _frR2(precoRows.reduce((s, x) => s + (x.totF - x.totC), 0)),
         totalMesa: _frR2(estado.ordens.reduce((s, o) => s + o.precoTotal, 0)),
         totalLinhas: _frR2(rows.reduce((s, x) => s + (x.totF || 0), 0))
     };
+}
+
+/* SUGERIR UMA EQUIVALÊNCIA: o talão escreveu outro nome
+   O emparelhamento por nome (faturaKey + faturaScore) só apanha grafias
+   parecidas. Quando a casa imprime um nome que não tem NADA a ver com o do
+   menu — "Lacrau Moscat" para o que na app é "Villa Platanus Branco" — o nome
+   não ajuda em nada e a conferência parte a coisa em duas linhas: um `extra`
+   (na fatura, ninguém marcou) e uma `falta` (marcado, não vem na fatura). São
+   as duas metades do MESMO artigo, e enquanto assim ficarem o preço da fatura
+   não chega a quem o consumiu — que é o ponto de tudo isto.
+   O que resta para as juntar é a QUANTIDADE: 2 un a mais de um lado e 2 un a
+   menos do outro. É pista suficiente **quando não há rival** — com dois extras
+   e duas faltas todos a 2 un, a mesma pista serve para os dois e adivinhar era
+   pior do que calar.
+   Daí o emparelhamento ser ganancioso e por rondas: de cada vez sai o par com
+   melhor semelhança de NOME entre os que a quantidade permite, e só se mais
+   nenhum candidato disputar esse extra ou essa falta com a mesma pontuação. É
+   isto que salva o talão que trunca os nomes a meio ("Lagartos Grel"): esse
+   par resolve-se pelo nome, sai do meio, e o que fica — o Lacrau, que não se
+   parece com nada — fica sozinho e já se pode propor. Todos a zero e a
+   disputar os mesmos lados = não se propõe nada, e o <select> da linha trata
+   do resto à mão.
+   Sugerir é tudo o que isto faz: quem aprova é quem está a ler o talão, e
+   aprovar é só escrever o mesmo `overrides` que o <select> já escrevia.
+   O "não é" guarda-se em `estado.fatura.semEquiv` (a par dos `overrides`, no
+   mesmo jsonb, sem migração) para a proposta não voltar a cada render — e para
+   deixar sair a seguinte. Fica preso a ESTA leitura, como os overrides: outra
+   fatura começa do zero.                                                      */
+function _frEquivKey(lido, item) { return faturaKey(lido) + '|' + faturaKey(item); }
+
+function _frSugestoesEquiv(rows, r) {
+    const nao = (r && r.semEquiv) || {};
+    let extras = rows.filter(x => x.tipo === 'extra');
+    let faltas = rows.filter(x => x.tipo === 'falta' && x.item);
+    const out = [];
+    while (extras.length && faltas.length) {
+        const cand = [];
+        extras.forEach(e => faltas.forEach(f => {
+            if (Math.abs(e.qtdF - f.qtdC) > 0.001) return;      // a quantidade é a pista de base
+            if (nao[_frEquivKey(e.nome, f.item)]) return;       // já foi recusado nesta leitura
+            cand.push({ e, f, s: faturaScore(e.nome, f.item) });
+        }));
+        if (!cand.length) break;
+        cand.sort((a, b) => b.s - a.s);
+        const p = cand[0];
+        // Rival = outro candidato a disputar o mesmo extra ou a mesma falta com
+        // pontuação igual. Havendo um, a escolha é do utilizador e não desta
+        // função — e as rondas seguintes não melhoram, por isso pára aqui.
+        if (cand.some((q, i) => i > 0 && (q.e === p.e || q.f === p.f) && q.s >= p.s - 1e-9)) break;
+        out.push({
+            lido: p.e.nome,
+            nomes: (p.e.nomesFatura && p.e.nomesFatura.length) ? p.e.nomesFatura : [p.e.nome],
+            item: p.f.item, qtd: p.e.qtdF,
+            unitF: p.e.unitF, unitC: p.f.unitC, totF: p.e.totF, totC: p.f.totC
+        });
+        extras = extras.filter(x => x !== p.e);
+        faltas = faltas.filter(x => x !== p.f);
+    }
+    return out;
+}
+
+// Aprovar: escreve o mesmo override que o <select> escreveria, uma vez por
+// nome lido (a fatura pode trazer o artigo em duas linhas).
+function faturaAceitarEquiv() {
+    if (!podeEditarEventoAtual()) { mostrarMensagem('⚠️ Sem permissão para editar este evento', false); return; }
+    const c = faturaConferir(), s = c && c.sugestao;
+    if (!s || !estado.fatura) return;
+    if (!estado.fatura.overrides) estado.fatura.overrides = {};
+    s.nomes.forEach(n => { estado.fatura.overrides[faturaKey(n)] = s.item; });
+    salvarNoLocalStorage();
+    faturaRenderRecon();
+    mostrarMensagem('✓ «' + s.lido + '» passa a contar como ' + s.item, true);
+}
+
+// Recusar: não mexe em nada, só cala a proposta. Desfaz-se pelo <select> da
+// linha, que continua a ser o caminho para emparelhar à mão.
+function faturaRejeitarEquiv() {
+    if (!podeEditarEventoAtual()) { mostrarMensagem('⚠️ Sem permissão para editar este evento', false); return; }
+    const c = faturaConferir(), s = c && c.sugestao;
+    if (!s || !estado.fatura) return;
+    if (!estado.fatura.semEquiv) estado.fatura.semEquiv = {};
+    estado.fatura.semEquiv[_frEquivKey(s.lido, s.item)] = true;
+    salvarNoLocalStorage();
+    faturaRenderRecon();
 }
 
 function faturaRenderRecon() {
@@ -3247,6 +3332,32 @@ function faturaRenderRecon() {
         vTexto += ' Atenção: ' + t + (/[?.!]$/.test(t) ? '' : '.');
     }
 
+    // Proposta de equivalência (ver _frSugestoesEquiv). Fica logo a seguir ao
+    // veredicto porque é a resposta ao que o veredicto acabou de apontar: um
+    // artigo a mais e outro a menos, com a mesma quantidade. Sem permissão
+    // para reatribuir não se mostra — não haveria como aprovar.
+    let sugHtml = '';
+    if (c.sugestao && podeReatribuir) {
+        const s = c.sugestao;
+        // O corpo do texto vai num <div> próprio: o `.fr-sug > b` do CSS é o
+        // título (bloco) e apanhava também os <b> soltos da frase.
+        sugHtml = '<div class="fr-sug"><b>🔗 Será o mesmo artigo com outro nome?</b>'
+            + '<div class="fr-sug-txt">A fatura traz <b>' + s.qtd + '× ' + _frEsc(s.lido) + '</b> que ninguém marcou, e '
+            + 'os <b>' + s.qtd + '× ' + _frEsc(s.item) + '</b> marcados não vêm na fatura. Mesma quantidade '
+            + 'e sem outro candidato — aprovar manda o preço da fatura para quem o consumiu.</div>'
+            + '<div class="fr-sug-par"><span>' + _frEsc(s.lido) + '</span> → <span>' + _frEsc(s.item) + '</span>'
+            + ' · fatura €' + s.unitF.toFixed(2) + '/un · marcado €' + s.unitC.toFixed(2) + '/un</div>'
+            + '<div class="fr-sug-btns">'
+            + '<button class="fr-sug-sim" onclick="faturaAceitarEquiv()">✓ É o mesmo</button>'
+            + '<button class="fr-sug-nao" onclick="faturaRejeitarEquiv()">✗ São diferentes</button>'
+            + '</div>'
+            // Responder a esta faz sair a seguinte — dizê-lo evita a sensação
+            // de que a resposta não fez nada quando aparece logo outro cartão.
+            + (c.nSugestoes > 1 ? '<div class="fr-sug-mais">' + (c.nSugestoes - 1)
+                + (c.nSugestoes === 2 ? ' outra proposta a seguir a esta' : ' outras propostas a seguir a esta') + '</div>' : '')
+            + '</div>';
+    }
+
     // Cabeçalho lido do talão + totais
     const meta = [];
     if (r.restaurante) meta.push('🏠 ' + _frEsc(r.restaurante));
@@ -3288,12 +3399,18 @@ function faturaRenderRecon() {
         // permissão, cada um vira um <select> — é o que deixa desfazer um
         // emparelhamento errado (ex.: "Caneca Stout" apanhado para "Caneca").
         const alias = (x.nomesFatura || []).filter(n => faturaKey(n) !== faturaKey(x.nome));
+        // Uma linha `extra` sem par nenhum não tem alias (o nome da linha É o
+        // nome lido) e ficava sem <select> — ou seja, sem forma de a mandar
+        // para o artigo certo, que é justamente o que falta quando o talão
+        // escreve outro nome. É o mesmo controlo, com outra legenda.
+        const reatr = alias.length ? alias : (x.tipo === 'extra' ? [x.nome] : []);
         let sub = '';
-        if (alias.length) {
+        if (reatr.length) {
+            const leg = alias.length ? 'na fatura: ' : 'é o mesmo que: ';
             sub = podeReatribuir
-                ? '<div class="fr-det fr-reatr-lista">na fatura: ' + alias.map(n =>
+                ? '<div class="fr-det fr-reatr-lista">' + leg + reatr.map(n =>
                     '<span class="fr-reatr-item">' + _frEsc(n) + ' ' + faturaOpcoesReatribuir(n) + '</span>').join(' · ') + '</div>'
-                : '<div class="fr-det">na fatura: ' + _frEsc(alias.join(', ')) + '</div>';
+                : (alias.length ? '<div class="fr-det">na fatura: ' + _frEsc(alias.join(', ')) + '</div>' : '');
         }
         return '<div class="fr-linha">' + chk
             + '<div class="fr-body"><div class="fr-nome">' + _frEsc(x.nome)
@@ -3324,6 +3441,7 @@ function faturaRenderRecon() {
 
     box.innerHTML = strip + (!_faturaPainel ? '' :
           '<div class="fr-verdict ' + vClasse + '"><b>' + vTitulo + '</b>' + vTexto + '</div>'
+        + sugHtml
         + '<div class="fr-meta">' + meta.join(' · ')
         + (r.semPreco ? ' · <span class="neg">' + r.semPreco + (r.semPreco === 1 ? ' linha ignorada' : ' linhas ignoradas') + ' (sem preço)</span>' : '') + '</div>'
         + linhasHtml
@@ -3364,7 +3482,11 @@ function faturaOpcoesReatribuir(nomeOriginal) {
     const overrides = estado.fatura && estado.fatura.overrides;
     const temOverride = overrides && Object.prototype.hasOwnProperty.call(overrides, key);
     const atual = temOverride ? (overrides[key] || '__none') : '__auto';
-    const itens = Object.keys(menu).sort((a, b) => a.localeCompare(b, 'pt'));
+    // O menu do evento mais o que foi mesmo consumido: uma ordem antiga pode
+    // ter um artigo que já saiu do menu, e é dela que a `falta` vem.
+    const itens = Object.keys(menu);
+    estado.ordens.forEach(o => { if (itens.indexOf(o.item) < 0) itens.push(o.item); });
+    itens.sort((a, b) => a.localeCompare(b, 'pt'));
     const opts = ['<option value="__auto"' + (atual === '__auto' ? ' selected' : '') + '>— automático —</option>',
                   '<option value="__none"' + (atual === '__none' ? ' selected' : '') + '>é um item à parte</option>']
         .concat(itens.map(it => '<option value="' + _frEsc(it) + '"' + (atual === it ? ' selected' : '') + '>' + _frEsc(it) + '</option>'));

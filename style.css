@@ -1701,6 +1701,45 @@ html,body{touch-action:pan-x pan-y}
         .fr-verdict.ok { border-left-color: var(--verde); color: var(--verde); }
         .fr-verdict.preco { border-left-color: var(--dourado); color: #8A6D14; }
         .fr-verdict.qtd { border-left-color: var(--rubro); color: var(--rubro); }
+        /* Proposta de equivalência: um artigo a mais e outro a menos, com a
+           mesma quantidade. Dourado porque é uma PROPOSTA e não um veredicto —
+           só vale depois de alguém carregar no sim. Os dois botões repõem cor,
+           caixa e maiúsculas por causa dos `button`/`button:hover` globais. */
+        .fr-sug {
+            border: 1px solid #C9C2AC;
+            border-left: 4px solid var(--dourado);
+            border-radius: 5px;
+            padding: 9px 10px;
+            margin-bottom: 9px;
+            background: var(--dourado-claro);
+            line-height: 1.45;
+            color: var(--ink);
+        }
+        .fr-sug > b { display: block; font-size: 13px; margin-bottom: 2px; color: #8A6D14; }
+        .fr-sug-par {
+            margin: 7px 0 8px;
+            padding: 6px 8px;
+            background: #fff;
+            border-radius: 4px;
+            font-size: 11px;
+            color: var(--ink-soft);
+            overflow-wrap: anywhere;
+        }
+        .fr-sug-par span { font-weight: 700; color: var(--ink); }
+        .fr-sug-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+        .fr-sug-btns button {
+            flex: 1 1 130px;
+            padding: 9px 10px;
+            font-family: var(--mono);
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: none;
+            letter-spacing: normal;
+            border-radius: 5px;
+        }
+        .fr-sug-mais { margin-top: 7px; font-size: 10.5px; color: var(--ink-soft); }
+        .fr-sug-sim, .fr-sug-sim:hover { background: var(--verde); color: #fff; border: 1px solid var(--verde); }
+        .fr-sug-nao, .fr-sug-nao:hover { background: #fff; color: var(--ink-soft); border: 1px solid var(--linha); }
         .fr-meta { color: var(--ink-soft); font-size: 11px; margin-bottom: 8px; line-height: 1.5; }
         /* Uma linha por artigo: nome + estado em cima, números por baixo */
         .fr-linha {
