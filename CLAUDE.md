@@ -655,8 +655,8 @@ vir da cache.
   `.sbi-open:hover` têm a mesma especificidade e ganha a última.
 
 ## O registo central de acessos ao Gemini (schema `ia_uso`)
-Esta app chama o Gemini numa função só, mas não é a única: são **cinco** no
-mesmo projeto Supabase, por oito Edge Functions. O schema **`ia_uso`** é
+Esta app chama o Gemini numa função só, mas não é a única: são **seis** no
+mesmo projeto Supabase, por nove Edge Functions. O schema **`ia_uso`** é
 uma linha por chamada (app, função, modelo, tokens, custo estimado,
 duração, quem, erro), para a pergunta *"quanto é que isto custa ao todo?"*
 ter onde ser respondida.
@@ -665,6 +665,12 @@ ter onde ser respondida.
 verdade do schema é o `db/ia_uso.sql` desse repo. Aqui fica só o que é
 preciso saber para não partir nada:
 
+- **Um 200 com o corpo VAZIO não é resposta, e não pode passar por
+  sucesso.** O modelo gasta o orçamento a pensar e não escreve uma letra —
+  HTTP 200, `candidatesTokenCount: 0`. Aqui já dava erro — o que faltava era dizer PORQUÊ: chamava-se "resposta ilegível" a um caso em que não houve texto nenhum. Agora o corpo lê-se DENTRO do
+  ciclo dos modelos (um vazio passa ao seguinte) e, se nenhum escrever,
+  fecha em **erro** com o `finishReason` à frente. A lição inteira, com o
+  caso que a pagou, está no `CLAUDE.md` da WineCatalog ("O 200 vazio").
 - **Daqui escreve a `fatura-restaurante.ts`** (`app: "splitbill"`), e é a
   ÚNICA coisa que a `fatura-restaurante` regista: ao contrário das funções
   das apps de vinhos, esta nunca teve um `sync_log` próprio. É este o único
