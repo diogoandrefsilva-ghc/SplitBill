@@ -155,7 +155,7 @@ ${menu.map((a) => `  · ${a.nome}${a.preco != null ? ` (€${a.preco.toFixed(2)}
 - Se algo não se ler com confiança, usa null nesse campo em vez de adivinhar.
 Responde só com o JSON.`;
 
-async function emailAutorizado(auth: string, signal: AbortSignal): Promise<boolean> {
+async function emailAutorizado(auth: string, signal: AbortSignal): Promise<{ ok: boolean; email: string | null }> {
   console.log("FATURA-RESTAURANTE auth header presente:", !!auth, "tamanho:", auth.length);
   // 1) quem é o utilizador deste token?
   const u = await fetch(`${SB_URL}/auth/v1/user`, {
@@ -165,12 +165,12 @@ async function emailAutorizado(auth: string, signal: AbortSignal): Promise<boole
   console.log("FATURA-RESTAURANTE /user status:", u.status, "ok:", u.ok);
   if (!u.ok) {
     console.log("FATURA-RESTAURANTE /user erro:", (await u.text().catch(() => "")).slice(0, 300));
-    return false;
+    return { ok: false, email: null };
   }
   const uj = await u.json();
   const email = (uj.email ?? "").toLowerCase();
   console.log("FATURA-RESTAURANTE email presente:", !!email, "sub presente:", !!uj.id);
-  if (!email) return false;
+  if (!email) return { ok: false, email: null };
   // 2) consta de splitbill.allowed_users?
   const r = await fetch(
     `${SB_URL}/rest/v1/allowed_users?email=eq.${encodeURIComponent(email)}&select=email`,
@@ -184,11 +184,49 @@ async function emailAutorizado(auth: string, signal: AbortSignal): Promise<boole
     },
   );
   console.log("FATURA-RESTAURANTE allowed_users status:", r.status, "ok:", r.ok);
-  if (!r.ok) return false;
+  if (!r.ok) return { ok: false, email };
   const rows = await r.json();
   const permitido = Array.isArray(rows) && rows.length > 0;
   console.log("FATURA-RESTAURANTE permitido:", permitido);
-  return permitido;
+  return { ok: permitido, email };
+}
+
+/* Registo em `ia_uso.registos` — schema à parte, no MESMO projeto Supabase,
+   partilhado pelas cinco apps que chamam o Gemini (ver o CLAUDE.md da
+   WineCatalog, "O registo central de acessos ao Gemini"). Esta função nunca
+   teve um sync_log próprio — é este o único rasto do que gasta. Nunca deita
+   a resposta abaixo por isto falhar. */
+async function registarIaUso(estado: string, detalhe: Record<string, unknown>, quem: string | null): Promise<void> {
+  try {
+    const usage = (detalhe.usageMetadata ?? null) as
+      | { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number; totalTokenCount?: number }
+      | null;
+    await fetch(`${SB_URL}/rest/v1/registos`, {
+      method: "POST",
+      headers: {
+        apikey: SB_SRV, Authorization: `Bearer ${SB_SRV}`,
+        "Content-Type": "application/json", "Content-Profile": "ia_uso",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        app: "splitbill", funcao: "fatura-restaurante",
+        estado: estado === "pedido" || estado === "erro" ? estado : "ok",
+        modelo: (detalhe.modelo as string | undefined) ?? null,
+        pesquisa_web: false,
+        tokens_entrada: usage?.promptTokenCount ?? null,
+        tokens_saida: usage?.candidatesTokenCount ?? null,
+        tokens_pensamento: usage?.thoughtsTokenCount ?? null,
+        tokens_total: usage?.totalTokenCount ?? null,
+        custo_estimado_eur: null,
+        duracao_ms: (detalhe.ms as number | undefined) ?? null,
+        quem,
+        erro: estado === "erro" ? (String((detalhe.erro as string | undefined) ?? "").slice(0, 500) || null) : null,
+        detalhe,
+      }),
+    });
+  } catch (_e) {
+    // nunca deita a chamada principal abaixo
+  }
 }
 
 Deno.serve(async (req) => {
@@ -207,11 +245,14 @@ Deno.serve(async (req) => {
   // a função pendurada indefinidamente, sem nunca responder ao browser.
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  const inicio = Date.now();
+  let quem: string | null = null;
 
   try {
     console.log("FATURA-RESTAURANTE start");
     const auth = req.headers.get("Authorization") ?? "";
-    const ok = await emailAutorizado(auth, ctrl.signal);
+    const { ok, email } = await emailAutorizado(auth, ctrl.signal);
+    quem = email;
     console.log("FATURA-RESTAURANTE autorizado:", ok);
     if (!ok) {
       return json({ error: "não autorizado" }, 403);
@@ -290,6 +331,7 @@ Deno.serve(async (req) => {
       const detail = g ? await g.text() : "";
       console.error("gemini", model, status, detail.slice(0, 500));
       if (transitorio(status)) {
+        await registarIaUso("erro", { modelo: model, erro: `sobrecarga (${status})`, ms: Date.now() - inicio }, quem);
         return json({
           error: "o serviço de leitura está com muita procura agora — espera um minuto e tenta outra vez",
         }, 503);
@@ -304,6 +346,7 @@ Deno.serve(async (req) => {
           .filter(Boolean);
         if (fv.length) msg += ` [${fv.join(", ")}]`;
       } catch (_) { /**/ }
+      await registarIaUso("erro", { modelo: model, erro: msg || `HTTP ${status}`, ms: Date.now() - inicio }, quem);
       return json({ error: `gemini ${status} (${model})${msg ? ": " + msg.slice(0, 200) : ""}` }, 502);
     }
     const gd = await g.json();
@@ -312,17 +355,27 @@ Deno.serve(async (req) => {
     try {
       parsed = JSON.parse(text);
     } catch (_) {
+      await registarIaUso("erro", {
+        modelo: model, erro: "resposta ilegível do modelo", ms: Date.now() - inicio,
+        ...(gd?.usageMetadata ? { usageMetadata: gd.usageMetadata } : {}),
+      }, quem);
       return json({ error: "resposta ilegível do modelo" }, 502);
     }
+    await registarIaUso("ok", {
+      modelo: model, ms: Date.now() - inicio,
+      ...(gd?.usageMetadata ? { usageMetadata: gd.usageMetadata } : {}),
+    }, quem);
     return json(parsed);
   } catch (e) {
     const err = e as Error;
     // Estoirou o nosso timeout antes de o modelo responder.
     if (err.name === "AbortError") {
+      await registarIaUso("erro", { passo: "timeout", ms: Date.now() - inicio }, quem);
       return json({
         error: "o modelo demorou demasiado a ler a fatura — tenta uma foto mais nítida ou um PDF com menos páginas",
       }, 504);
     }
+    await registarIaUso("erro", { passo: "excecao", erro: err.message.slice(0, 500), ms: Date.now() - inicio }, quem);
     return json({ error: err.message }, 500);
   } finally {
     // Limpo aqui (não logo a seguir ao Gemini responder) para o limite
