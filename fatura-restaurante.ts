@@ -210,6 +210,9 @@ async function registarIaUso(estado: string, detalhe: Record<string, unknown>, q
       },
       body: JSON.stringify({
         app: "splitbill", funcao: "fatura-restaurante",
+        // Uma funcionalidade só: ler a fatura. O painel de custos (AI-API-Control)
+        // conta o custo médio por funcionalidade.
+        funcionalidade: "fatura",
         estado: estado === "pedido" || estado === "erro" ? estado : "ok",
         modelo: (detalhe.modelo as string | undefined) ?? null,
         pesquisa_web: false,
