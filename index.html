@@ -1632,9 +1632,13 @@ if ('serviceWorker' in navigator) {
     // ordem de CRIAÇÃO e isso deixou de querer dizer o jogo mais recente desde
     // que o calendário do Goals cria os jogos em lotes (os europeus entraram
     // depois dos da liga, com ids maiores) — o atalho abria o penúltimo jogo.
-    var lista = (typeof eventosDoHistorico==='function')
+    // Mas só os FECHADOS: o painel também leva o jogo em aberto, e esse é
+    // sempre o mais recente — o atalho caía nele em vez de no último jogo
+    // com conta feita. O jogo em aberto já tem o seu cartão em "Em aberto".
+    var lista = ((typeof eventosDoHistorico==='function')
         ? eventosDoHistorico()
-        : getHist().filter(function(ev){ return !!ev.totalFatura; }).reverse();
+        : getHist().slice().reverse()
+      ).filter(function(ev){ return !!ev.totalFatura; });
     if (lista.length && typeof carregarEvento==='function') {
       carregarEvento(lista[0]);
       // Mesma sequência de refresco do navegarHistorico()/sbiAbrirEvento() — sem
