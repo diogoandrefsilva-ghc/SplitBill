@@ -1575,6 +1575,17 @@ if ('serviceWorker' in navigator) {
       h += '<div class="sbi-vazio">Nenhum jogo em Alvalade por acontecer.'
          + (admin ? ' Aparecem aqui sozinhos assim que estiverem no calendário da app Goals.' : '') + '</div>';
     }
+    // Jogos marcados "Sem evento" (só o admin os vê), com a ficha do Goals,
+    // para os poder repor. Não ocupa nada quando não há nenhum.
+    if (admin && typeof jogosSemEventoLista==='function'){
+      var sem = jogosSemEventoLista();
+      if (sem.length){
+        h += '<div class="sbi-vazio" style="margin-top:12px;">Sem evento: ' + sem.map(function(j){
+          return String(j.adversario||'?').replace(/[<>&"]/g,'') + ' (' + String(j.data||'').slice(8,10) + '/' + String(j.data||'').slice(5,7)
+               + ') <a href="#" onclick="reporSemEvento(\''+String(j.id).replace(/[^\w-]/g,'')+'\');return false;">repor</a>';
+        }).join(' · ') + '</div>';
+      }
+    }
     return h;
   }
 
