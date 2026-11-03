@@ -5875,9 +5875,15 @@ async function _jogoCriarEvento(j, id, amigos, menu) {
    duplicar o mesmo jogo. */
 async function sincronizarJogosDoGoals() {
     if (!isAdmin() || !JOGO_ID_COL || !GOALS_JOGOS.length) return null;
+    // Os jogos marcados "Sem evento" nunca voltam a ser criados. A lista pode
+    // ainda não ter chegado (esta função arranca sem await): sem ela, criava-se
+    // outra vez o evento que o admin acabou de apagar — por isso lê-se aqui.
+    if (JOGOS_SEM_EVENTO === null) await carregarJogosSemEvento();
+    var semEv = JOGOS_SEM_EVENTO || [];
     var hoje = _calHoje();
     var jogos = GOALS_JOGOS.filter(function (j) {
-        return _calEmAlvalade(j) && String(j.data || '') >= hoje;
+        return _calEmAlvalade(j) && String(j.data || '') >= hoje
+            && semEv.indexOf(String(j.id)) < 0;
     });
     if (!jogos.length) return null;
 
@@ -5960,6 +5966,100 @@ function _jogoSincResumo(r) {
     if (r.datas) p.push(r.datas + (r.datas === 1 ? ' data corrigida' : ' datas corrigidas'));
     if (!p.length) return '';
     return '✓ Calendário: ' + p.join(' · ') + (r.erros ? ' (' + r.erros + ' com erro)' : '');
+}
+
+/* ── JOGOS SEM EVENTO (splitbill.config, chave `jogos_sem_evento`) ────────
+   Nem todos os jogos do calendário acabam no Sá (o grupo não foi). O admin
+   marca-o "Sem evento": o evento por abrir apaga-se e o id do jogo do Goals
+   fica aqui, para a sincronização não o criar outra vez. Mesma tabela genérica
+   dos convocados — sem migração nova. `null` = ainda não lida (ou a tabela
+   não existe). Só se marca um jogo por abrir e sem consumo: apagar um evento
+   levava com ele as presenças e as ordens. */
+let JOGOS_SEM_EVENTO = null;   // ids (string) de goals.jogos
+
+async function carregarJogosSemEvento() {
+    try {
+        const r = await sbFetch(`${SB_URL}/rest/v1/config?chave=eq.jogos_sem_evento&select=valor`,
+            { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        if (!r.ok) { JOGOS_SEM_EVENTO = null; return; }
+        const rows = await r.json();
+        const l = rows && rows[0] && rows[0].valor && rows[0].valor.ids;
+        JOGOS_SEM_EVENTO = Array.isArray(l) ? l.map(String) : [];
+    } catch (e) { JOGOS_SEM_EVENTO = null; }
+}
+
+async function _guardarJogosSemEvento(ids) {
+    await sbOk(await sbFetch(`${SB_URL}/rest/v1/config`, {
+        method: 'POST',
+        headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+        body: JSON.stringify({
+            chave: 'jogos_sem_evento',
+            valor: { ids: ids },
+            atualizado_em: new Date().toISOString(),
+            atualizado_por: emailSessao()
+        })
+    }), 'guardar jogos sem evento');
+    JOGOS_SEM_EVENTO = ids;
+}
+
+// Pode marcar: admin, jogo do calendário (tem jogo_id), por abrir e sem consumo.
+function podeMarcarSemEvento(ev) {
+    return !!(ev && isAdmin() && CONFIG_TABELA && JOGO_ID_COL && ev.jogoId != null
+              && !ev.totalFatura && !jogoAberto(ev)
+              && !(ev.estado && ev.estado.ordens && ev.estado.ordens.length)
+              && !(ev.ordens && ev.ordens.length));
+}
+
+async function marcarSemEvento(id) {
+    const ev = historico.find(e => String(e.id) === String(id));
+    if (!podeMarcarSemEvento(ev)) return;
+    const ok = await mostrarModal({
+        icon: '🚫',
+        title: 'Jogo sem evento?',
+        msg: '<strong>' + _calEsc(ev.descricao || 'Jogo') + '</strong> (' + _calEsc(ev.data || '—') + ') deixa de aparecer nos Próximos Jogos e o evento é apagado, com as presenças já marcadas.<br><br>Podes repô-lo no fim da lista dos Próximos Jogos.',
+        confirmText: 'Sem evento',
+        cancelText: 'Cancelar',
+        danger: true
+    });
+    if (!ok) return;
+    try {
+        if (JOGOS_SEM_EVENTO === null) await carregarJogosSemEvento();
+        const ids = (JOGOS_SEM_EVENTO || []).slice();
+        const jid = String(ev.jogoId);
+        if (ids.indexOf(jid) < 0) ids.push(jid);
+        // Primeiro a marca, depois o apagar: se o apagar falhar, o evento fica
+        // e a marca não faz mal; ao contrário, a sincronização recriava-o.
+        await _guardarJogosSemEvento(ids);
+    } catch (e) { mostrarMensagem('⚠️ Não gravado: ' + sbErroLegivel(e), false); return; }
+    if (!await sbApagarEvento(ev.id)) return;
+    historico = historico.filter(e => String(e.id) !== String(ev.id));
+    salvarHistoricoLocal();
+    if (String(eventoAtualId) === String(ev.id)) {
+        if (historico.length > 0) carregarEvento(eventoPorDefeito()); else limparEstadoEvento();
+    }
+    try { renderHistoricoDropdown(); } catch (e) {}
+    try { renderInicio(); } catch (e) {}
+    mostrarMensagem('✓ Jogo marcado como sem evento', true);
+}
+
+// Repor: tira a marca e a sincronização volta a criar o evento sozinha.
+async function reporSemEvento(jogoId) {
+    if (!isAdmin()) return;
+    try {
+        await _guardarJogosSemEvento((JOGOS_SEM_EVENTO || []).filter(i => i !== String(jogoId)));
+    } catch (e) { mostrarMensagem('⚠️ Não gravado: ' + sbErroLegivel(e), false); return; }
+    try {
+        const r = await sincronizarJogosDoGoals();
+        if (r) renderHistoricoDropdown();
+    } catch (e) {}
+    try { renderInicio(); } catch (e) {}
+    mostrarMensagem('✓ Jogo reposto nos Próximos Jogos', true);
+}
+
+// Jogos marcados, com a ficha do Goals, para o admin os poder repor.
+function jogosSemEventoLista() {
+    const ids = JOGOS_SEM_EVENTO || [];
+    return GOALS_JOGOS.filter(j => ids.indexOf(String(j.id)) >= 0 && _calEmAlvalade(j));
 }
 
 /* ── JOGO ABERTO & PRESENÇAS (Próximos Jogos em Alvalade) ────────────────
@@ -6636,7 +6736,12 @@ function _jogoSheetHTML(ev) {
         }
         h += '</div>';
     }
-    return h + _quemVaiHTML(ev);
+    h += _quemVaiHTML(ev);
+    // Só o admin, e só num jogo do calendário por abrir e sem consumo.
+    if (podeMarcarSemEvento(ev)) {
+        h += '<button type="button" class="jf-semev" onclick="fecharModalComResultado(\'semevento\')">🚫 Sem evento (não vamos ao Sá)</button>';
+    }
+    return h;
 }
 
 /* Desde que o histórico só mostra o que já aconteceu, esta folha é a única porta
@@ -6807,6 +6912,7 @@ async function abrirFolhaJogo(id) {
     // a esta folha no final — botão à parte de propósito, para não se
     // confundir com "Podes estar às" (ver essa função).
     if (r === 'extra2') { await jogoSheetMarcarMesa(ev.id); return; }
+    if (r === 'semevento') { await marcarSemEvento(ev.id); return; }
     if (r === true && podeAbrir) await abrirJogo(ev.id);
 }
 
@@ -7729,6 +7835,8 @@ async function sbCarregarDados() {
         // Catálogo do menu (mesma tabela). Sem ele, o menu volta a vir de cada
         // evento — ver menuDoEvento().
         await carregarMenuCatalogo();
+        // Jogos marcados "Sem evento" (mesma tabela) — para a lista de repor.
+        await carregarJogosSemEvento();
 
         // Reconstruir historico no formato esperado pela app. O mapa linha→evento
         // é o `eventoDaBD()` (ver acima), partilhado com o refresco de um evento
