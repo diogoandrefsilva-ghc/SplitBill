@@ -951,7 +951,12 @@ function evAbrirLinha(tipo, chave) {
         if (!pessoa) return;
         const saldo = calcularSaldoOfertas();
         let base = 0;
-        const linhas = [];
+        const porOrdem = [];
+        // Por artigo (a vista por defeito): três canecas em três ordens são
+        // "3× Caneca" e um valor só, que é o que se procura quando se confere
+        // a conta. A oferta da casa fica num grupo à parte — "Grátis" não se
+        // soma a nada.
+        const grupos = {};
         estado.ordens.forEach(o => {
             if (o.amigos.indexOf(pessoa) < 0) return;
             const quota = o.precoTotal / o.amigos.length;
@@ -963,10 +968,36 @@ function evAbrirLinha(tipo, chave) {
             // que "0.3× Costeletão" não é coisa que alguém tenha comido.
             const inteiro = Number.isInteger(q);
             const casa = ordemOfertaCasa(o);
-            linhas.push(_evDrow((inteiro ? q : o.quantidade) + '× ' + _evEsc(o.item),
+            porOrdem.push(_evDrow((inteiro ? q : o.quantidade) + '× ' + _evEsc(o.item),
                 casa ? 'oferta da casa' : (inteiro ? '' : 'a dividir por ' + o.amigos.length),
                 casa ? '<i class="ev-gratis">Grátis</i>' : '€' + quota.toFixed(2), casa ? 'ev-casa' : ''));
+            const k = o.item + (casa ? '|casa' : '');
+            const g = grupos[k] || (grupos[k] = { item: o.item, casa: casa, inteiras: 0, div: {}, total: 0 });
+            g.total += quota;
+            // O partilhado junta-se pelo nº de pessoas: dois costeletões a
+            // dividir por 3 (numa ordem ou em duas) são "2× ... a dividir por 3".
+            if (inteiro) g.inteiras += q;
+            else g.div[o.amigos.length] = (g.div[o.amigos.length] || 0) + o.quantidade;
         });
+        const porArtigo = Object.keys(grupos).map(k => grupos[k])
+            .sort((a, b) => (b.total - a.total) || a.item.localeCompare(b.item, 'pt') || (a.casa - b.casa))
+            .map(g => {
+                const divs = Object.keys(g.div).map(Number).sort((x, y) => x - y);
+                const subs = g.casa ? ['oferta da casa'] : [];
+                let qtd = g.inteiras;
+                if (!qtd && divs.length === 1) {
+                    qtd = g.div[divs[0]];
+                    subs.push('a dividir por ' + divs[0]);
+                } else {
+                    divs.forEach(n => subs.push((qtd ? '+ ' : '') + g.div[n] + '× a dividir por ' + n));
+                }
+                return _evDrow((qtd ? qtd + '× ' : '') + _evEsc(g.item), subs.join(' · '),
+                    g.casa ? '<i class="ev-gratis">Grátis</i>' : '€' + g.total.toFixed(2), g.casa ? 'ev-casa' : '');
+            });
+        // O seletor só aparece quando as duas vistas dizem coisas diferentes:
+        // com uma ordem por artigo são a mesma lista, e era um botão a mais.
+        const temVistas = porArtigo.length < porOrdem.length;
+        const linhas = (temVistas && _evPessoaVista === 'ordem') ? porOrdem : porArtigo;
         // Rodadas agrupadas por artigo: duas canecas oferecidas à mesma pessoa
         // são uma linha, não duas. A dourado, como no resto das ofertas.
         const dou = {}, recebo = {};
@@ -1015,10 +1046,25 @@ function evAbrirLinha(tipo, chave) {
             + '</div>' : '';
         tit.textContent = pessoa;
         sub.textContent = '€' + total.toFixed(2) + (estado.totalFatura ? ' · valor final' : ' por confirmar');
-        body.innerHTML = '<div class="ev-card">' + (linhas.length ? linhas.join('') : _evDrow('Sem consumo marcado', '', '')) + '</div>' + totais;
+        const seg = temVistas ? '<div class="ev-seg ev-seg-mini">'
+            + '<button type="button"' + (_evPessoaVista !== 'ordem' ? ' class="on"' : '') + ' onclick="evPessoaVista(\'artigo\',' + chave + ')">Por artigo</button>'
+            + '<button type="button"' + (_evPessoaVista === 'ordem' ? ' class="on"' : '') + ' onclick="evPessoaVista(\'ordem\',' + chave + ')">Por ordem</button>'
+            + '</div>' : '';
+        body.innerHTML = seg + '<div class="ev-card">' + (linhas.length ? linhas.join('') : _evDrow('Sem consumo marcado', '', '')) + '</div>' + totais;
     }
 
     evAbrirSheet('ev-sheet-linha');
+}
+
+/* A folha de uma pessoa tem duas vistas do mesmo consumo: por artigo (por
+   defeito — os totais de cada coisa) e por ordem (a lista corrida, como foi
+   sendo lançada). A escolha fica até a app recarregar, para se poder comparar
+   duas pessoas na mesma vista; não vai para o localStorage, para o defeito
+   voltar a ser sempre o "por artigo". */
+let _evPessoaVista = 'artigo';
+function evPessoaVista(v, chave) {
+    _evPessoaVista = v === 'ordem' ? 'ordem' : 'artigo';
+    evAbrirLinha('pessoa', chave);
 }
 
 /* Marcar/desmarcar uma ordem JÁ LANÇADA como oferta da casa. É o botão do meio

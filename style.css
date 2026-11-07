@@ -2402,6 +2402,10 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
     font-family: var(--display); font-weight: 600; font-size: 15px; text-transform: uppercase; letter-spacing: .05em;
 }
 .ev-seg button.on, .ev-seg button.on:hover { background: #fff; color: var(--verde-escuro); box-shadow: 0 2px 6px -3px rgba(11,59,43,.5); }
+/* O seletor Por artigo | Por ordem da folha de uma pessoa: mais baixo que o do +,
+   porque aqui é uma escolha de leitura e não a pergunta principal da folha. */
+.ev-seg.ev-seg-mini { margin-bottom: 9px; padding: 3px; border-radius: 10px; }
+.ev-seg.ev-seg-mini button, .ev-seg.ev-seg-mini button:hover { min-height: 32px; border-radius: 8px; font-size: 13px; }
 .ev-oferece {
     display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px;
     background: var(--dourado-claro); border: 1px solid #EADFB6; border-radius: 12px; padding: 9px 12px;

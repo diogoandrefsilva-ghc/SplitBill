@@ -473,6 +473,14 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
   costeletão para 3 mostra-se pelo que foi pedido (`1× Costeletão`) com a
   divisão por baixo — "0.3× Costeletão" não é coisa que alguém tenha comido. As
   rodadas dessa pessoa agrupam-se **por artigo** e vão a dourado (`.ev-of`).
+- **A folha de uma pessoa abre por artigo** (os totais de cada coisa: três
+  canecas em três ordens são `3× Caneca` e um valor só), com um seletor
+  `Por artigo | Por ordem` (`evPessoaVista`, `.ev-seg-mini`) para a lista
+  corrida de sempre. O partilhado junta-se pelo nº de pessoas (`2× Costeletão`
+  · a dividir por 3) e a oferta da casa fica num grupo à parte. O seletor **só
+  aparece quando as duas vistas diferem** — com uma ordem por artigo são a mesma
+  lista. A escolha fica em memória (`_evPessoaVista`), não no localStorage: ao
+  recarregar volta a abrir por artigo.
 - **No Por pessoa há duas coisas por linha, e não uma:** à esquerda o que a
   oferta faz (`🎁 oferece +€6.00` / `🎁 recebe −€3.50`) — essa vale, não se
   rasura; à direita, **por baixo do total oficial**, o que essa pessoa pagaria
