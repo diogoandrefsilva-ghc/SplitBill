@@ -2644,11 +2644,15 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
 .rod-soma b { font-family: var(--display); font-size: 19px; color: #7A5E12; }
 .rod-p { background: #fff; border-radius: 12px; margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.06); overflow: hidden; }
 .rod-row, .rod-row:hover, .rod-jogo, .rod-jogo:hover {
-    width: 100%; display: flex; align-items: center; gap: 10px; border: 0; background: transparent; cursor: pointer;
+    width: 100%; border: 0; background: transparent; cursor: pointer; border-radius: 0;
     text-align: left; text-transform: none; letter-spacing: normal; color: var(--ink); font-family: inherit; font-weight: 400;
     -webkit-tap-highlight-color: transparent;
 }
-.rod-row { padding: 11px 12px; min-height: 0; }
+/* O layout fica FORA da regra com :hover. Já esteve lá dentro, com o
+   `align-items:center` das linhas de resumo, e o `.rod-jogo:hover` (0,2,0)
+   ganhava ao `.rod-jogo` (0,1,0): no telemóvel o :hover fica colado depois do
+   toque, e as linhas curtas de um jogo saltavam para o meio. */
+.rod-row { display: flex; align-items: center; gap: 10px; padding: 11px 12px; min-height: 0; }
 .rod-pos {
     flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
     background: var(--dourado-claro); color: #8A6D12; font-family: var(--display); font-weight: 700; font-size: 14px;
@@ -2657,20 +2661,26 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
 .rod-nome { font-family: var(--display); font-weight: 700; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rod-nome em { font-style: normal; font-family: var(--mono, monospace); font-size: 10px; font-weight: 700; text-transform: uppercase;
     background: var(--verde-claro, #E2EFE8); color: var(--verde-tinta, #0E5C3F); border-radius: 10px; padding: 1px 6px; vertical-align: 2px; }
-.rod-sub { font-size: 12px; color: var(--ink-soft, #5B6661); }
+.rod-sub { display: flex; align-items: baseline; gap: 6px; font-size: 12px; color: var(--ink-soft, #5B6661); min-width: 0; }
+.rod-subj { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rod-mais { flex: 0 0 auto; font-family: var(--mono, monospace); font-size: 10.5px; font-weight: 700; color: #8A6D12;
+    background: var(--dourado-claro); border-radius: 10px; padding: 1px 6px; }
+.rod-sub b { font-family: var(--mono, monospace); font-size: 11px; font-weight: 600; color: #8A7D52; }
 .rod-val { flex: 0 0 auto; font-family: var(--display); font-weight: 700; font-size: 17px; color: #8A6D12; }
 .rod-chev { flex: 0 0 auto; display: flex; color: #B9B39B; transition: transform .15s; }
 .rod-chev svg { width: 16px; height: 16px; }
 .rod-p.aberto .rod-chev { transform: rotate(90deg); }
 .rod-jogos { border-top: 1px solid #EEF1ED; padding: 4px 0; background: #FCFBF6; }
-.rod-jogo { flex-direction: column; align-items: stretch; gap: 3px; padding: 8px 12px 8px 48px; }
+.rod-jogo { display: block; padding: 9px 12px 10px 48px; }
 .rod-jogo + .rod-jogo { border-top: 1px dashed #EAE4CF; }
-.rod-jh { display: flex; align-items: baseline; gap: 8px; }
+.rod-jh { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
 .rod-jd { flex: 0 0 auto; font-family: var(--mono, monospace); font-size: 11px; color: var(--ink-soft, #5B6661); }
 .rod-jn { flex: 1 1 auto; min-width: 0; font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rod-jv { flex: 0 0 auto; font-weight: 700; font-size: 13px; color: #8A6D12; }
-.rod-it { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; color: var(--ink); }
+.rod-it { display: block; font-size: 12.5px; color: var(--ink); }
+.rod-it + .rod-it { margin-top: 5px; }
+.rod-itl { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .rod-itn { flex: 1 1 auto; min-width: 0; }
 .rod-itv { flex: 0 0 auto; color: var(--ink-soft, #5B6661); font-size: 12px; }
-.rod-para { color: var(--ink-soft, #5B6661); }
+.rod-para { display: block; color: var(--ink-soft, #5B6661); font-size: 11.5px; line-height: 1.35; margin-top: 1px; }
 .rod-parte { color: var(--ink-soft, #5B6661); font-size: 11.5px; }

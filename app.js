@@ -7004,14 +7004,14 @@ function _rodTodas() {
     return out;
 }
 
-// { pessoas: [{nome, total, recebeu, jogos:[{ev, ts, total, itens:[{item, qtd, valor, para:[]}]}]}], temAntes }
+// { pessoas: [{nome, total, jogos:[{ev, ts, total, itens:[{item, qtd, valor, para:[]}]}]}], temAntes }
 function rodadasPorPessoa() {
     const todas = _rodTodas();
     let janela = null;
     if (_rodModo === 'epoca') janela = _rodEpocaJanela(_rodOff);
     const dentro = r => !janela || (r.ts >= janela.ini && r.ts < janela.fim);
     const pessoas = {};
-    const pessoa = n => pessoas[n] || (pessoas[n] = { nome: n, total: 0, recebeu: 0, jogos: {} });
+    const pessoa = n => pessoas[n] || (pessoas[n] = { nome: n, total: 0, jogos: {} });
     todas.filter(dentro).forEach(r => {
         const o = r.o;
         const p = pessoa(o.quem);
@@ -7023,8 +7023,6 @@ function rodadasPorPessoa() {
         it.qtd += Number(o.quantidade) || 0;
         it.valor += o.precoTotal;
         (o.para || []).forEach(a => { if (a && it.para.indexOf(a) < 0) it.para.push(a); });
-        const share = o.precoTotal / Math.max(1, (o.para || []).length);
-        (o.para || []).forEach(a => { if (a) pessoa(a).recebeu += share; });
     });
     const lista = Object.values(pessoas)
         .filter(p => p.total > 0.005)
@@ -7048,6 +7046,21 @@ function rodadasEpocaAtual() {
 }
 
 const _rodEur = v => '€' + (Math.round((Number(v) || 0) * 100) / 100).toFixed(2);
+
+// Na linha de resumo só cabe o adversário: o "Sporting vs" é igual em todos.
+function _rodAdv(desc) {
+    return String(desc || 'Sem nome').replace(/^\s*sporting\s*(vs\.?|x|[-–—])\s*/i, '') || 'Sem nome';
+}
+// "7/nov Moreirense · 5/out Braga" com dois jogos; com mais, só o mais recente
+// e o resto em "+N" — dois e um "+N" não cabem num 360px sem cortar a meio.
+function _rodResumoJogos(jogos) {
+    const MAX = jogos.length > 2 ? 1 : 2;
+    const txt = jogos.slice(0, MAX).map(j =>
+        '<b>' + _evEsc(_dataCurta(j.ev.data) || '—') + '</b> ' + _evEsc(_rodAdv(j.ev.descricao))).join(' · ');
+    // O "+N" fica fora do texto que trunca: cortado pelas reticências perdia-se.
+    return '<span class="rod-subj">' + txt + '</span>'
+        + (jogos.length > MAX ? '<span class="rod-mais">+' + (jogos.length - MAX) + '</span>' : '');
+}
 
 function _rodQtdItem(it) {
     const q = Math.round(it.qtd);
@@ -7116,14 +7129,12 @@ function renderRodadas() {
     h += '<div class="rod-soma"><span>🎁 Total oferecido</span><b>' + _rodEur(soma) + '</b></div>';
     h += d.pessoas.map((p, i) => {
         const aberto = _rodAberto === p.nome;
-        const nJ = p.jogos.length;
         const eu = mine.indexOf(p.nome) >= 0;
         let s = '<div class="rod-p' + (aberto ? ' aberto' : '') + '">'
             + '<button type="button" class="rod-row" onclick="rodToggle(' + i + ')" aria-expanded="' + aberto + '">'
             + '<span class="rod-pos">' + (i + 1) + '</span>'
             + '<span class="rod-info"><span class="rod-nome">' + _evEsc(p.nome) + (eu ? ' <em>tu</em>' : '') + '</span>'
-            + '<span class="rod-sub">' + nJ + (nJ === 1 ? ' jogo' : ' jogos')
-            + (p.recebeu > 0.005 ? ' · recebeu ' + _rodEur(p.recebeu) : '') + '</span></span>'
+            + '<span class="rod-sub">' + _rodResumoJogos(p.jogos) + '</span></span>'
             + '<span class="rod-val">' + _rodEur(p.total) + '</span>'
             + '<span class="rod-chev" aria-hidden="true">' + NAVR + '</span>'
             + '</button>';
@@ -7134,9 +7145,10 @@ function renderRodadas() {
                 + '<span class="rod-jn">' + _evEsc(j.ev.descricao || 'Sem nome') + '</span>'
                 + '<span class="rod-jv">' + _rodEur(j.total) + '</span></span>'
                 + j.itens.map(it =>
-                    '<span class="rod-it"><span class="rod-itn">' + _rodQtdItem(it)
-                    + (it.para.length ? ' <span class="rod-para">→ ' + it.para.map(_evEsc).join(', ') + '</span>' : '')
-                    + '</span><span class="rod-itv">' + _rodEur(it.valor) + '</span></span>').join('')
+                    '<span class="rod-it"><span class="rod-itl"><span class="rod-itn">' + _rodQtdItem(it) + '</span>'
+                    + '<span class="rod-itv">' + _rodEur(it.valor) + '</span></span>'
+                    + (it.para.length ? '<span class="rod-para">→ ' + it.para.map(_evEsc).join(', ') + '</span>' : '')
+                    + '</span>').join('')
                 + '</button>').join('') + '</div>';
         }
         return s + '</div>';
