@@ -140,8 +140,15 @@ Com o calendário criado de uma vez, "eventos em aberto" passou a incluir meia
   (`.sbi-past`) — o creme/dourado é da agenda — e à direita levam o total da
   mesa e quantos comeram (🍽). Os jogos em Alvalade marcados **"Sem evento"**
   (o grupo não foi ao Sá) e já passados também entram, **apagados**
-  (`.sbi-past.semsa`, pílula "sem Sá") e sem se abrirem: não têm evento cá, a
-  ficha vem do Goals. Como `GOALS_JOGOS` só traz hoje-45d em diante, ao abrir o
+  (`.sbi-past.semsa`, pílula "sem Sá"): não têm evento cá, a ficha vem do Goals.
+  É **aí, e só aí,** que se repõem — o admin toca na ficha
+  (`reporSemEventoConfirmar`); para os outros não se abre. A linha "Sem evento:
+  … repor" que havia por baixo dos Próximos Jogos saiu. Repor um jogo que **já
+  passou** cria o evento logo **aberto** (a sincronização nunca cria eventos com
+  data velha); um por acontecer volta pela sincronização, como antes.
+  No **topo** do painel fica o atalho das **Rodadas oferecidas** (saiu do ecrã
+  inicial, onde só ficam Histórico · Pagamentos); fechar as rodadas abertas daí
+  volta ao Histórico (`_rodDoHistorico`). Como `GOALS_JOGOS` só traz hoje-45d em diante, ao abrir o
   painel lê-se **uma vez** a lista dos jogos já passados
   (`carregarDadosHistorico` → `GOALS_JOGOS_PASSADOS`, só SELECT, tolerante),
   que dá também a hora/jornada aos eventos antigos (`fichaJogoHistorico`).
@@ -611,8 +618,9 @@ estar cobrado — mas não pode entrar para a conta de ninguém.
 ## Rodadas oferecidas: a consulta (secção `RODADAS OFERECIDAS`)
 Quanto é que cada um já ofereceu aos outros, em que jogos, o quê e a quem.
 **Só de leitura** e para toda a gente: abre-se pelo atalho dourado "Rodadas
-oferecidas" do ecrã inicial (linha inteira por baixo de Histórico · Pagamentos
-— três quadrados não cabem num 320px), num painel `#page-rodadas`.
+oferecidas" no topo do painel do **Histórico** (`rodadasLinha` no `index.html`;
+já viveu no ecrã inicial, por baixo de Histórico · Pagamentos), num painel
+`#page-rodadas`.
 - Lê as `ofertas` de todos os eventos do `historico`, **sem pedido nenhum ao
   servidor e sem migração**. As ofertas da casa (🏠) não entram: não são de
   ninguém para ninguém, são ordens a zero.
