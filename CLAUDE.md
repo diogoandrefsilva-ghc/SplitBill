@@ -16,7 +16,7 @@ App pessoal de divisão de contas ("dia de jogo").
 
 ## Como NÃO gastar tokens à toa (importante)
 - **Não leias o `app.js` inteiro.** Está dividido em secções com comentários `/* ── título ── */`. Para achar algo, faz `grep` pelo título e lê só esse troço. Secções:
-  Custom confirm modal · **Pagador & Contas (dívidas)** · Page switching · FAB · **Core: cálculo de saldos** (dívidas + pagamentos) · Render · **Ecrã do evento** (quadrantes, folhas, o + em dois passos) · Payment form · Edit Ordem inline · **Importar Fatura** (foto/PDF → Gemini → conferência artigo a artigo) · **Calendário do Sporting** (ler `goals.jogos`, guardar o mínimo cá) · **Jogo aberto & presenças** (abrir o jogo, vou/não vou, hora do Sá) · Configs · **Supabase** (+ Sessão/refresh do token, Permissões, **Refresco** do evento no ecrã, Agregação global, IDs únicos, Equivalências amigo↔conta)
+  Custom confirm modal · **Pagador & Contas (dívidas)** · Page switching · FAB · **Core: cálculo de saldos** (dívidas + pagamentos) · Render · **Ecrã do evento** (quadrantes, folhas, o + em dois passos) · Payment form · Edit Ordem inline · **Importar Fatura** (foto/PDF → Gemini → conferência artigo a artigo) · **Calendário do Sporting** (ler `goals.jogos`, guardar o mínimo cá) · **Jogo aberto & presenças** (abrir o jogo, vou/não vou, hora do Sá) · **Rodadas oferecidas** (consulta por pessoa) · Configs · **Supabase** (+ Sessão/refresh do token, Permissões, **Refresco** do evento no ecrã, Agregação global, IDs únicos, Equivalências amigo↔conta)
 - `fatura-restaurante.ts` — Edge Function (Deno) que lê a fatura com o Gemini. **Não corre no site**: vive no Supabase, faz-se deploy à parte (`supabase functions deploy fatura-restaurante`). É irmã da `fatura-ocr` da FestasBV — mesmo projeto Supabase, schema e prompt diferentes.
 - `push-notificar.ts` — a outra Edge Function, a das notificações Web Push. Também **não corre no site** (`supabase functions deploy push-notificar`): se mexeres nos `tipo` daqui, o texto novo só aparece depois desse deploy. O corpo da notificação é escolhido **lá**, nunca vem livre do cliente — só nomes, valores, as horas (a do Sá e a da mesa, validadas `HH:MM` dos dois lados) e o nº de pessoas da mesa (validado inteiro 1–99 dos dois lados, opcional) são interpolados.
 - **Fatura guardada:** o detalhe lido fica em `estado.fatura` e persiste na coluna `eventos.fatura` (jsonb, `db/fatura-detalhe.sql`). A correspondência linha-da-fatura ↔ artigo do menu **não** se guarda — é recalculada a cada render (`faturaConferir()`), de propósito: se o menu do evento mudar, a conferência acompanha. Sem a migração, `FATURA_COL=false` e a fatura fica só no localStorage.
@@ -587,6 +587,24 @@ estar cobrado — mas não pode entrar para a conta de ninguém.
   trouxer, não há linha nenhuma em falta. E o 🔄 de corrigir preço pela fatura
   **nunca** ressuscita uma oferta: atualiza o unitário e deixa o total a zero,
   porque pôr de volta na conta é decisão de quem lê a fatura, não do preço.
+
+## Rodadas oferecidas: a consulta (secção `RODADAS OFERECIDAS`)
+Quanto é que cada um já ofereceu aos outros, em que jogos, o quê e a quem.
+**Só de leitura** e para toda a gente: abre-se pelo atalho dourado "Rodadas
+oferecidas" do ecrã inicial (linha inteira por baixo de Histórico · Pagamentos
+— três quadrados não cabem num 320px), num painel `#page-rodadas`.
+- Lê as `ofertas` de todos os eventos do `historico`, **sem pedido nenhum ao
+  servidor e sem migração**. As ofertas da casa (🏠) não entram: não são de
+  ninguém para ninguém, são ordens a zero.
+- Uma rodada nova são **vários** registos (um por quem recebe), por isso nunca
+  se contam registos: junta-se por jogo e por artigo e somam-se as quantidades
+  (3 canecas a 3 pessoas = `3× Caneca → A, B, C`). Quantidade fraccionada (a
+  parte de um prato partilhado) mostra-se `Costeletão (parte)`, nunca "0.33×".
+- Período: **Por época** (corte a 15/jul, setas como nos cartões do consumo) ou
+  **Sempre**. Abre na época actual; se essa estiver vazia e houver rodadas
+  noutras, abre em Sempre. Ranking pelo total oferecido, com o "recebeu" por
+  baixo; tocar numa pessoa abre os jogos, tocar num jogo leva ao evento.
+- Os `onclick` vão por **índice** (`_rodLista`), nunca pelo nome.
 
 ## O que os outros lançam aparece sozinho (secção `REFRESCO`)
 A mesa é escrita por várias pessoas ao mesmo tempo, mas a app só lia o servidor
