@@ -6962,6 +6962,188 @@ async function abrirFolhaJogo(id) {
     if (r === true && podeAbrir) await abrirJogo(ev.id);
 }
 
+/* ── RODADAS OFERECIDAS: quem pagou o quê aos outros (consulta) ───────────
+   Só de leitura: junta as `ofertas` de todos os eventos do histórico e mostra,
+   por pessoa, quanto ofereceu — em que jogos, o quê e a quem. Abre-se pelo
+   atalho "Rodadas" do ecrã inicial (`page-rodadas`).
+   - Uma rodada nova são vários registos (um por pessoa que recebe, ver
+     OFERECER), por isso não se contam registos: junta-se por jogo e por
+     artigo, e somam-se as quantidades — 3 canecas a 3 pessoas são "3× Caneca".
+   - Com fracções (a parte de um Costeletão partilhado) não se mostra "0.33×":
+     mostra-se o artigo com "(parte)", como nos zooms do evento.
+   - As ofertas da casa (🏠) não estão aqui: não são de ninguém para ninguém,
+     são ordens a zero (`ordemOfertaCasa`).
+   - Período: por época (corte a 15/jul, o mesmo de `_epocaLabel`) ou sempre. */
+let _rodModo = 'epoca';     // 'epoca' | 'sempre'
+let _rodOff = 0;            // 0 = época actual, -1 = anterior…
+let _rodAberto = '';        // nome da pessoa com o detalhe aberto
+let _rodLista = [];         // o que está desenhado (os onclick vão por índice)
+
+function _rodEpocaJanela(off) {
+    const hoje = new Date();
+    let ano = hoje.getFullYear();
+    if (hoje.getTime() < new Date(ano, 6, 15).getTime()) ano -= 1;
+    ano += (off || 0);
+    const p2 = n => String(n % 100).padStart(2, '0');
+    return { ini: new Date(ano, 6, 15).getTime(), fim: new Date(ano + 1, 6, 15).getTime(),
+             label: 'Época ' + p2(ano) + '/' + p2(ano + 1) };
+}
+
+// Linhas de oferta de todo o histórico, já com o evento e a data.
+function _rodTodas() {
+    const out = [];
+    (historico || []).forEach(ev => {
+        const ofs = ev.ofertas || [];
+        if (!ofs.length) return;
+        const ts = _parsePgtoData(ev.data) || 0;
+        ofs.forEach(o => {
+            if (!o || !o.quem || !(o.precoTotal > 0.005)) return;
+            out.push({ ev: ev, ts: ts, o: o });
+        });
+    });
+    return out;
+}
+
+// { pessoas: [{nome, total, recebeu, jogos:[{ev, ts, total, itens:[{item, qtd, valor, para:[]}]}]}], temAntes }
+function rodadasPorPessoa() {
+    const todas = _rodTodas();
+    let janela = null;
+    if (_rodModo === 'epoca') janela = _rodEpocaJanela(_rodOff);
+    const dentro = r => !janela || (r.ts >= janela.ini && r.ts < janela.fim);
+    const pessoas = {};
+    const pessoa = n => pessoas[n] || (pessoas[n] = { nome: n, total: 0, recebeu: 0, jogos: {} });
+    todas.filter(dentro).forEach(r => {
+        const o = r.o;
+        const p = pessoa(o.quem);
+        p.total += o.precoTotal;
+        const k = String(r.ev.id);
+        const j = p.jogos[k] || (p.jogos[k] = { ev: r.ev, ts: r.ts, total: 0, itens: {} });
+        j.total += o.precoTotal;
+        const it = j.itens[o.item] || (j.itens[o.item] = { item: o.item || 'Artigo', qtd: 0, valor: 0, para: [] });
+        it.qtd += Number(o.quantidade) || 0;
+        it.valor += o.precoTotal;
+        (o.para || []).forEach(a => { if (a && it.para.indexOf(a) < 0) it.para.push(a); });
+        const share = o.precoTotal / Math.max(1, (o.para || []).length);
+        (o.para || []).forEach(a => { if (a) pessoa(a).recebeu += share; });
+    });
+    const lista = Object.values(pessoas)
+        .filter(p => p.total > 0.005)
+        .map(p => {
+            p.jogos = Object.values(p.jogos)
+                .map(j => { j.itens = Object.values(j.itens).sort((a, b) => b.valor - a.valor); return j; })
+                .sort((a, b) => b.ts - a.ts);
+            return p;
+        })
+        .sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome, 'pt'));
+    const temAntes = !!janela && todas.some(r => r.ts && r.ts < janela.ini);
+    return { pessoas: lista, label: janela ? janela.label : 'Todas as épocas', temAntes: temAntes };
+}
+
+// Total oferecido na época actual, para a pílula do atalho no ecrã inicial.
+function rodadasEpocaAtual() {
+    const j = _rodEpocaJanela(0);
+    let total = 0;
+    _rodTodas().forEach(r => { if (r.ts >= j.ini && r.ts < j.fim) total += r.o.precoTotal; });
+    return Math.round(total * 100) / 100;
+}
+
+const _rodEur = v => '€' + (Math.round((Number(v) || 0) * 100) / 100).toFixed(2);
+
+function _rodQtdItem(it) {
+    const q = Math.round(it.qtd);
+    return (q >= 1 && Math.abs(it.qtd - q) < 0.02)
+        ? q + '× ' + _evEsc(it.item)
+        : _evEsc(it.item) + ' <span class="rod-parte">(parte)</span>';
+}
+
+function abrirRodadas() {
+    _rodModo = 'epoca'; _rodOff = 0; _rodAberto = '';
+    // Sem nada na época actual mas com rodadas noutras: abre em "Sempre", senão
+    // a primeira coisa que se via era uma lista vazia.
+    if (!rodadasPorPessoa().pessoas.length && _rodTodas().length) _rodModo = 'sempre';
+    document.getElementById('page-rodadas').style.display = 'flex';
+    renderRodadas();
+}
+function fecharRodadas() {
+    document.getElementById('page-rodadas').style.display = 'none';
+}
+function rodModo(m) { _rodModo = m; _rodOff = 0; _rodAberto = ''; renderRodadas(); }
+function rodNav(dir) {
+    _rodOff = Math.min(0, _rodOff + dir); _rodAberto = ''; renderRodadas();
+}
+function rodToggle(i) {
+    const p = _rodLista[i]; if (!p) return;
+    _rodAberto = (_rodAberto === p.nome) ? '' : p.nome;
+    renderRodadas();
+}
+// Tocar num jogo do detalhe leva ao evento (a mesma porta dos cartões do início).
+function rodAbrirJogo(i, k) {
+    const p = _rodLista[i]; const j = p && p.jogos[k];
+    if (!j || typeof sbiAbrirEvento !== 'function') return;
+    fecharRodadas();
+    sbiAbrirEvento(String(j.ev.id));
+}
+
+function renderRodadas() {
+    const body = document.getElementById('rod-body');
+    if (!body) return;
+    const d = rodadasPorPessoa();
+    _rodLista = d.pessoas;
+    let mine = [];
+    try { mine = meusAmigos() || []; } catch (e) {}
+    const NAVL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>';
+    const NAVR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>';
+
+    let h = '<div class="ev-seg ev-seg-mini">'
+        + '<button type="button"' + (_rodModo === 'epoca' ? ' class="on"' : '') + ' onclick="rodModo(\'epoca\')">Por época</button>'
+        + '<button type="button"' + (_rodModo === 'sempre' ? ' class="on"' : '') + ' onclick="rodModo(\'sempre\')">Sempre</button>'
+        + '</div>';
+    if (_rodModo === 'epoca') {
+        h += '<div class="rod-nav">'
+           + '<button type="button" class="rod-navb" onclick="rodNav(-1)" aria-label="Época anterior"' + (d.temAntes ? '' : ' disabled') + '>' + NAVL + '</button>'
+           + '<span class="rod-navl">' + _evEsc(d.label) + '</span>'
+           + '<button type="button" class="rod-navb" onclick="rodNav(1)" aria-label="Época seguinte"' + (_rodOff < 0 ? '' : ' disabled') + '>' + NAVR + '</button>'
+           + '</div>';
+    }
+    if (!d.pessoas.length) {
+        h += '<div class="rod-vazio">' + (_rodModo === 'epoca'
+            ? 'Ninguém ofereceu nada nesta época.'
+            : 'Ainda não há rodadas oferecidas em jogo nenhum.') + '</div>';
+        body.innerHTML = h;
+        return;
+    }
+    const soma = d.pessoas.reduce((s, p) => s + p.total, 0);
+    h += '<div class="rod-soma"><span>🎁 Total oferecido</span><b>' + _rodEur(soma) + '</b></div>';
+    h += d.pessoas.map((p, i) => {
+        const aberto = _rodAberto === p.nome;
+        const nJ = p.jogos.length;
+        const eu = mine.indexOf(p.nome) >= 0;
+        let s = '<div class="rod-p' + (aberto ? ' aberto' : '') + '">'
+            + '<button type="button" class="rod-row" onclick="rodToggle(' + i + ')" aria-expanded="' + aberto + '">'
+            + '<span class="rod-pos">' + (i + 1) + '</span>'
+            + '<span class="rod-info"><span class="rod-nome">' + _evEsc(p.nome) + (eu ? ' <em>tu</em>' : '') + '</span>'
+            + '<span class="rod-sub">' + nJ + (nJ === 1 ? ' jogo' : ' jogos')
+            + (p.recebeu > 0.005 ? ' · recebeu ' + _rodEur(p.recebeu) : '') + '</span></span>'
+            + '<span class="rod-val">' + _rodEur(p.total) + '</span>'
+            + '<span class="rod-chev" aria-hidden="true">' + NAVR + '</span>'
+            + '</button>';
+        if (aberto) {
+            s += '<div class="rod-jogos">' + p.jogos.map((j, k) =>
+                '<button type="button" class="rod-jogo" onclick="rodAbrirJogo(' + i + ',' + k + ')">'
+                + '<span class="rod-jh"><span class="rod-jd">' + _evEsc(_dataCurta(j.ev.data) || '—') + '</span>'
+                + '<span class="rod-jn">' + _evEsc(j.ev.descricao || 'Sem nome') + '</span>'
+                + '<span class="rod-jv">' + _rodEur(j.total) + '</span></span>'
+                + j.itens.map(it =>
+                    '<span class="rod-it"><span class="rod-itn">' + _rodQtdItem(it)
+                    + (it.para.length ? ' <span class="rod-para">→ ' + it.para.map(_evEsc).join(', ') + '</span>' : '')
+                    + '</span><span class="rod-itv">' + _rodEur(it.valor) + '</span></span>').join('')
+                + '</button>').join('') + '</div>';
+        }
+        return s + '</div>';
+    }).join('');
+    body.innerHTML = h;
+}
+
 /* ── SUPABASE ───────────────────────────────── */
 const SB_URL = 'https://gjweqwfbnkgnibhajldc.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdqd2Vxd2ZibmtnbmliaGFqbGRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDk4NzUsImV4cCI6MjA5NjY4NTg3NX0.h6st-RayGhQdsqH7E2Ko-rPWk2QZUpTevO6cbjvlSnk';
@@ -9884,6 +10066,8 @@ function sbVoltar() {
     if (admin && admin.style.display === 'flex') { fecharAdmin(); return true; }
     const defs = document.getElementById('page-definicoes');
     if (defs && defs.style.display === 'flex') { fecharDefinicoes(); return true; }
+    const rod = document.getElementById('page-rodadas');
+    if (rod && rod.style.display === 'flex') { fecharRodadas(); return true; }
     if (typeof _paginaAtual !== 'undefined' && _paginaAtual && _paginaAtual !== 'inicio') {
         mudarPagina('inicio'); return true;
     }
