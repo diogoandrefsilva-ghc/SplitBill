@@ -116,9 +116,11 @@ Com o calendário criado de uma vez, "eventos em aberto" passou a incluir meia
 época de jogos por acontecer. Por isso:
 - **Ecrã inicial** (`renderInicio`, no `index.html`): "Em aberto" só leva os
   jogos **abertos** (ver secção seguinte). Os que estão por abrir vivem em
-  **"Próximos Jogos em Alvalade"** (`proximosAlvalade()`), no **topo do ecrã**,
-  antes do "Em aberto" — já viveu no fim, a seguir ao Consumo, e subiu a pedido:
-  é o que se vem ver ao abrir a app. `FUTUROS_A_MOSTRAR` (2) à vista, o
+  **"Próximos Jogos em Alvalade"** (`proximosAlvalade()`), no **fim do ecrã, a
+  seguir ao Consumo** — é agenda, não é trabalho por fazer, e não deve empurrar
+  para baixo o que precisa de atenção hoje. (Esteve uns dias no topo e voltou,
+  a pedido, depois de a linha "Sem evento" e as Rodadas irem para o Histórico.)
+  `FUTUROS_A_MOSTRAR` (2) à vista, o
   resto atrás de "mais N jogos". A secção aparece **sempre**, mesmo sem jogos: é
   lá que há onde dizer que não há nenhum. Os jogos entram aqui **sozinhos**, a
   partir do calendário do Goals — esta app já não tem botão de sincronizar.

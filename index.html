@@ -1698,8 +1698,9 @@ button.sbi-past.semsa{cursor:pointer;}
     btn.textContent = (_futAberto ? '▴ mostrar menos' : '▾ mais ' + btn.getAttribute('data-n') + ' jogos');
   };
 
-  /* "Próximos Jogos em Alvalade" — vive no TOPO do ecrã (já viveu no fim, a
-     seguir ao consumo; subiu a pedido: é o que se vem ver ao abrir a app).
+  /* "Próximos Jogos em Alvalade" — vive no FIM do ecrã, a seguir ao consumo:
+     é agenda, não é trabalho por fazer, e não deve empurrar para baixo o que
+     precisa de atenção hoje (esteve no topo por pouco tempo e voltou).
      Aparece SEMPRE (mesmo sem jogos), para haver onde
      dizer que não há nenhum — os jogos entram aqui sozinhos, a partir do
      calendário da app Goals (ver sincronizarJogosDoGoals no app.js); esta app
@@ -1737,9 +1738,7 @@ button.sbi-past.semsa{cursor:pointer;}
     abertos.forEach(function(ev){ (ehJogoAberto(ev) ? porFechar : futuros).push(ev); });
     porFechar.sort(function(a,b){ return tsEvento(b) - tsEvento(a); });  // mais recente primeiro
     futuros.sort(function(a,b){ return tsEvento(a) - tsEvento(b); });    // mais perto primeiro
-    // Os Próximos Jogos vêm em PRIMEIRO: é a primeira coisa que se procura ao
-    // abrir a app (quando é o jogo, quem vai, a que horas é a mesa).
-    var h = proximosAlvalade(futuros, admin);
+    var h = '';
     if (porFechar.length){
       h += '<div class="sbi-eyebrow">Em aberto <span class="sbi-count">'+porFechar.length+'</span></div>';
       h += '<div class="sbi-list">'+porFechar.map(cardAberto).join('')+'</div>';
@@ -1751,6 +1750,9 @@ button.sbi-past.semsa{cursor:pointer;}
     h += '<div class="sbi-eyebrow">Atalhos</div>';
     h += '<div class="sbi-grid2">'+atalhos()+'</div>';
     h += statsConsumo();
+    // Os Próximos Jogos ficam no FIM (já estiveram no topo e voltaram): é
+    // agenda, não é trabalho por fazer.
+    h += proximosAlvalade(futuros, admin);
     el.innerHTML = h;
     // Sincroniza o FAB de novo evento (só visível neste ecrã e para admin).
     var fn = document.getElementById('fab-novo');
