@@ -602,8 +602,13 @@ oferecidas" do ecrã inicial (linha inteira por baixo de Histórico · Pagamento
   parte de um prato partilhado) mostra-se `Costeletão (parte)`, nunca "0.33×".
 - Período: **Por época** (corte a 15/jul, setas como nos cartões do consumo) ou
   **Sempre**. Abre na época actual; se essa estiver vazia e houver rodadas
-  noutras, abre em Sempre. Ranking pelo total oferecido, com o "recebeu" por
-  baixo; tocar numa pessoa abre os jogos, tocar num jogo leva ao evento.
+  noutras, abre em Sempre. Ranking pelo total oferecido, com os jogos por
+  baixo (`7/nov Moreirense · 5/out Braga · +N`, só o adversário: o "Sporting
+  vs" é igual em todos); tocar numa pessoa abre o detalhe, tocar num jogo leva
+  ao evento. Já mostrou o "recebeu" — saiu porque ninguém percebia o que era.
+- **Armadilha já mordida:** o layout das linhas (`display`/`align-items`) fica
+  fora da regra partilhada com `:hover`. Lá dentro, o `.rod-jogo:hover` ganhava
+  ao `.rod-jogo` e, com o :hover colado do telemóvel, o detalhe "mexia-se".
 - Os `onclick` vão por **índice** (`_rodLista`), nunca pelo nome.
 
 ## O que os outros lançam aparece sozinho (secção `REFRESCO`)
