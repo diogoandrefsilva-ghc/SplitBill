@@ -12,6 +12,8 @@ App pessoal de divisão de contas ("dia de jogo").
 - `logos-competicoes/` — os 5 PNG dos símbolos das competições, cópia dos do
   Goals. Estão cá (e não a apontar para o outro site) para o cartão dos
   Próximos Jogos funcionar offline, como o resto da PWA.
+- `logos-equipas/` — escudos de adversários que faltam no `logos.json` do
+  AppDataJSON (ver `LOGOS_ADV_LOCAIS` no `app.js`).
 - Não mexer: `manifest.json`.
 
 ## Como NÃO gastar tokens à toa (importante)
@@ -74,7 +76,10 @@ de lá que esta app lê. **Não há botão de sincronizar no SplitBill.**
   competição da **descrição do evento** ("Sporting vs Adversário [(Competição)]",
   `_calDescricao`). Perde-se a hora e o escudo, mais nada.
 - **Escudos dos adversários:** o mesmo `logos.json` do repo público AppDataJSON
-  que o Goals já lê. Não passa pelo Supabase e não é dado de utilizador.
+  que o Goals já lê. Não passa pelo Supabase e não é dado de utilizador. Os que
+  lá faltam (o União da Serra) estão cá em `logos-equipas/`, no mapa
+  `LOGOS_ADV_LOCAIS` (chave normalizada por `_gjNormNome`) — só entram quando o
+  `logos.json` não tem o clube.
 - As duas leituras arrancam **sem `await`**: não podem atrasar a app, e
   re-renderizam o ecrã inicial quando chegam.
 
@@ -111,9 +116,9 @@ Com o calendário criado de uma vez, "eventos em aberto" passou a incluir meia
 época de jogos por acontecer. Por isso:
 - **Ecrã inicial** (`renderInicio`, no `index.html`): "Em aberto" só leva os
   jogos **abertos** (ver secção seguinte). Os que estão por abrir vivem em
-  **"Próximos Jogos em Alvalade"** (`proximosAlvalade()`), no **fim do ecrã, a
-  seguir ao Consumo** — é agenda, não é trabalho por fazer, e não deve empurrar
-  para baixo o que precisa de atenção hoje. `FUTUROS_A_MOSTRAR` (2) à vista, o
+  **"Próximos Jogos em Alvalade"** (`proximosAlvalade()`), no **topo do ecrã**,
+  antes do "Em aberto" — já viveu no fim, a seguir ao Consumo, e subiu a pedido:
+  é o que se vem ver ao abrir a app. `FUTUROS_A_MOSTRAR` (2) à vista, o
   resto atrás de "mais N jogos". A secção aparece **sempre**, mesmo sem jogos: é
   lá que há onde dizer que não há nenhum. Os jogos entram aqui **sozinhos**, a
   partir do calendário do Goals — esta app já não tem botão de sincronizar.
@@ -125,7 +130,22 @@ Com o calendário criado de uma vez, "eventos em aberto" passou a incluir meia
   acontecer) e as contagens de presenças ficam **antes** do símbolo da
   competição, por serem matéria só desta app. As caixas de largura fixa são o
   que mantém as linhas todas alinhadas quando falta a hora ou o símbolo.
-- **Painel do histórico** (`renderHistoricoDropdown` + `eventosDoHistorico()`):
+- **Atalho "Histórico" do ecrã inicial** (`sbiHistorico` → painel
+  `#page-histjogos`, desenhado por `sbiRenderHistorico`/`cardHistorico` no
+  `index.html`; dados em `jogosDoHistoricoLista()`, secção `HISTÓRICO DE JOGOS`
+  no `app.js`): abre primeiro a **lista** dos jogos que já passaram, em fichas
+  com o mesmo interior `.sbj` dos Próximos Jogos (`fichaMeio`/`fichaCico`,
+  partilhadas), por época, e só tocando numa se entra no evento. Antes saltava
+  direito para o último jogo fechado. As fichas são brancas com barra verde
+  (`.sbi-past`) — o creme/dourado é da agenda — e à direita levam o total da
+  mesa e quantos comeram (🍽). Os jogos em Alvalade marcados **"Sem evento"**
+  (o grupo não foi ao Sá) e já passados também entram, **apagados**
+  (`.sbi-past.semsa`, pílula "sem Sá") e sem se abrirem: não têm evento cá, a
+  ficha vem do Goals. Como `GOALS_JOGOS` só traz hoje-45d em diante, ao abrir o
+  painel lê-se **uma vez** a lista dos jogos já passados
+  (`carregarDadosHistorico` → `GOALS_JOGOS_PASSADOS`, só SELECT, tolerante),
+  que dá também a hora/jornada aos eventos antigos (`fichaJogoHistorico`).
+- **Painel do histórico** dentro do evento (`renderHistoricoDropdown` + `eventosDoHistorico()`):
   ordenado por **data** e já não por ordem de criação, e **só leva o que já
   aconteceu** — jogos abertos ou fechados. Os que estão por abrir não entram:
   "histórico" com jogos futuros não quer dizer nada, e vivem no ecrã inicial.
