@@ -1000,7 +1000,10 @@ if ('serviceWorker' in navigator) {
 .sbi-past.semsa > *{opacity:.5;}
 .sbi-past.semsa .sbj-logo img,.sbi-past.semsa .sbj-cico img{filter:grayscale(1);}
 .sbi-past.semsa .sbj-adv{font-weight:600;}
-#hj-body .sbi-eyebrow:first-child{margin-top:14px;}
+.hj-rod{margin-top:14px;}
+/* A ficha "sem Sá" que o admin pode tocar (repor) é um botão: o cursor volta. */
+button.sbi-past.semsa{cursor:pointer;}
+.sbi-past.semsa:hover{background:#EEF0ED;}
 
 /* Pedido de pagamento por confirmar (ecrã inicial, só admin) */
 .sbi-pedido{background:var(--card,#fff);border:1px solid #E7D9A8;border-left:3px solid #B8911F;border-radius:13px;padding:12px 14px;margin-bottom:9px;box-shadow:0 3px 12px -10px rgba(11,59,43,.4);}
@@ -1549,10 +1552,15 @@ if ('serviceWorker' in navigator) {
   function cardHistorico(it){
     var f = it.ficha || { adversario: (it.ev && it.ev.descricao) || 'Sem nome', competicao:'', jornada:'', hora:'' };
     if (it.semSa){
-      return '<div class="sbi-past sbj semsa" aria-label="'+esc(f.adversario)+' — não fomos ao Sá">'
-        + fichaMeio(it.data, f)
+      // Só o admin a pode repor (reporSemEventoConfirmar no app.js); para os
+      // outros é um <div>, não há nada para abrir.
+      var meio = fichaMeio(it.data, f)
         + '<span class="sbj-pres"><span class="sbi-pill sbi-calm">sem Sá</span></span>'
-        + fichaCico(f) + '</div>';
+        + fichaCico(f);
+      var jid = String((f.jogo && f.jogo.id) || '').replace(/[^\w-]/g,'');
+      if (ehAdmin() && jid)
+        return '<button class="sbi-tap sbi-past sbj semsa" onclick="reporSemEventoConfirmar(\''+jid+'\')" aria-label="'+esc(f.adversario)+' — não fomos ao Sá (tocar para repor)">'+meio+'</button>';
+      return '<div class="sbi-past sbj semsa" aria-label="'+esc(f.adversario)+' — não fomos ao Sá">'+meio+'</div>';
     }
     var ev = it.ev, dir;
     if (!ev.totalFatura){
@@ -1575,8 +1583,9 @@ if ('serviceWorker' in navigator) {
     if (!body) return;
     var lista = [];
     try { lista = (typeof jogosDoHistoricoLista==='function') ? jogosDoHistoricoLista() : []; } catch(e){ lista = []; }
+    var topo = '<div class="hj-rod">'+rodadasLinha()+'</div>';
     if (!lista.length){
-      body.innerHTML = '<div class="sbi-vazio" style="margin-top:14px;">Nenhum jogo jogado ainda.</div>';
+      body.innerHTML = topo + '<div class="sbi-vazio" style="margin-top:14px;">Nenhum jogo jogado ainda.</div>';
       return;
     }
     var grupos = [], porEp = {};
@@ -1586,7 +1595,7 @@ if ('serviceWorker' in navigator) {
       if (!porEp[ep]){ porEp[ep] = { ep: ep, itens: [] }; grupos.push(porEp[ep]); }
       porEp[ep].itens.push(it);
     });
-    body.innerHTML = grupos.map(function(g){
+    body.innerHTML = topo + grupos.map(function(g){
       var nSa = g.itens.filter(function(it){ return !it.semSa; }).length;
       return '<div class="sbi-eyebrow">'+(g.ep ? 'Época '+esc(g.ep) : 'Sem data')
         + ' <span class="sbi-count">'+nSa+'</span></div>'
@@ -1604,16 +1613,27 @@ if ('serviceWorker' in navigator) {
        + '<span class="sbi-ico g">'+ICO.pag+'</span>'
        + '<span class="sbi-sqname">Pagamentos</span>'
        + pagTrailing()+'</button>';
-    // Rodadas: largura inteira por baixo dos dois quadrados (três quadrados não
-    // cabem num 320px). Dourado, como tudo o que é oferecido.
+    // As Rodadas oferecidas saíram daqui: vivem no topo do painel do Histórico
+    // (rodadasLinha) — são consulta sobre jogos passados, como ele.
+    return s;
+  }
+
+  // Rodadas: linha dourada, como tudo o que é oferecido. Abre o painel das
+  // rodadas por cima do Histórico, e fechá-lo volta ao Histórico.
+  function rodadasLinha(){
     var rod = (typeof rodadasEpocaAtual==='function') ? rodadasEpocaAtual() : 0;
-    s += '<button class="sbi-tap sbi-rod" onclick="abrirRodadas()" aria-label="Rodadas oferecidas">'
+    return '<button class="sbi-tap sbi-rod" onclick="sbiAbrirRodadas()" aria-label="Rodadas oferecidas">'
        + '<span class="sbi-ico">'+ICO.rod+'</span>'
        + '<span class="sbi-rod-txt"><span class="sbi-sqname">Rodadas oferecidas</span>'
        + '<span class="sbi-rod-desc">'+(rod > 0 ? '<b>'+eur(rod)+'</b> oferecidos nesta época' : 'Quem ofereceu o quê, e a quem')+'</span></span>'
        + '<span class="sbi-chev">'+CHEV+'</span></button>';
-    return s;
   }
+  window.sbiAbrirRodadas = function(){
+    if (typeof abrirRodadas!=='function') return;
+    window.sbiFecharHistorico();
+    try { _rodDoHistorico = true; } catch(e){}
+    abrirRodadas();
+  };
 
   // Pedidos de pagamento declarados pelos utilizadores ("já paguei"). Quem
   // recebe (o pagador do evento) ou o substituto veem Confirmar/Rejeitar —
@@ -1703,17 +1723,8 @@ if ('serviceWorker' in navigator) {
       h += '<div class="sbi-vazio">Nenhum jogo em Alvalade por acontecer.'
          + (admin ? ' Aparecem aqui sozinhos assim que estiverem no calendário da app Goals.' : '') + '</div>';
     }
-    // Jogos marcados "Sem evento" (só o admin os vê), com a ficha do Goals,
-    // para os poder repor. Não ocupa nada quando não há nenhum.
-    if (admin && typeof jogosSemEventoLista==='function'){
-      var sem = jogosSemEventoLista();
-      if (sem.length){
-        h += '<div class="sbi-vazio" style="margin-top:12px;">Sem evento: ' + sem.map(function(j){
-          return String(j.adversario||'?').replace(/[<>&"]/g,'') + ' (' + String(j.data||'').slice(8,10) + '/' + String(j.data||'').slice(5,7)
-               + ') <a href="#" onclick="reporSemEvento(\''+String(j.id).replace(/[^\w-]/g,'')+'\');return false;">repor</a>';
-        }).join(' · ') + '</div>';
-      }
-    }
+    // Os jogos marcados "Sem evento" já não se listam aqui: vivem no painel do
+    // Histórico, numa ficha apagada, e é tocando nela (admin) que se repõem.
     return h;
   }
 

@@ -6072,7 +6072,7 @@ async function marcarSemEvento(id) {
     const ok = await mostrarModal({
         icon: '🚫',
         title: 'Jogo sem evento?',
-        msg: '<strong>' + _calEsc(ev.descricao || 'Jogo') + '</strong> (' + _calEsc(ev.data || '—') + ') deixa de aparecer nos Próximos Jogos e o evento é apagado, com as presenças já marcadas.<br><br>Podes repô-lo no fim da lista dos Próximos Jogos.',
+        msg: '<strong>' + _calEsc(ev.descricao || 'Jogo') + '</strong> (' + _calEsc(ev.data || '—') + ') deixa de aparecer nos Próximos Jogos e o evento é apagado, com as presenças já marcadas.<br><br>Fica no Histórico, apagado, e é tocando nele que o podes repor.',
         confirmText: 'Sem evento',
         cancelText: 'Cancelar',
         danger: true
@@ -6098,18 +6098,55 @@ async function marcarSemEvento(id) {
     mostrarMensagem('✓ Jogo marcado como sem evento', true);
 }
 
-// Repor: tira a marca e a sincronização volta a criar o evento sozinha.
+// Repor: tira a marca e o evento volta. Num jogo por acontecer quem o cria é a
+// sincronização, como a todos os outros; num jogo que JÁ PASSOU a sincronização
+// não toca (nunca cria eventos com data velha), por isso cria-se aqui — e já
+// ABERTO, com a fotografia do menu de hoje como no abrirJogo(): repor um jogo
+// que passou é dizer que afinal se foi ao Sá, e é para lançar o que se comeu.
+// A porta é a ficha apagada no painel do Histórico (só admin).
 async function reporSemEvento(jogoId) {
     if (!isAdmin()) return;
+    const jid = String(jogoId);
+    const j = (GOALS_JOGOS_PASSADOS || []).concat(GOALS_JOGOS || []).find(x => String(x.id) === jid);
+    const passado = !!(j && String(j.data || '') < _calHoje());
     try {
-        await _guardarJogosSemEvento((JOGOS_SEM_EVENTO || []).filter(i => i !== String(jogoId)));
+        await _guardarJogosSemEvento((JOGOS_SEM_EVENTO || []).filter(i => i !== jid));
     } catch (e) { mostrarMensagem('⚠️ Não gravado: ' + sbErroLegivel(e), false); return; }
-    try {
-        const r = await sincronizarJogosDoGoals();
-        if (r) renderHistoricoDropdown();
-    } catch (e) {}
+    if (passado) {
+        try {
+            const ev = await _jogoCriarEvento(j, nextId(), amigosPorDefeito(), menuBaseNovoEvento());
+            const menuHoje = catalogoMenuObj();
+            if (Object.keys(menuHoje).length) ev.menu = menuHoje;
+            if (ABERTO_COL) {
+                ev.aberto = true;
+                try { await sbGuardarEvento(ev); } catch (e) { ev.aberto = false; }
+            }
+            salvarHistoricoLocal();
+        } catch (e) { mostrarMensagem('⚠️ Evento não criado: ' + sbErroLegivel(e), false); return; }
+    } else {
+        try { await sincronizarJogosDoGoals(); } catch (e) {}
+    }
+    try { renderHistoricoDropdown(); } catch (e) {}
     try { renderInicio(); } catch (e) {}
-    mostrarMensagem('✓ Jogo reposto nos Próximos Jogos', true);
+    mostrarMensagem(passado ? '✓ Jogo reposto no histórico' : '✓ Jogo reposto nos Próximos Jogos', true);
+}
+
+// Toque numa ficha "sem Sá" do Histórico (só admin): confirma e repõe.
+async function reporSemEventoConfirmar(jogoId) {
+    if (!isAdmin()) return;
+    const j = (GOALS_JOGOS_PASSADOS || []).concat(GOALS_JOGOS || []).find(x => String(x.id) === String(jogoId));
+    const ok = await mostrarModal({
+        icon: '↩️',
+        title: 'Repor o evento?',
+        msg: '<strong>' + _calEsc(j ? _calDescricao(j) : 'Jogo') + '</strong>' + (j ? ' (' + _calEsc(_calPt(j.data)) + ')' : '')
+            + ' foi marcado como <em>sem evento</em> — o grupo não foi ao Sá.<br><br>Repor cria o evento de novo'
+            + (j && String(j.data || '') < _calHoje() ? ', já aberto, para se lançar o consumo.' : ', nos Próximos Jogos.'),
+        confirmText: 'Repor',
+        cancelText: 'Cancelar'
+    });
+    if (!ok) return;
+    await reporSemEvento(jogoId);
+    try { if (typeof sbiRenderHistorico === 'function') sbiRenderHistorico(); } catch (e) {}
 }
 
 // Jogos marcados, com a ficha do Goals, para o admin os poder repor.
@@ -7190,8 +7227,15 @@ function abrirRodadas() {
     document.getElementById('page-rodadas').style.display = 'flex';
     renderRodadas();
 }
+// Aberto a partir do painel do Histórico (é lá que o atalho vive agora)?
+// Fechar volta para lá em vez de cair no ecrã inicial.
+let _rodDoHistorico = false;
 function fecharRodadas() {
     document.getElementById('page-rodadas').style.display = 'none';
+    if (_rodDoHistorico) {
+        _rodDoHistorico = false;
+        if (typeof sbiHistorico === 'function') sbiHistorico();
+    }
 }
 function rodModo(m) { _rodModo = m; _rodOff = 0; _rodAberto = ''; renderRodadas(); }
 function rodNav(dir) {
@@ -7206,6 +7250,7 @@ function rodToggle(i) {
 function rodAbrirJogo(i, k) {
     const p = _rodLista[i]; const j = p && p.jogos[k];
     if (!j || typeof sbiAbrirEvento !== 'function') return;
+    _rodDoHistorico = false;   // vai para o evento: não volta ao painel
     fecharRodadas();
     sbiAbrirEvento(String(j.ev.id));
 }
