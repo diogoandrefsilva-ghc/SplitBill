@@ -190,6 +190,20 @@ window.sbEsconderSplash = function(){
     </div>
 </div>
 
+<!-- ═══ PAINEL HISTÓRICO DE JOGOS (atalho do ecrã inicial) — fichas dos jogos que já passaram; tocar num abre o evento. Ver HISTÓRICO DE JOGOS no app.js e sbiRenderHistorico mais abaixo ═══ -->
+<div id="page-histjogos" style="display:none;position:fixed;inset:0;background:rgba(11,59,43,0.45);z-index:9997;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)sbiFecharHistorico()">
+    <div style="background:#EFF1EC;width:100%;max-width:520px;max-height:85vh;border-radius:16px 16px 0 0;display:flex;flex-direction:column;overflow:hidden;">
+        <div style="background:#0B3B2B;color:#fff;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:18px;">📚</span>
+                <h2 style="font-size:16px;font-weight:700;margin:0;">Histórico de jogos</h2>
+            </div>
+            <button onclick="sbiFecharHistorico()" aria-label="Fechar" style="background:rgba(255,255,255,0.12);border:none;color:#fff;border-radius:50%;width:34px;height:34px;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;-webkit-tap-highlight-color:transparent;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg></button>
+        </div>
+        <div id="hj-body" style="padding:4px 16px 18px;overflow-y:auto;flex:1;min-height:0;"></div>
+    </div>
+</div>
+
 <!-- ═══ PAINEL DEFINIÇÕES (utilizador normal) ═══ -->
 <div id="page-definicoes" style="display:none;position:fixed;inset:0;background:rgba(11,59,43,0.45);z-index:9997;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)fecharDefinicoes()">
     <div style="background:#EFF1EC;width:100%;max-width:520px;max-height:85vh;border-radius:16px 16px 0 0;display:flex;flex-direction:column;overflow:hidden;">
@@ -864,6 +878,7 @@ if ('serviceWorker' in navigator) {
 .sbi-fut:hover{background:linear-gradient(135deg,#FFFCF2 0%,#F6F0DD 100%);}
 .sbi-sq:hover{background:linear-gradient(180deg,#fff 0%,#F6FAF7 100%);}
 .sbi-rod:hover{background:linear-gradient(135deg,#FFFCF2 0%,#F6F0DD 100%);}
+.sbi-past:hover{background:linear-gradient(180deg,#fff 0%,#F4F8F5 100%);}
 .sbi-newquiet:hover{background:transparent;}
 .sbi-voltar:hover{background:#fff;}
 .sbi-ico{flex:0 0 auto;display:grid;place-items:center;}
@@ -966,6 +981,26 @@ if ('serviceWorker' in navigator) {
   .sbj-cico{width:30px;height:30px;}
 }
 
+/* Ficha de um jogo que JÁ PASSOU (painel do Histórico): o mesmo interior .sbj
+   dos Próximos Jogos, mas em branco com a barra verde — o creme/dourado é da
+   agenda. À direita, em vez das presenças, o total da mesa e quantos foram.
+   `.semsa` = jogo em que o grupo não foi ao Sá (marcado "Sem evento"): fica lá
+   para a época se ler inteira, mas apagado e sem se abrir — não há nada lá
+   dentro. */
+.sbi-past{position:relative;overflow:hidden;width:100%;display:flex;align-items:center;background:linear-gradient(180deg,#fff 0%,#F4F8F5 100%);border:1px solid #E1EAE3;border-radius:16px;box-shadow:0 6px 18px -14px rgba(11,59,43,.55);}
+.sbi-past::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(180deg,#16A86F,var(--verde,#0E7A4F));}
+.sbi-past > *{position:relative;z-index:1;}
+.sbi-past .sbj-sep{background:#D7E3DA;}
+.sbi-past .sbj-dt span{color:var(--verde-tinta,#0E5C3F);}
+.sbi-past .sbj-hr strong.vazia{color:#B9C5BE;}
+.sbj-tot{display:block;font-family:var(--mono,monospace);font-weight:700;font-size:12.5px;line-height:1.2;color:var(--ink,#1B231F);letter-spacing:-.02em;white-space:nowrap;}
+.sbj-pres .sbi-pos{background:var(--verde-claro,#E2EFE8);color:var(--verde-tinta,#0E5C3F);}
+.sbi-past.semsa{background:#EEF0ED;border-color:#E2E6E1;box-shadow:none;cursor:default;}
+.sbi-past.semsa::before{background:#C7CEC9;}
+.sbi-past.semsa > *{opacity:.5;}
+.sbi-past.semsa .sbj-logo img,.sbi-past.semsa .sbj-cico img{filter:grayscale(1);}
+.sbi-past.semsa .sbj-adv{font-weight:600;}
+#hj-body .sbi-eyebrow:first-child{margin-top:14px;}
 
 /* Pedido de pagamento por confirmar (ecrã inicial, só admin) */
 .sbi-pedido{background:var(--card,#fff);border:1px solid #E7D9A8;border-left:3px solid #B8911F;border-radius:13px;padding:12px 14px;margin-bottom:9px;box-shadow:0 3px 12px -10px rgba(11,59,43,.4);}
@@ -1447,30 +1482,44 @@ if ('serviceWorker' in navigator) {
   var MESES_CURTOS = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
   var DIAS_CURTOS  = ['DOM','SEG','TER','QUA','QUI','SEX','SÁB'];
 
+  // A data do evento é 'dd/mm/aaaa'; o dia da semana tira-se sempre dela (ao
+  // contrário da hora, que só vem quando já está confirmada no calendário).
+  function partesData(str){
+    var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(str || ''));
+    var r = { dia: m ? ('0'+m[1]).slice(-2) : '--', mes: m ? (MESES_CURTOS[(+m[2])-1] || '') : '', ds: '' };
+    if (m){
+      var d = new Date(+m[3], (+m[2])-1, +m[1], 12);
+      if (!isNaN(d)) r.ds = DIAS_CURTOS[d.getDay()];
+    }
+    return r;
+  }
+  // As caixas do meio da ficha (data · hora · escudo · adversário), iguais nos
+  // Próximos Jogos e no Histórico. O que vai à direita é de cada um.
+  function fichaMeio(data, f){
+    var p = partesData(data);
+    var logo = '';
+    try { logo = (typeof logoAdversario==='function') ? logoAdversario(f.adversario) : ''; } catch(e){}
+    var sub = [f.competicao, f.jornada].filter(Boolean).map(esc).join(' · ');
+    return '<span class="sbj-dt"><strong>'+p.dia+'</strong><span>'+p.mes+'</span></span>'
+      + '<span class="sbj-sep"></span>'
+      + '<span class="sbj-hr"><strong'+(f.hora?'':' class="vazia"')+'>'+(f.hora?esc(f.hora):'—')+'</strong><span>'+p.ds+'</span></span>'
+      + '<span class="sbj-logo">'+(logo?'<img src="'+esc(logo)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':'')+'</span>'
+      + '<span class="sbj-info"><span class="sbj-adv">'+esc(f.adversario)+'</span>'
+      + (sub ? '<span class="sbj-comp">'+sub+'</span>' : '')
+      + '</span>';
+  }
+  function fichaCico(f){
+    var compSrc = '';
+    try { compSrc = (typeof COMP_LOGOS!=='undefined' && COMP_LOGOS) ? (COMP_LOGOS[f.competicao] || '') : ''; } catch(e){}
+    return '<span class="sbj-cico">'+(compSrc?'<img src="'+esc(compSrc)+'" alt="'+esc(f.competicao)+'" loading="lazy" onerror="this.style.display=\'none\'">':'')+'</span>';
+  }
+
   function cardFuturo(ev, primeiro){
     var nome = esc(ev.descricao || 'Sem nome');
     var cont = null, f = null;
     try { if (typeof contagemPresencas==='function') cont = contagemPresencas(ev); } catch(e){}
     try { if (typeof fichaJogoEvento==='function') f = fichaJogoEvento(ev); } catch(e){}
     if (!f) f = { adversario: ev.descricao || 'Sem nome', competicao:'', jornada:'', hora:'' };
-
-    // A data do evento é 'dd/mm/aaaa'; o dia da semana tira-se sempre dela (ao
-    // contrário da hora, que só vem quando já está confirmada no calendário).
-    var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(ev.data || ''));
-    var dia = m ? ('0'+m[1]).slice(-2) : '--';
-    var mes = m ? (MESES_CURTOS[(+m[2])-1] || '') : '';
-    var ds  = '';
-    if (m){
-      var d = new Date(+m[3], (+m[2])-1, +m[1], 12);
-      if (!isNaN(d)) ds = DIAS_CURTOS[d.getDay()];
-    }
-
-    var logo = '';
-    try { logo = (typeof logoAdversario==='function') ? logoAdversario(f.adversario) : ''; } catch(e){}
-    var compSrc = '';
-    try { compSrc = (typeof COMP_LOGOS!=='undefined' && COMP_LOGOS) ? (COMP_LOGOS[f.competicao] || '') : ''; } catch(e){}
-
-    var sub = [f.competicao, f.jornada].filter(Boolean).map(esc).join(' · ');
 
     // A terceira pílula (boxes livres) SÓ aparece quando há alguma: é a única
     // das três que é notícia — quem chega ao ecrã inicial e vê um 🎟️ sabe que
@@ -1487,17 +1536,63 @@ if ('serviceWorker' in navigator) {
     }
 
     return '<button class="sbi-tap sbi-fut sbj'+(primeiro?' proximo':'')+'" onclick="abrirFolhaJogo(\''+esc(ev.id)+'\')" aria-label="'+nome+'">'
-      + '<span class="sbj-dt"><strong>'+dia+'</strong><span>'+mes+'</span></span>'
-      + '<span class="sbj-sep"></span>'
-      + '<span class="sbj-hr"><strong'+(f.hora?'':' class="vazia"')+'>'+(f.hora?esc(f.hora):'—')+'</strong><span>'+ds+'</span></span>'
-      + '<span class="sbj-logo">'+(logo?'<img src="'+esc(logo)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':'')+'</span>'
-      + '<span class="sbj-info"><span class="sbj-adv">'+esc(f.adversario)+'</span>'
-      + (sub ? '<span class="sbj-comp">'+sub+'</span>' : '')
-      + '</span>'
+      + fichaMeio(ev.data, f)
       + pres
-      + '<span class="sbj-cico">'+(compSrc?'<img src="'+esc(compSrc)+'" alt="'+esc(f.competicao)+'" loading="lazy" onerror="this.style.display=\'none\'">':'')+'</span>'
+      + fichaCico(f)
       + '</button>';
   }
+
+  /* Ficha de um jogo do Histórico. À direita: o total da mesa e quantos
+     comeram (🍽, a mesma pílula do Sá nos Próximos Jogos); "em aberto" no jogo
+     com conta por fechar; "sem Sá" nos jogos em que o grupo não foi — esses
+     são um <div> e não um botão, porque não há evento para abrir. */
+  function cardHistorico(it){
+    var f = it.ficha || { adversario: (it.ev && it.ev.descricao) || 'Sem nome', competicao:'', jornada:'', hora:'' };
+    if (it.semSa){
+      return '<div class="sbi-past sbj semsa" aria-label="'+esc(f.adversario)+' — não fomos ao Sá">'
+        + fichaMeio(it.data, f)
+        + '<span class="sbj-pres"><span class="sbi-pill sbi-calm">sem Sá</span></span>'
+        + fichaCico(f) + '</div>';
+    }
+    var ev = it.ev, dir;
+    if (!ev.totalFatura){
+      dir = '<span class="sbi-pill sbi-pos">em aberto</span>';
+    } else {
+      var n = 0;
+      try { n = (typeof presentesNoEvento==='function') ? presentesNoEvento(ev).size : 0; } catch(e){}
+      dir = '<span class="sbj-tot">'+eur(ev.totalFatura)+'</span>'
+          + (n ? '<span class="sbi-pill sbi-calm">🍽 '+n+'</span>' : '');
+    }
+    return '<button class="sbi-tap sbi-past sbj" onclick="sbiHistAbrir(\''+esc(ev.id)+'\')" aria-label="'+esc(ev.descricao || f.adversario)+'">'
+      + fichaMeio(ev.data, f)
+      + '<span class="sbj-pres">'+dir+'</span>'
+      + fichaCico(f) + '</button>';
+  }
+
+  // O painel, arrumado por época (corte a 15/jul, _epocaLabel no app.js).
+  window.sbiRenderHistorico = function(){
+    var body = document.getElementById('hj-body');
+    if (!body) return;
+    var lista = [];
+    try { lista = (typeof jogosDoHistoricoLista==='function') ? jogosDoHistoricoLista() : []; } catch(e){ lista = []; }
+    if (!lista.length){
+      body.innerHTML = '<div class="sbi-vazio" style="margin-top:14px;">Nenhum jogo jogado ainda.</div>';
+      return;
+    }
+    var grupos = [], porEp = {};
+    lista.forEach(function(it){
+      var ep = '';
+      try { ep = (typeof _epocaLabel==='function') ? _epocaLabel(it.data) : ''; } catch(e){}
+      if (!porEp[ep]){ porEp[ep] = { ep: ep, itens: [] }; grupos.push(porEp[ep]); }
+      porEp[ep].itens.push(it);
+    });
+    body.innerHTML = grupos.map(function(g){
+      var nSa = g.itens.filter(function(it){ return !it.semSa; }).length;
+      return '<div class="sbi-eyebrow">'+(g.ep ? 'Época '+esc(g.ep) : 'Sem data')
+        + ' <span class="sbi-count">'+nSa+'</span></div>'
+        + '<div class="sbi-list">'+g.itens.map(cardHistorico).join('')+'</div>';
+    }).join('');
+  };
 
   function atalhos(){
     var s = '';
@@ -1583,9 +1678,9 @@ if ('serviceWorker' in navigator) {
     btn.textContent = (_futAberto ? '▴ mostrar menos' : '▾ mais ' + btn.getAttribute('data-n') + ' jogos');
   };
 
-  /* "Próximos Jogos em Alvalade" — vive no FIM do ecrã, a seguir ao consumo:
-     é agenda, não é trabalho por fazer, e não deve empurrar para baixo o que
-     precisa de atenção hoje. Aparece SEMPRE (mesmo sem jogos), para haver onde
+  /* "Próximos Jogos em Alvalade" — vive no TOPO do ecrã (já viveu no fim, a
+     seguir ao consumo; subiu a pedido: é o que se vem ver ao abrir a app).
+     Aparece SEMPRE (mesmo sem jogos), para haver onde
      dizer que não há nenhum — os jogos entram aqui sozinhos, a partir do
      calendário da app Goals (ver sincronizarJogosDoGoals no app.js); esta app
      já não tem botão nenhum para ir buscar o calendário. */
@@ -1631,7 +1726,9 @@ if ('serviceWorker' in navigator) {
     abertos.forEach(function(ev){ (ehJogoAberto(ev) ? porFechar : futuros).push(ev); });
     porFechar.sort(function(a,b){ return tsEvento(b) - tsEvento(a); });  // mais recente primeiro
     futuros.sort(function(a,b){ return tsEvento(a) - tsEvento(b); });    // mais perto primeiro
-    var h = '';
+    // Os Próximos Jogos vêm em PRIMEIRO: é a primeira coisa que se procura ao
+    // abrir a app (quando é o jogo, quem vai, a que horas é a mesa).
+    var h = proximosAlvalade(futuros, admin);
     if (porFechar.length){
       h += '<div class="sbi-eyebrow">Em aberto <span class="sbi-count">'+porFechar.length+'</span></div>';
       h += '<div class="sbi-list">'+porFechar.map(cardAberto).join('')+'</div>';
@@ -1643,7 +1740,6 @@ if ('serviceWorker' in navigator) {
     h += '<div class="sbi-eyebrow">Atalhos</div>';
     h += '<div class="sbi-grid2">'+atalhos()+'</div>';
     h += statsConsumo();
-    h += proximosAlvalade(futuros, admin);
     el.innerHTML = h;
     // Sincroniza o FAB de novo evento (só visível neste ecrã e para admin).
     var fn = document.getElementById('fab-novo');
@@ -1670,36 +1766,30 @@ if ('serviceWorker' in navigator) {
     if (typeof renderPagadorSelect==='function') renderPagadorSelect();
     if (typeof atualizarUI==='function') atualizarUI();
   };
+  /* Histórico: abre primeiro a LISTA dos jogos que já passaram (fichas, por
+     época) e só tocando num é que se entra no evento. Antes saltava direito
+     para o último jogo fechado, e para chegar a outro era preciso o painel
+     dentro do evento. Desenha logo com o que há em memória e redesenha quando
+     chegar a ficha dos jogos antigos do Goals (carregarDadosHistorico). */
   window.sbiHistorico = function(){
-    // O jogo que abre é o PRIMEIRO do painel do histórico: o mais recente por
-    // DATA, o mesmo critério do eventosDoHistorico(). Era o último da lista por
-    // ordem de CRIAÇÃO e isso deixou de querer dizer o jogo mais recente desde
-    // que o calendário do Goals cria os jogos em lotes (os europeus entraram
-    // depois dos da liga, com ids maiores) — o atalho abria o penúltimo jogo.
-    // Mas só os FECHADOS: o painel também leva o jogo em aberto, e esse é
-    // sempre o mais recente — o atalho caía nele em vez de no último jogo
-    // com conta feita. O jogo em aberto já tem o seu cartão em "Em aberto".
-    var lista = ((typeof eventosDoHistorico==='function')
-        ? eventosDoHistorico()
-        : getHist().slice().reverse()
-      ).filter(function(ev){ return !!ev.totalFatura; });
-    if (lista.length && typeof carregarEvento==='function') {
-      carregarEvento(lista[0]);
-      // Mesma sequência de refresco do navegarHistorico()/sbiAbrirEvento() — sem
-      // isto o ecrã ficava com os amigos e a lista de ordens do evento anterior
-      // (o jogo em aberto), só o total é que atualizava (é escrito diretamente
-      // no input dentro de carregarEvento()).
-      if (typeof atualizarReadOnly==='function') atualizarReadOnly();
-      if (typeof renderDropdownItens==='function') renderDropdownItens();
-      if (typeof renderAmigosBotoes==='function') renderAmigosBotoes();
-      if (typeof renderOfertaDropdowns==='function') renderOfertaDropdowns();
-      if (typeof renderOfertaAmigos==='function') renderOfertaAmigos();
-      if (typeof renderPagadorSelect==='function') renderPagadorSelect();
-      if (typeof atualizarUI==='function') atualizarUI();
+    var p = document.getElementById('page-histjogos');
+    if (!p) return;
+    p.style.display = 'flex';
+    window.sbiRenderHistorico();
+    var b = document.getElementById('hj-body'); if (b) b.scrollTop = 0;
+    if (typeof carregarDadosHistorico==='function'){
+      carregarDadosHistorico().then(function(){
+        if (p.style.display === 'flex') window.sbiRenderHistorico();
+      }, function(){});
     }
-    if (typeof mudarPagina==='function') mudarPagina('eventos');
-    var p = document.getElementById('historico-panel');
-    if (p && p.classList.contains('open') && typeof toggleHistoricoPanel==='function') toggleHistoricoPanel();
+  };
+  window.sbiFecharHistorico = function(){
+    var p = document.getElementById('page-histjogos');
+    if (p) p.style.display = 'none';
+  };
+  window.sbiHistAbrir = function(id){
+    window.sbiFecharHistorico();
+    window.sbiAbrirEvento(id);
   };
   window.sbiPagamentos = function(){ if (typeof mudarPagina==='function') mudarPagina('pagamentos'); };
   window.sbiDefinicoes = function(){ if (typeof abrirAdmin==='function') abrirAdmin(); };

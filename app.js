@@ -5805,7 +5805,17 @@ function _gjNormNome(s) {
     return String(s == null ? '' : s).toLowerCase().normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
 }
-function logoAdversario(nome) { return LOGOS_ADV[_gjNormNome(nome)] || ''; }
+/* Escudos que faltam no logos.json, guardados cá (`logos-equipas/`). Só entram
+   quando o logos.json não tem o clube: se lá aparecer, ganha o de lá. Chave já
+   normalizada (_gjNormNome). */
+var LOGOS_ADV_LOCAIS = {
+    'uniaodaserra': 'logos-equipas/uniao-da-serra.png',
+    'udserra': 'logos-equipas/uniao-da-serra.png'
+};
+function logoAdversario(nome) {
+    var k = _gjNormNome(nome);
+    return LOGOS_ADV[k] || LOGOS_ADV_LOCAIS[k] || '';
+}
 async function carregarLogosAdversarios() {
     try {
         var r = await fetch('https://raw.githubusercontent.com/diogoandrefsilva-ghc/AppDataJSON/main/logos.json?t=' + Date.now());
@@ -6106,6 +6116,109 @@ async function reporSemEvento(jogoId) {
 function jogosSemEventoLista() {
     const ids = JOGOS_SEM_EVENTO || [];
     return GOALS_JOGOS.filter(j => ids.indexOf(String(j.id)) >= 0 && _calEmAlvalade(j));
+}
+
+/* ── HISTÓRICO DE JOGOS (o atalho "Histórico" do ecrã inicial) ───────────
+   O atalho abre primeiro a LISTA dos jogos que já passaram, em fichas iguais
+   às dos Próximos Jogos (data · hora · escudo · adversário · competição), e só
+   tocando num é que se entra no evento. O painel é desenhado no index.html
+   (`sbiRenderHistorico`, junto do cardFuturo); aqui fica só o que dá os dados.
+
+   Entram duas coisas:
+   · os eventos do histórico (`eventosDoHistorico`: abertos ou fechados);
+   · os jogos em Alvalade marcados "Sem evento" (o grupo não foi ao Sá) e que
+     já passaram — sem evento cá, vêm da ficha do Goals. Aparecem apagados e
+     não se abrem: não há nada lá dentro.
+
+   `GOALS_JOGOS` só traz os jogos de hoje-45d para a frente, por isso para os
+   mais antigos (a hora, a jornada, a competição dos eventos sem ela na
+   descrição) lê-se UMA vez a lista dos jogos já passados, ao abrir o painel.
+   Só SELECT, e tolerante como o resto: sem ela, a ficha cai na descrição. */
+var GOALS_JOGOS_PASSADOS = null;   // null = por ler · [] = vazio/indisponível
+var _histCarregando = null;
+
+function _histIsoParaPt(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+    return m ? (m[3] + '/' + m[2] + '/' + m[1]) : '';
+}
+function _histPtParaIso(pt) {
+    const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(pt || ''));
+    return m ? (m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2)) : '';
+}
+
+// Lê (uma vez) os jogos já passados do Goals e a lista dos "Sem evento".
+// Devolve a promessa, para o painel redesenhar quando chegar.
+function carregarDadosHistorico() {
+    if (_histCarregando) return _histCarregando;
+    _histCarregando = (async () => {
+        if (JOGOS_SEM_EVENTO === null) { try { await carregarJogosSemEvento(); } catch (e) {} }
+        if (GOALS_JOGOS_PASSADOS === null) {
+            try {
+                const d0 = new Date();
+                const hoje = d0.getFullYear() + '-' + ('0' + (d0.getMonth() + 1)).slice(-2) + '-' + ('0' + d0.getDate()).slice(-2);
+                const url = SB_URL + '/rest/v1/jogos?select=id,data,adversario,competicao,jornada,local,hora,estadio'
+                    + '&por_definir=is.false&data=lt.' + hoje + '&order=data.desc&limit=500';
+                const r = await sbFetch(url, { headers: sbHeaders({ 'Accept': 'application/json', 'Accept-Profile': 'goals', 'Content-Profile': 'goals' }) });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const d = await r.json();
+                GOALS_JOGOS_PASSADOS = Array.isArray(d) ? d : [];
+            } catch (e) {
+                GOALS_JOGOS_PASSADOS = [];
+                console.warn('[SplitBill] histórico sem a ficha dos jogos passados do Goals', e);
+            }
+        }
+    })();
+    // Uma falha não fica presa: da próxima vez que se abrir o painel, tenta-se outra vez.
+    _histCarregando.finally(() => {
+        if (!GOALS_JOGOS_PASSADOS || !GOALS_JOGOS_PASSADOS.length) _histCarregando = null;
+    });
+    return _histCarregando;
+}
+
+// Ficha de um evento JÁ PASSADO: a mesma de fichaJogoEvento, mas com a lista
+// dos jogos passados como segunda fonte (pelo jogo_id, ou pela data quando só
+// há um jogo em Alvalade nesse dia — os eventos anteriores à ligação).
+function fichaJogoHistorico(ev) {
+    const f = fichaJogoEvento(ev);
+    if (f.jogo) return f;
+    const lista = GOALS_JOGOS_PASSADOS || [];
+    let j = null;
+    if (ev.jogoId != null) j = lista.find(x => String(x.id) === String(ev.jogoId)) || null;
+    if (!j) {
+        const iso = _histPtParaIso(ev.data);
+        const cand = iso ? lista.filter(x => x.data === iso && _calEmAlvalade(x)) : [];
+        if (cand.length === 1) j = cand[0];
+    }
+    if (!j) return f;
+    return {
+        adversario: j.adversario || f.adversario,
+        competicao: j.competicao || f.competicao,
+        jornada: j.jornada || f.jornada || '',
+        hora: j.hora || f.hora || '',
+        jogo: j
+    };
+}
+
+// A lista do painel, do mais recente para o mais antigo:
+// { ev, data, ficha } para os eventos · { semSa:true, data, ficha } para os outros.
+function jogosDoHistoricoLista() {
+    const ts = d => { try { return _parsePgtoData(d) || 0; } catch (e) { return 0; } };
+    const l = eventosDoHistorico().map(ev => ({ ev, data: ev.data, ficha: fichaJogoHistorico(ev) }));
+    const ids = JOGOS_SEM_EVENTO || [];
+    if (ids.length) {
+        const hoje = _hojeInicio(), vistos = {};
+        (GOALS_JOGOS_PASSADOS || []).concat(GOALS_JOGOS || []).forEach(j => {
+            const id = String(j.id);
+            if (vistos[id] || ids.indexOf(id) < 0 || !_calEmAlvalade(j)) return;
+            const data = _histIsoParaPt(j.data);
+            if (!data || ts(data) >= hoje) return;   // só os que já passaram
+            vistos[id] = true;
+            l.push({ semSa: true, data, ficha: {
+                adversario: j.adversario || '—', competicao: j.competicao || '',
+                jornada: j.jornada || '', hora: j.hora || '', jogo: j } });
+        });
+    }
+    return l.sort((a, b) => ts(b.data) - ts(a.data));
 }
 
 /* ── JOGO ABERTO & PRESENÇAS (Próximos Jogos em Alvalade) ────────────────
@@ -10080,6 +10193,8 @@ function sbVoltar() {
     if (defs && defs.style.display === 'flex') { fecharDefinicoes(); return true; }
     const rod = document.getElementById('page-rodadas');
     if (rod && rod.style.display === 'flex') { fecharRodadas(); return true; }
+    const hj = document.getElementById('page-histjogos');
+    if (hj && hj.style.display === 'flex') { sbiFecharHistorico(); return true; }
     if (typeof _paginaAtual !== 'undefined' && _paginaAtual && _paginaAtual !== 'inicio') {
         mudarPagina('inicio'); return true;
     }
