@@ -2622,3 +2622,55 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
 .ev-hint-casa { color: #8A6D14; }
 /* A contagem de unidades oferecidas, na conferência da fatura. */
 .fr-casa { color: #8A6D14; font-weight: 600; }
+
+/* ── Rodadas oferecidas (painel #page-rodadas, ver RODADAS OFERECIDAS no app.js) ──
+   Dourado, como tudo o que é oferecido. As linhas são botões: repõem o
+   UPPERCASE/letter-spacing do `button` global e o fundo do `button:hover`
+   (que no telemóvel fica colado depois do toque). */
+.rod-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 10px; }
+.rod-navl { font-family: var(--display); font-weight: 700; font-size: 16px; color: var(--ink); }
+.rod-navb, .rod-navb:hover {
+    width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: #fff; color: var(--verde-escuro, #0B3B2B);
+    display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0,0,0,.08); cursor: pointer;
+}
+.rod-navb svg { width: 16px; height: 16px; }
+.rod-navb:disabled { opacity: .35; pointer-events: none; }
+.rod-vazio { text-align: center; color: var(--ink-soft, #5B6661); font-size: 13px; padding: 26px 8px; }
+.rod-soma {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px;
+    background: var(--dourado-claro); border: 1px solid #EADFB6; border-radius: 12px; padding: 10px 13px;
+    font-size: 13px; color: #8A6D12; font-weight: 600;
+}
+.rod-soma b { font-family: var(--display); font-size: 19px; color: #7A5E12; }
+.rod-p { background: #fff; border-radius: 12px; margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.06); overflow: hidden; }
+.rod-row, .rod-row:hover, .rod-jogo, .rod-jogo:hover {
+    width: 100%; display: flex; align-items: center; gap: 10px; border: 0; background: transparent; cursor: pointer;
+    text-align: left; text-transform: none; letter-spacing: normal; color: var(--ink); font-family: inherit; font-weight: 400;
+    -webkit-tap-highlight-color: transparent;
+}
+.rod-row { padding: 11px 12px; min-height: 0; }
+.rod-pos {
+    flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: var(--dourado-claro); color: #8A6D12; font-family: var(--display); font-weight: 700; font-size: 14px;
+}
+.rod-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.rod-nome { font-family: var(--display); font-weight: 700; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rod-nome em { font-style: normal; font-family: var(--mono, monospace); font-size: 10px; font-weight: 700; text-transform: uppercase;
+    background: var(--verde-claro, #E2EFE8); color: var(--verde-tinta, #0E5C3F); border-radius: 10px; padding: 1px 6px; vertical-align: 2px; }
+.rod-sub { font-size: 12px; color: var(--ink-soft, #5B6661); }
+.rod-val { flex: 0 0 auto; font-family: var(--display); font-weight: 700; font-size: 17px; color: #8A6D12; }
+.rod-chev { flex: 0 0 auto; display: flex; color: #B9B39B; transition: transform .15s; }
+.rod-chev svg { width: 16px; height: 16px; }
+.rod-p.aberto .rod-chev { transform: rotate(90deg); }
+.rod-jogos { border-top: 1px solid #EEF1ED; padding: 4px 0; background: #FCFBF6; }
+.rod-jogo { flex-direction: column; align-items: stretch; gap: 3px; padding: 8px 12px 8px 48px; }
+.rod-jogo + .rod-jogo { border-top: 1px dashed #EAE4CF; }
+.rod-jh { display: flex; align-items: baseline; gap: 8px; }
+.rod-jd { flex: 0 0 auto; font-family: var(--mono, monospace); font-size: 11px; color: var(--ink-soft, #5B6661); }
+.rod-jn { flex: 1 1 auto; min-width: 0; font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rod-jv { flex: 0 0 auto; font-weight: 700; font-size: 13px; color: #8A6D12; }
+.rod-it { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; color: var(--ink); }
+.rod-itn { flex: 1 1 auto; min-width: 0; }
+.rod-itv { flex: 0 0 auto; color: var(--ink-soft, #5B6661); font-size: 12px; }
+.rod-para { color: var(--ink-soft, #5B6661); }
+.rod-parte { color: var(--ink-soft, #5B6661); font-size: 11.5px; }
