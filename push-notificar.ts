@@ -1,6 +1,6 @@
 // supabase/functions/push-notificar/index.ts
 // SplitBill — Envia notificações Web Push (Notification/Push API, sem
-// Telegram). Nove momentos, todos chamados pela app:
+// Telegram). Dez momentos, todos chamados pela app:
 //   'divida'              fecharComFatura() → todos os devedores do evento
 //                          que acabou de fechar, com o nome de quem pagou a
 //                          conta (em `quem`) para o aviso dizer a quem entregar
@@ -40,6 +40,12 @@
 //   'carro_hora'           marcarCarroHora() → só quem vai no carro de quem o
 //                          leva (`quem`): o condutor mudou a hora a que o carro
 //                          sai (fire-and-forget)
+//   'leva_carro'           marcarCarro(true) → o grupo todo menos quem conduz e
+//                          quem já disse que não vai ao jogo: há mais um carro,
+//                          e quem está sem carro precisa de saber. A `hora` (a
+//                          que o carro sai) é OPCIONAL aqui — pode ainda não se
+//                          saber — e só entra na frase se for HH:MM válida
+//                          (fire-and-forget)
 //
 // Um `tipo` que a função não conheça é RECUSADO (400). Antes caía no texto da
 // 'divida', e um aviso novo enviado por uma app mais recente do que este
@@ -177,7 +183,8 @@ type Tipo =
   | "hora_sa"
   | "mesa_marcada"
   | "saida_marcada"
-  | "carro_hora";
+  | "carro_hora"
+  | "leva_carro";
 
 // Os tipos que esta versão sabe escrever — é também a resposta à pergunta da
 // app ({tipo: 'tipos'}) antes de usar um tipo novo.
@@ -190,6 +197,7 @@ const TIPOS: Tipo[] = [
   "mesa_marcada",
   "saida_marcada",
   "carro_hora",
+  "leva_carro",
 ];
 
 // Nem todos os momentos falam de dinheiro: 'gamebox', 'hora_sa',
@@ -236,6 +244,15 @@ function montarMensagem(
     return {
       title: horaMesa ? "🚗 Saída de Alcochete e mesa no Sá" : "🚗 Saída de Alcochete",
       body: `${quem || "Alguém"} marcou a saída de Alcochete para as ${hora}${mesa}${suf}`,
+    };
+  }
+  if (tipo === "leva_carro") {
+    // A hora é opcional: o carro pode ainda não ter hora (nem o condutor
+    // respondeu, nem há mesa marcada).
+    const quando = hora ? ` (sai às ${hora})` : "";
+    return {
+      title: "🚗 Mais um carro",
+      body: `${quem || "Alguém"} leva carro${quando}${suf} — quem quiser boleia, escolhe na app`,
     };
   }
   if (tipo === "carro_hora") {
