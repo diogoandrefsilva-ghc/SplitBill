@@ -1979,7 +1979,7 @@ function mostrarModal(opts) {
             actions.appendChild(extraBtn);
         }
         // Quarta escolha opcional, irmã da anterior (ex.: a folha do jogo por
-        // abrir tem "Preparar" e "Marcar mesa" ao mesmo tempo) — resolve
+        // abrir tem "Preparar" e "Marcar horas" ao mesmo tempo) — resolve
         // 'extra2', sem mexer nas outras.
         if (opts.extraText2) {
             const extraBtn2 = document.createElement('button');
@@ -6647,47 +6647,71 @@ function mesaPessoasEvento(ev) {
     const n = ev && ev.mesaPessoas;
     return (Number.isInteger(n) && n > 0 && n <= 99) ? n : '';
 }
-function podeMarcarMesa(ev) {
-    if (!ev || ev.totalFatura || !MESA_HORA_COL) return false;
+/* A saída de ALCOCHETE (`ev.saidaHora`, migração db/saida-hora.sql): a outra
+   hora do grupo, a primeira do dia. Com a da mesa sozinha já houve quem
+   perguntasse de que era aquela hora — por isso as duas aparecem sempre com o
+   seu nome ("Saída de Alcochete", "Mesa marcada no Sá"), nunca uma hora solta. */
+function saidaHoraEvento(ev) {
+    const h = (ev && ev.saidaHora) || '';
+    return /^([01]\d|2[0-3]):[0-5]\d$/.test(h) ? h : '';
+}
+// Quem organiza o dia: quem trata da marcação da mesa, o admin ou o
+// substituto do evento. As duas horas do grupo são dessa gente — a mesma regra
+// que o servidor confirma em marcar_mesa_hora e marcar_saida_hora.
+function _podeOrganizarDia(ev) {
+    if (!ev || ev.totalFatura) return false;
     return podeEditarEvento(ev) || meusAmigos().includes(GESTOR_MESA_SA);
 }
+function podeMarcarMesa(ev) { return MESA_HORA_COL && _podeOrganizarDia(ev); }
+function podeMarcarSaida(ev) { return SAIDA_HORA_COL && _podeOrganizarDia(ev); }
+function podeMarcarHorarios(ev) { return podeMarcarMesa(ev) || podeMarcarSaida(ev); }
 
-// `hora` a vazio desmarca a mesa (e o nº de pessoas com ela — ver
-// db/mesa-pessoas.sql). Mesmo padrão das outras respostas da folha: grava já
-// em memória, e desfaz se o servidor recusar.
-async function marcarMesaHora(id, hora, pessoas) {
+/* Grava as horas do grupo que mudaram no diálogo "Marcar horas"
+   (jogoSheetHorarios). `novo` só traz o que mudou: `saida` ('HH:MM', ou '' para
+   apagar) e/ou `mesa` + `pessoas` — desmarcar a mesa leva o nº de pessoas com
+   ela (ver db/mesa-pessoas.sql). Mesmo padrão das outras respostas da folha: grava já em
+   memória e desfaz o que o servidor recusar. E um Guardar dá UM aviso, mesmo
+   que tenham mudado as duas (sbNotificarHorarios). */
+async function marcarHorarios(id, novo) {
     const ev = historico.find(e => String(e.id) === String(id));
     if (!ev || ev.totalFatura) return false;
-    if (!MESA_HORA_COL) { mostrarMensagem('⚠️ Falta a coluna eventos.mesa_hora — corre db/mesa-hora.sql no Supabase', false); return false; }
-    if (!podeMarcarMesa(ev)) { mostrarMensagem('⚠️ Só quem trata da marcação (ou o administrador) pode pôr a hora da mesa', false); return false; }
-    const limpa = /^([01]\d|2[0-3]):[0-5]\d$/.test(hora || '') ? hora : '';
-    if (hora && !limpa) { mostrarMensagem('⚠️ Hora inválida', false); return false; }
-    const n = Number(pessoas);
-    const pessoasLimpas = (limpa && Number.isInteger(n) && n > 0 && n <= 99) ? n : '';
-    if (limpa && pessoas && !pessoasLimpas) { mostrarMensagem('⚠️ Número de pessoas inválido', false); return false; }
+    const mudaSaida = 'saida' in novo, mudaMesa = 'mesa' in novo;
+    if (!mudaSaida && !mudaMesa) return true;
+    if (mudaSaida && !SAIDA_HORA_COL) { mostrarMensagem('⚠️ Falta a coluna eventos.saida_hora — corre db/saida-hora.sql no Supabase', false); return false; }
+    if (mudaMesa && !MESA_HORA_COL) { mostrarMensagem('⚠️ Falta a coluna eventos.mesa_hora — corre db/mesa-hora.sql no Supabase', false); return false; }
+    if (!_podeOrganizarDia(ev)) { mostrarMensagem('⚠️ Só quem trata da marcação (ou o administrador) pode pôr estas horas', false); return false; }
+    const re = /^([01]\d|2[0-3]):[0-5]\d$/;
+    const saida = (mudaSaida && re.test(novo.saida || '')) ? novo.saida : '';
+    const mesa = (mudaMesa && re.test(novo.mesa || '')) ? novo.mesa : '';
+    if ((mudaSaida && novo.saida && !saida) || (mudaMesa && novo.mesa && !mesa)) { mostrarMensagem('⚠️ Hora inválida', false); return false; }
+    const n = Number(novo.pessoas);
+    const pessoas = (mesa && Number.isInteger(n) && n > 0 && n <= 99) ? n : '';
+    if (mesa && novo.pessoas && !pessoas) { mostrarMensagem('⚠️ Número de pessoas inválido', false); return false; }
 
-    const antes = ev.mesaHora || '';
-    const antesPessoas = ev.mesaPessoas || null;
-    ev.mesaHora = limpa;
-    ev.mesaPessoas = pessoasLimpas || null;
+    const antes = { saidaHora: ev.saidaHora || '', mesaHora: ev.mesaHora || '', mesaPessoas: ev.mesaPessoas || null };
+    if (mudaSaida) ev.saidaHora = saida;
+    if (mudaMesa) { ev.mesaHora = mesa; ev.mesaPessoas = pessoas || null; }
     salvarHistoricoLocal();
 
-    let ok;
+    let okSaida = true, okMesa = true;
     if (podeEditarEvento(ev)) {
-        try { await sbGuardarEvento(ev, { apenas: ['mesaHora', 'mesaPessoas'] }); ok = true; } catch (e) { ok = false; }
+        const apenas = (mudaSaida ? ['saidaHora'] : []).concat(mudaMesa ? ['mesaHora', 'mesaPessoas'] : []);
+        try { await sbGuardarEvento(ev, { apenas }); } catch (e) { okSaida = okMesa = false; }
     } else {
-        ok = await sbMarcarMesaHora(ev.id, limpa, pessoasLimpas || null);
+        // Uma função do servidor por hora: se uma recusar, a outra fica gravada.
+        if (mudaSaida) okSaida = await sbMarcarSaidaHora(ev.id, saida);
+        if (mudaMesa) okMesa = await sbMarcarMesaHora(ev.id, mesa, pessoas || null);
     }
-    if (!ok) {
-        ev.mesaHora = antes;
-        ev.mesaPessoas = antesPessoas;
-        salvarHistoricoLocal();
-        return false;
-    }
-    // Só na MUDANÇA para uma hora nova: desmarcar não toca os telemóveis, e
-    // gravar a mesma hora outra vez também não.
-    if (limpa && limpa !== antes) sbNotificarMesa(ev, (meusAmigos()[0] || ''), limpa, pessoasLimpas || null);
-    return true;
+    if (!okSaida) ev.saidaHora = antes.saidaHora;
+    if (!okMesa) { ev.mesaHora = antes.mesaHora; ev.mesaPessoas = antes.mesaPessoas; }
+    if (!okSaida || !okMesa) salvarHistoricoLocal();
+
+    // Só a MUDANÇA para uma hora nova avisa: apagar não toca os telemóveis, e
+    // gravar a mesma hora outra vez (ou só o nº de pessoas) também não.
+    const saidaNova = (okSaida && saida && saida !== antes.saidaHora) ? saida : '';
+    const mesaNova = (okMesa && mesa && mesa !== antes.mesaHora) ? mesa : '';
+    if (saidaNova || mesaNova) sbNotificarHorarios(ev, meusAmigos()[0] || '', saidaNova, mesaNova, mesaNova ? (pessoas || null) : null);
+    return okSaida && okMesa;
 }
 
 /* Grava a hora a partir da qual posso estar no Sá (`ev.saHora`, migração
@@ -6727,9 +6751,9 @@ async function marcarHoraSa(id, hora) {
 }
 
 /* Folha de um jogo por abrir (tocar no cartão dos Próximos Jogos): a data, as
-   perguntas (Sá / hora / jogo), quem já está convocado com a hora de cada um,
-   a hora a que a mesa dá para marcar e — só para quem o pode abrir, e só no
-   próximo — o botão de abrir o jogo. */
+   perguntas (Sá / hora / jogo), as horas do grupo (a saída de Alcochete e a
+   mesa marcada no Sá), quem já está convocado com a hora de cada um e — só
+   para quem o pode abrir, e só no próximo — o botão de abrir o jogo. */
 // "dd/mm/aaaa" → "aaaa-mm-dd" (formato do <input type="date">). Inverso de
 // _isoParaDataPt(), já usado na criação de eventos.
 function _dataPtParaIso(dataPt) {
@@ -6758,37 +6782,68 @@ function _horasAgrupadas(ev) {
     return Array.from(conta, ([hora, n]) => ({ hora, n })).sort((a, b) => a.hora.localeCompare(b.hora));
 }
 
+// Uma hora do grupo no resumo da folha (e no diálogo "Marcar horas"): o símbolo, o
+// NOME da hora e, à direita, a hora em grande — ou `fim`, o que lá vai em vez
+// dela (o "por marcar" do resumo, o campo do diálogo). Nunca uma hora solta:
+// com a da mesa sozinha, já houve quem perguntasse de que era.
+function _jfHorarioHTML(ico, nome, hora, sub, fim) {
+    return '<div class="jf-hor">'
+         + '<span class="jf-hor-ic" aria-hidden="true">' + ico + '</span>'
+         + '<span class="jf-hor-txt"><span class="jf-mesa-lbl">' + nome + '</span>'
+         + (sub ? '<span class="jf-hor-sub">' + sub + '</span>' : '') + '</span>'
+         + (hora ? '<strong>' + _calEsc(hora) + '</strong>' : (fim || ''))
+         + '</div>';
+}
+
 function _horasResumoHTML(ev) {
     const grupos = _horasAgrupadas(ev);
+    const saida = saidaHoraEvento(ev);
     const marcada = mesaHoraEvento(ev);
-    const posso = podeMarcarMesa(ev);
-    if (!grupos.length && !marcada && !posso) {
-        return '<div class="jf-mesa vazia">Ainda ninguém disse a que horas pode chegar.</div>';
+    // Só LEITURA aqui — pôr/mudar as horas é o botão próprio "Marcar horas"
+    // da folha (jogoSheetHorarios), não um campo ao lado de "Podes estar no
+    // Sá às": eram dois <input type="time"> na mesma folha e picar a mesa a mais
+    // em vez da hora de cada um já aconteceu, sem volta atrás (avisa o grupo).
+    // Pela ordem do dia: primeiro sai-se de Alcochete, depois é a mesa. Por
+    // marcar, só quem as pode pôr vê a linha — aos outros não diz nada.
+    const por = t => '<span class="jf-hor-por">' + t + '</span>';
+    let horarios = '';
+    if (!saida && !marcada && podeMarcarSaida(ev) && podeMarcarMesa(ev)) {
+        // Nada marcado ainda: um lembrete só — duas linhas "por marcar" eram
+        // altura gasta a dizer a mesma coisa.
+        horarios = _jfHorarioHTML('🕒', 'Saída e mesa', '', '', por('por marcar'));
+    } else {
+        if (saida || podeMarcarSaida(ev)) {
+            horarios += _jfHorarioHTML('🚗', 'Saída de Alcochete', saida, '', por('por definir'));
+        }
+        if (marcada || podeMarcarMesa(ev)) {
+            const pessoas = marcada ? mesaPessoasEvento(ev) : '';
+            horarios += _jfHorarioHTML('🍽️', marcada ? 'Mesa marcada no Sá' : 'Mesa no Sá', marcada,
+                pessoas ? pessoas + ' ' + (pessoas === 1 ? 'pessoa' : 'pessoas') : '', por('por marcar'));
+        }
     }
-    let h = '<div class="jf-mesa' + (marcada ? ' marcada' : '') + '">';
-    // Só LEITURA aqui — marcar/mudar a mesa é o botão próprio "Marcar mesa" da
-    // folha (jogoSheetMarcarMesa), não um campo ao lado de "Podes estar às":
-    // eram dois <input type="time"> na mesma folha e picar a mesa a mais em
-    // vez da hora de cada um já aconteceu, sem volta atrás (avisa o grupo).
-    if (marcada) {
-        const pessoas = mesaPessoasEvento(ev);
-        h += '<div class="jf-mesa-res"><span class="jf-mesa-lbl">Mesa marcada para</span>'
-           + '<strong>' + _calEsc(marcada) + '</strong></div>'
-           + (pessoas ? '<div class="jf-mesa-pax">' + pessoas + ' ' + (pessoas === 1 ? 'pessoa' : 'pessoas') + '</div>' : '');
-    } else if (posso) {
-        h += '<div class="jf-mesa-res"><span class="jf-mesa-lbl">Mesa por marcar</span></div>';
+    if (!grupos.length && !horarios) {
+        return SA_HORA_COL ? '<div class="jf-mesa vazia">Ainda ninguém disse a que horas pode chegar ao Sá.</div>' : '';
     }
-    if (grupos.length) {
+    let h = '<div class="jf-mesa">' + (horarios ? '<div class="jf-hors">' + horarios + '</div>' : '');
+    // Com a mesa MARCADA, os votos saem da folha: já cumpriram o que tinham a
+    // cumprir, e o lugar deles é o da hora de saída — a folha tem de caber num
+    // ecrã. Continuam no diálogo "Marcar horas" e, nome a nome, na tabela dobrada.
+    if (grupos.length && !marcada) {
         const semHora = horasSaEvento(ev).filter(l => !l.hora).length;
-        h += '<span class="jf-mesa-lbl">' + (marcada ? 'Podem chegar a partir das' : 'A partir de que horas') + '</span>'
-           + '<div class="jf-mesa-horas">'
-           + grupos.map(g => '<span>' + _calEsc(g.hora) + (g.n > 1 ? '<em>(' + g.n + 'p)</em>' : '') + '</span>').join('')
-           + (semHora ? '<span class="jf-sem-horas">' + semHora + ' sem responder</span>' : '')
-           + '</div>';
-    } else if (posso) {
-        h += '<div class="jf-mesa-nada">Ainda ninguém disse a que horas pode chegar.</div>';
+        h += '<span class="jf-mesa-lbl">A que horas podem chegar ao Sá</span>'
+           + _jfVotosHTML(grupos, semHora ? '<span class="jf-sem-horas">' + semHora + ' sem responder</span>' : '');
+    } else if (!grupos.length && SA_HORA_COL && podeMarcarMesa(ev) && !marcada) {
+        h += '<div class="jf-mesa-nada">Ainda ninguém disse a que horas pode chegar ao Sá.</div>';
     }
     return h + '</div>';
+}
+
+// As pílulas dos votos ("17:30 (2p)"), iguais no resumo e no diálogo. `fim`
+// vai no fim da mesma fila (o "N sem responder" do resumo).
+function _jfVotosHTML(grupos, fim) {
+    return '<div class="jf-mesa-horas">'
+         + grupos.map(g => '<span>' + _calEsc(g.hora) + (g.n > 1 ? '<em>(' + g.n + 'p)</em>' : '') + '</span>').join('')
+         + (fim || '') + '</div>';
 }
 
 /* A lista dobrável da folha. O estado vive FORA do HTML porque a folha se
@@ -6865,7 +6920,7 @@ function _quemVaiHTML(ev) {
     // única das três que é notícia, e um "0 box" a cada jogo era ruído.
     const resumo = '<strong>' + nSa + '</strong> ' + _pluralVai(nSa) + ' ao Sá · <strong>' + nJogo + '</strong> ao jogo'
                  + (nBox ? ' · <strong>' + nBox + '</strong> box ' + (nBox === 1 ? 'livre' : 'livres') : '');
-    return ((SA_HORA_COL || MESA_HORA_COL) ? _horasResumoHTML(ev) : '') + _jfFoldHTML('quem', resumo, _jfTabelaHTML(linhas));
+    return ((SA_HORA_COL || MESA_HORA_COL || SAIDA_HORA_COL) ? _horasResumoHTML(ev) : '') + _jfFoldHTML('quem', resumo, _jfTabelaHTML(linhas));
 }
 
 // Uma linha do cartão de respostas: pergunta à esquerda, resposta à direita.
@@ -6918,7 +6973,9 @@ function _jogoSheetHTML(ev) {
         // último a chegar, e por isso mostram-se todas (ver _horasResumoHTML).
         if (vouSa && SA_HORA_COL) {
             const minha = minhaHoraSa(ev);
-            h += _jfLinha('Podes estar às',
+            // "no Sá" por extenso: com a saída de Alcochete na mesma folha, um
+            // "Podes estar às" solto podia ser lido como a hora de lá estar.
+            h += _jfLinha('Podes estar no Sá às',
                 '<input type="time" class="jf-chip-hora' + (minha ? ' on' : '') + '" id="jf-hora-input" step="300"'
                 + ' value="' + _calEsc(minha) + '" onblur="jogoSheetHoraSa(' + ev.id + ')">');
         }
@@ -6998,55 +7055,96 @@ async function jogoSheetHoraSa(id) {
     mostrarMensagem(valor ? '✓ Horas guardadas' : '✓ Horas apagadas', true);
 }
 
-// Botão próprio da folha ("Marcar mesa" / "Mudar mesa"), a par de Preparar e
-// Abrir jogo — de propósito FORA do cartão de respostas, para não ficar ao
-// lado de "Podes estar às" (a hora de CADA UM): os dois eram dois
-// <input type="time"> lado a lado na mesma folha, e já aconteceu picar a
-// mesa a mais em vez da própria hora. Aqui exige um Guardar explícito em vez
-// de gravar ao sair do campo — gravar a mesa avisa o grupo todo, e um toque
-// a mais não tinha volta.
-async function jogoSheetMarcarMesa(id) {
+// Botão próprio da folha ("Marcar horas"), a par de Preparar e Abrir jogo — de
+// propósito FORA do cartão de respostas, para não ficar ao lado de "Podes
+// estar no Sá às" (a hora de CADA UM): já foram dois <input type="time"> lado
+// a lado na mesma folha, e já aconteceu picar a mesa a mais em vez da própria
+// hora. Aqui há um Guardar explícito em vez de gravar ao sair do campo —
+// gravar avisa o grupo todo, e um toque a mais não tinha volta.
+// As duas horas do grupo vivem no mesmo diálogo, pela ordem do dia — a saída
+// de Alcochete, depois a mesa no Sá —, cada uma com o seu ✕ para a apagar
+// (era o "Desmarcar" do diálogo só da mesa; com duas horas, cada uma tem o
+// seu). Em cima, a hora do jogo, que é por onde se acerta a da saída.
+async function jogoSheetHorarios(id) {
     const ev = historico.find(e => String(e.id) === String(id));
     if (!ev) return;
+    const comSaida = podeMarcarSaida(ev), comMesa = podeMarcarMesa(ev);
+    if (!comSaida && !comMesa) return;
+    const saida = saidaHoraEvento(ev);
     const marcada = mesaHoraEvento(ev);
     const pessoasAntes = mesaPessoasEvento(ev);
+    const ficha = fichaJogoEvento(ev);
     const grupos = _horasAgrupadas(ev);
-    const votos = grupos.length
-        ? '<div class="jf-mesa-horas">' + grupos.map(g => '<span>' + _calEsc(g.hora) + (g.n > 1 ? '<em>(' + g.n + 'p)</em>' : '') + '</span>').join('') + '</div>'
-        : '<div class="jf-mesa-nada">Ainda ninguém disse a que horas pode chegar.</div>';
+    const campo = (inputId, valor) => '<span class="jf-hor-campo">'
+        + '<input type="time" class="jf-mesa-input on" id="' + inputId + '" step="300" value="' + _calEsc(valor) + '"'
+        + ' oninput="jfHoraCampo(this)" onchange="jfHoraCampo(this)">'
+        + '<button type="button" class="jf-hor-x" onclick="jfHoraLimpar(\'' + inputId + '\')" aria-label="Apagar esta hora"'
+        + (valor ? '' : ' hidden') + '>✕</button></span>';
+
+    let msg = ficha.hora ? '<div class="jf-sub">' + _calEsc(ev.data || '') + ' · jogo às ' + _calEsc(ficha.hora) + '</div>' : '';
+    msg += '<div class="jf-mesa jf-hor-dlg">';
+    if (comSaida) msg += _jfHorarioHTML('🚗', 'Saída de Alcochete', '', '', campo('jf-saida-dialog-input', saida));
+    if (comMesa) {
+        msg += _jfHorarioHTML('🍽️', 'Mesa no Sá', '', '', campo('jf-mesa-dialog-input', marcada));
+        // O nº de pessoas é da mesa: vai colado à linha dela, e com o lugar do
+        // ✕ guardado para os três campos acabarem na mesma vertical.
+        if (MESA_PESSOAS_COL) {
+            msg += '<div class="jf-hor jf-hor-pax"><span class="jf-hor-ic"></span>'
+                 + '<span class="jf-hor-txt"><span class="jf-mesa-lbl">Nº de pessoas</span></span>'
+                 + '<span class="jf-hor-campo"><input type="number" inputmode="numeric" min="1" max="99" class="jf-mesa-input on"'
+                 + ' id="jf-mesa-dialog-pax" placeholder="—" value="' + (pessoasAntes || '') + '">'
+                 + '<span class="jf-hor-x" aria-hidden="true" hidden></span></span></div>';
+        }
+        msg += '<span class="jf-mesa-lbl">A que horas podem chegar ao Sá</span>'
+             + (grupos.length ? _jfVotosHTML(grupos) : '<div class="jf-mesa-nada">Ainda ninguém disse a que horas pode chegar ao Sá.</div>');
+    }
+    msg += '</div><div class="jf-aviso">Ao gravar, o grupo todo é avisado das horas novas.</div>';
+
+    // Sem db/saida-hora.sql sobra só a mesa, e o diálogo é o de sempre.
     const r = await mostrarModal({
-        icon: '🍽️',
-        title: marcada ? 'Mudar a hora da mesa' : 'Marcar a mesa',
-        msg: '<div class="jf-mesa">'
-           + '<span class="jf-mesa-lbl">A partir de que horas podem chegar</span>' + votos
-           + '<div class="jf-mesa-res"><span class="jf-mesa-lbl">Hora da mesa</span>'
-           + '<input type="time" class="jf-mesa-input on" id="jf-mesa-dialog-input" step="300" value="' + _calEsc(marcada) + '"></div>'
-           + (MESA_PESSOAS_COL
-               ? '<div class="jf-mesa-res"><span class="jf-mesa-lbl">Nº de pessoas</span>'
-                 + '<input type="number" inputmode="numeric" min="1" max="99" class="jf-mesa-input on" id="jf-mesa-dialog-pax"'
-                 + ' placeholder="—" value="' + (pessoasAntes || '') + '"></div>'
-               : '')
-           + '</div>'
-           + '<div class="jf-aviso">Vai avisar todo o grupo assim que gravares.</div>',
+        icon: comSaida ? '🕒' : '🍽️',
+        title: comSaida ? 'Horas do jogo' : (marcada ? 'Mudar a hora da mesa' : 'Marcar a mesa'),
+        msg,
         confirmText: 'Guardar',
-        cancelText: 'Cancelar',
-        extraText: marcada ? 'Desmarcar' : ''
+        cancelText: 'Cancelar'
     });
     if (r === true) {
-        const input = document.getElementById('jf-mesa-dialog-input');
-        const paxInput = document.getElementById('jf-mesa-dialog-pax');
-        const valor = (input && input.value) || '';
-        const pessoas = (paxInput && paxInput.value) || '';
-        if (valor !== marcada || Number(pessoas || 0) !== Number(pessoasAntes || 0)) {
-            const ok = await marcarMesaHora(id, valor, pessoas);
-            if (ok) mostrarMensagem(valor ? '✓ Mesa marcada para as ' + valor : '✓ Mesa desmarcada', true);
+        const val = idInput => { const i = document.getElementById(idInput); return (i && i.value) || ''; };
+        // Só segue o que mudou: é isso que decide o que se grava e o que avisa.
+        const novo = {};
+        if (comSaida && val('jf-saida-dialog-input') !== saida) novo.saida = val('jf-saida-dialog-input');
+        if (comMesa) {
+            const mesa = val('jf-mesa-dialog-input');
+            const pessoas = val('jf-mesa-dialog-pax');
+            if (mesa !== marcada || Number(pessoas || 0) !== Number(pessoasAntes || 0)) { novo.mesa = mesa; novo.pessoas = pessoas; }
         }
-    } else if (r === 'extra') {
-        const ok = await marcarMesaHora(id, '');
-        if (ok) mostrarMensagem('✓ Mesa desmarcada', true);
+        if (Object.keys(novo).length && await marcarHorarios(id, novo)) mostrarMensagem(_horariosToast(novo), true);
     }
-    // Volta à folha, para quem marcou a mesa continuar onde estava.
+    // Volta à folha, para quem pôs as horas continuar onde estava.
     await abrirFolhaJogo(id);
+}
+
+// O ✕ de cada hora do diálogo "Marcar horas": só aparece com a hora posta, e
+// apaga-a no campo — grava-se no Guardar, como o resto.
+function jfHoraCampo(input) {
+    const x = input && input.parentNode && input.parentNode.querySelector('.jf-hor-x');
+    if (x) x.hidden = !input.value;
+}
+function jfHoraLimpar(inputId) {
+    const i = document.getElementById(inputId);
+    if (!i) return;
+    i.value = '';
+    jfHoraCampo(i);
+}
+
+// "✓ Saída de Alcochete às 17:15 · mesa no Sá às 20:30" — o que ficou gravado,
+// com o nome de cada hora, como em todo o lado.
+function _horariosToast(novo) {
+    const partes = [];
+    if ('saida' in novo) partes.push(novo.saida ? 'saída de Alcochete às ' + novo.saida : 'hora de saída apagada');
+    if ('mesa' in novo) partes.push(novo.mesa ? 'mesa no Sá às ' + novo.mesa : 'mesa desmarcada');
+    const t = partes.join(' · ');
+    return '✓ ' + t.charAt(0).toUpperCase() + t.slice(1);
 }
 
 // Muda a data de um jogo por abrir, direto na folha (input#jf-data-input).
@@ -7090,7 +7188,7 @@ async function abrirFolhaJogo(id) {
     if (!ev) return;
     const podeAbrir = podeAbrirJogo(ev);
     // Cada abertura da folha começa com as listas fechadas: o resumo (as
-    // perguntas e a hora da mesa) é o que tem de caber no primeiro ecrã.
+    // perguntas e as horas do grupo) é o que tem de caber no primeiro ecrã.
     _jfFold = { quem: false };
     const r = await mostrarModal({
         icon: '⚽',
@@ -7100,14 +7198,19 @@ async function abrirFolhaJogo(id) {
         cancelText: 'Fechar',
         semCancelar: !podeAbrir,
         extraText: _podeGerirJogo(ev) ? 'Preparar' : '',
-        extraText2: podeMarcarMesa(ev) ? (mesaHoraEvento(ev) ? 'Mudar mesa' : 'Marcar mesa') : ''
+        // Sem db/saida-hora.sql só há a hora da mesa, e o botão é o de sempre.
+        // Duas palavras de propósito: com quatro botões, um nome que não parta
+        // em duas linhas ("Horários") empurrava o "Abrir jogo" para fora do ecrã.
+        extraText2: !podeMarcarHorarios(ev) ? ''
+            : SAIDA_HORA_COL ? ((saidaHoraEvento(ev) || mesaHoraEvento(ev)) ? 'Mudar horas' : 'Marcar horas')
+            : (mesaHoraEvento(ev) ? 'Mudar mesa' : 'Marcar mesa')
     });
     // "Preparar" leva à página do evento SEM o abrir: o jogo continua em agenda.
     if (r === 'extra') { await navegarHistorico(ev.id); return; }
-    // "Marcar mesa" abre o diálogo próprio (jogoSheetMarcarMesa), que devolve
-    // a esta folha no final — botão à parte de propósito, para não se
-    // confundir com "Podes estar às" (ver essa função).
-    if (r === 'extra2') { await jogoSheetMarcarMesa(ev.id); return; }
+    // "Marcar horas" abre o diálogo próprio (jogoSheetHorarios), que devolve a
+    // esta folha no final — botão à parte de propósito, para não se confundir
+    // com "Podes estar no Sá às" (ver essa função).
+    if (r === 'extra2') { await jogoSheetHorarios(ev.id); return; }
     if (r === 'semevento') { await marcarSemEvento(ev.id); return; }
     if (r === true && podeAbrir) await abrirJogo(ev.id);
 }
@@ -8078,9 +8181,17 @@ let MESA_HORA_RPC = true;
 /* Nº de pessoas combinado com o restaurante para a mesa (`eventos.mesa_pessoas`,
    migração db/mesa-pessoas.sql) — irmã da hora, gravada pela MESMA
    `marcar_mesa_hora` (agora com um terceiro parâmetro). Sem a coluna,
-   MESA_PESSOAS_COL fica false e o campo esconde-se no diálogo "Marcar mesa",
+   MESA_PESSOAS_COL fica false e o campo esconde-se no diálogo "Marcar horas",
    ficando só a hora, como sempre foi. */
 let MESA_PESSOAS_COL = true;
+
+/* Hora a que o grupo sai de ALCOCHETE (`eventos.saida_hora`, migração
+   db/saida-hora.sql) — a segunda hora do grupo, irmã da da mesa e posta pelas
+   mesmas pessoas. Sem a coluna, SAIDA_HORA_COL fica false, a linha da saída
+   não aparece e o diálogo "Marcar horas" fica só com a mesa. `SAIDA_HORA_RPC` é a
+   irmã para `marcar_saida_hora`. */
+let SAIDA_HORA_COL = true;
+let SAIDA_HORA_RPC = true;
 
 /* Pedidos de pagamento por confirmar (`pagamentos.declarado_por`, migração
    db/pagamentos-pendentes.sql) — permite a um utilizador declarar que já pagou
@@ -8156,6 +8267,7 @@ function eventoDaBD(ev, ordensDoEv, ofertasDoEv, loc) {
         saHora: (SA_HORA_COL && ev.sa_hora && typeof ev.sa_hora === 'object') ? ev.sa_hora : (_temObj(_loc.saHora) || {}),
         mesaHora: MESA_HORA_COL ? (ev.mesa_hora || '') : (_loc.mesaHora || ''),
         mesaPessoas: MESA_PESSOAS_COL ? (ev.mesa_pessoas || null) : (_loc.mesaPessoas || null),
+        saidaHora: SAIDA_HORA_COL ? (ev.saida_hora || '') : (_loc.saidaHora || ''),
         // as dívidas recalculam-se a partir dos pagamentos
         dividas: {},
         fatura: (FATURA_COL && ev.fatura) ? ev.fatura : (_loc.fatura || null),
@@ -8187,6 +8299,7 @@ async function sbCarregarDados() {
             SA_HORA_COL = tem('sa_hora');
             MESA_HORA_COL = tem('mesa_hora');
             MESA_PESSOAS_COL = tem('mesa_pessoas');
+            SAIDA_HORA_COL = tem('saida_hora');
             JOGO_ID_COL = tem('jogo_id');
         }
         if (!JOGO_ID_COL) console.warn('[SplitBill] coluna eventos.jogo_id ausente — corre db/jogo-id.sql para os jogos virem sozinhos do calendário do Goals');
@@ -8196,6 +8309,7 @@ async function sbCarregarDados() {
         if (!SA_HORA_COL) console.warn('[SplitBill] coluna eventos.sa_hora ausente — corre db/sa-hora.sql para recolher a que horas cada um pode estar no Sá');
         if (!MESA_HORA_COL) console.warn('[SplitBill] coluna eventos.mesa_hora ausente — corre db/mesa-hora.sql para o gestor da mesa poder pôr a hora a que a marcou');
         if (!MESA_PESSOAS_COL) console.warn('[SplitBill] coluna eventos.mesa_pessoas ausente — corre db/mesa-pessoas.sql para guardar quantas pessoas ficam na mesa');
+        if (!SAIDA_HORA_COL) console.warn('[SplitBill] coluna eventos.saida_hora ausente — corre db/saida-hora.sql para pôr a hora de saída de Alcochete');
         if (!FATURA_COL) console.warn('[SplitBill] coluna eventos.fatura ausente — corre db/fatura-detalhe.sql para guardar o detalhe da fatura no servidor');
         if (!AMIGOS_COL || !MENU_COL) console.warn('[SplitBill] colunas eventos.amigos/menu ausentes — corre db/convocados-menu.sql para os convocados e o menu do evento viajarem entre dispositivos');
 
@@ -8383,7 +8497,7 @@ function _evAssinatura(ev) {
     if (!ev) return '';
     return JSON.stringify([ev.ordens, ev.ofertas, ev.totalFatura, ev.pagador, ev.amigos,
         ev.menu, ev.fatura, ev.aberto, ev.jogo, ev.gamebox, ev.saHora, ev.mesaHora,
-        ev.mesaPessoas, ev.substituto, ev.descricao, ev.data]);
+        ev.mesaPessoas, ev.saidaHora, ev.substituto, ev.descricao, ev.data]);
 }
 
 // Relê do servidor SÓ o evento que está no ecrã. Devolve true se mudou alguma
@@ -8641,6 +8755,31 @@ async function sbMarcarMesaHora(eventoId, hora, pessoas) {
     }
 }
 
+/* Irmã da anterior para a hora de SAÍDA DE ALCOCHETE (db/saida-hora.sql). A
+   mesma gente pode gravá-la — o servidor confirma-o outra vez. */
+async function sbMarcarSaidaHora(eventoId, hora) {
+    if (!_sbSession) return false;
+    if (!SAIDA_HORA_RPC) { mostrarMensagem('⚠️ Falta a função marcar_saida_hora — corre db/saida-hora.sql no Supabase', false); return false; }
+    try {
+        const r = await sbFetch(`${SB_URL}/rest/v1/rpc/marcar_saida_hora`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Accept': 'application/json' }),
+            body: JSON.stringify({ p_evento_id: eventoId, p_hora: hora || null })
+        });
+        if (r.status === 404) {
+            SAIDA_HORA_RPC = false;
+            mostrarMensagem('⚠️ Falta a função marcar_saida_hora — corre db/saida-hora.sql no Supabase', false);
+            return false;
+        }
+        await sbOk(r, 'marcar a hora de saída');
+        return true;
+    } catch (e) {
+        console.error('Erro ao marcar a hora de saída:', e);
+        mostrarMensagem('⚠️ Não gravado [' + (e.ctx || 'rede') + ']: ' + sbErroLegivel(e), false);
+        return false;
+    }
+}
+
 // Sincroniza uma tabela-pai (ordens/ofertas) + a tabela-filho respetiva
 // (ordem_amigos/oferta_para) com o padrão UPSERT + PRUNE: insere/atualiza tudo
 // PRIMEIRO e só DEPOIS remove o que sobra. Nunca apaga linhas-pai antes de a
@@ -8723,7 +8862,9 @@ async function sbGuardarEvento(ev, opts) {
                 // A coluna aceita NULL (mesa por marcar) mas não '' — o CHECK do
                 // formato rejeitava a string vazia (ver db/mesa-hora.sql).
                 mesaHora: () => { if (MESA_HORA_COL) campos.mesa_hora = mesaHoraEvento(ev) || null; },
-                mesaPessoas: () => { if (MESA_PESSOAS_COL) campos.mesa_pessoas = mesaPessoasEvento(ev) || null; }
+                mesaPessoas: () => { if (MESA_PESSOAS_COL) campos.mesa_pessoas = mesaPessoasEvento(ev) || null; },
+                // Mesma razão da mesaHora: NULL é "por definir", '' o CHECK recusava.
+                saidaHora: () => { if (SAIDA_HORA_COL) campos.saida_hora = saidaHoraEvento(ev) || null; }
             };
             apenas.forEach(campo => { if (camposDisponiveis[campo]) camposDisponiveis[campo](); });
         } else {
@@ -8738,6 +8879,7 @@ async function sbGuardarEvento(ev, opts) {
             if (SA_HORA_COL) campos.sa_hora = ev.saHora || {};
             if (MESA_HORA_COL) campos.mesa_hora = mesaHoraEvento(ev) || null;
             if (MESA_PESSOAS_COL) campos.mesa_pessoas = mesaPessoasEvento(ev) || null;
+            if (SAIDA_HORA_COL) campos.saida_hora = saidaHoraEvento(ev) || null;
             // `aberto` só vai se souber o valor: um evento anterior à migração tem
             // isto a undefined e escrever false punha-o de volta em agenda.
             if (ABERTO_COL && ev.aberto != null) campos.aberto = !!ev.aberto;
@@ -10134,6 +10276,56 @@ function sbNotificarMesa(ev, quem, hora, numPessoas) {
     // `pessoasMesa`, nunca `pessoas` — essa chave já é a lista de destinatários
     // do push (ver sbEnviarPush); reutilizar o nome sobrepunha-se a ela.
     sbEnviarPush('mesa_marcada', pessoas, ev.descricao, quem, { hora, pessoasMesa: numPessoas || null });
+}
+
+/* Os `tipo`s que a push-notificar que está no ar conhece. A versão anterior
+   mandava um tipo que não conhecesse para o texto da DÍVIDA — um aviso novo
+   que chegasse antes do deploy dela aparecia ao grupo todo como "ficaste a
+   dever €0.00". Por isso um tipo novo pergunta primeiro: um pedido sem
+   destinatários não envia nada em versão nenhuma, e só a nova responde com a
+   lista. Sem lista não há aviso (melhor nenhum do que um errado). Pergunta-se
+   uma vez por sessão; um erro (rede, 403, 500) deixa voltar a perguntar. */
+let _pushTiposPedido = null;
+function _pushConhece(tipo) {
+    if (!PUSH_COL || !_sbSession) return Promise.resolve(false);
+    if (!_pushTiposPedido) {
+        _pushTiposPedido = (async () => {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 15000);
+            try {
+                const r = await sbFetch(`${SB_URL}/functions/v1/push-notificar`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY },
+                    body: JSON.stringify({ tipo: 'tipos', pessoas: [] }),
+                    signal: ctrl.signal
+                });
+                const j = r.ok ? await r.json().catch(() => null) : null;
+                if (!j) { _pushTiposPedido = null; return []; }
+                return Array.isArray(j.tipos) ? j.tipos : [];
+            } catch (e) {
+                _pushTiposPedido = null;
+                return [];
+            } finally { clearTimeout(timer); }
+        })();
+    }
+    return _pushTiposPedido.then(tipos => tipos.includes(tipo));
+}
+
+/* Fire-and-forget: as horas do grupo mudaram no diálogo "Marcar horas". A saída de
+   Alcochete tem aviso próprio ('saida_marcada') e leva a mesa com ela quando
+   as duas mudaram no mesmo Guardar — um toque por gesto, não dois. Só a mesa
+   continua a ser o 'mesa_marcada' de sempre. Se a push-notificar ainda não
+   conhecer o aviso da saída (deploy por fazer), a saída grava-se e vê-se na
+   folha, mas não avisa ninguém — e a mesa, se mudou, avisa como sempre. */
+async function sbNotificarHorarios(ev, quem, saida, mesa, numPessoas) {
+    if (saida && await _pushConhece('saida_marcada')) {
+        const pessoas = _grupoParaAvisar(ev, meusAmigos()).map(amigo => ({ amigo, valor: 0 }));
+        sbEnviarPush('saida_marcada', pessoas, ev.descricao, quem,
+            { hora: saida, horaMesa: mesa || null, pessoasMesa: mesa ? (numPessoas || null) : null });
+        return;
+    }
+    if (saida) console.warn('[SplitBill] a push-notificar no ar ainda não conhece o aviso da saída de Alcochete — supabase functions deploy push-notificar');
+    if (mesa) sbNotificarMesa(ev, quem, mesa, numPessoas);
 }
 
 /* 5) Fire-and-forget: alguém confirmou a partir de que horas pode estar no Sá
