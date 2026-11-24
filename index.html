@@ -204,6 +204,15 @@ window.sbEsconderSplash = function(){
     </div>
 </div>
 
+<!-- ═══ PÁGINA DE UM JOGO POR ABRIR (tocar num cartão dos Próximos Jogos) — página inteira, com "Voltar" e o gesto de deslizar para trás (sbVoltar) e o "para trás" do browser (history). Desenhada por _jogoSheetHTML; ver JOGO ABERTO & PRESENÇAS no app.js (abrirFolhaJogo/fecharPaginaJogo) ═══ -->
+<div id="page-jogo" class="jp" hidden role="dialog" aria-modal="true" aria-labelledby="jp-titulo">
+    <div class="jp-top">
+        <button type="button" class="jp-voltar" onclick="fecharPaginaJogo()" aria-label="Voltar ao início"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg><span>Voltar</span></button>
+        <h2 class="jp-tit" id="jp-titulo"></h2>
+    </div>
+    <div class="jp-body" id="jp-body"></div>
+</div>
+
 <!-- ═══ PAINEL DEFINIÇÕES (utilizador normal) ═══ -->
 <div id="page-definicoes" style="display:none;position:fixed;inset:0;background:rgba(11,59,43,0.45);z-index:9997;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)fecharDefinicoes()">
     <div style="background:#EFF1EC;width:100%;max-width:520px;max-height:85vh;border-radius:16px 16px 0 0;display:flex;flex-direction:column;overflow:hidden;">

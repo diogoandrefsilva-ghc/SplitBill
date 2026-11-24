@@ -1953,11 +1953,7 @@ let _modalResolve = null;
 function mostrarModal(opts) {
     return new Promise(resolve => {
         _modalResolve = resolve;
-        const icone = document.getElementById('modal-icon');
-        icone.textContent = opts.icon || '⚠️';
-        // `semIcone`: a folha do jogo já leva o ⚽ no plano do dia, e os 36px
-        // do símbolo grande fazem-lhe falta para caber num ecrã.
-        icone.style.display = opts.semIcone ? 'none' : '';
+        document.getElementById('modal-icon').textContent = opts.icon || '⚠️';
         document.getElementById('modal-title').textContent = opts.title || '';
         document.getElementById('modal-msg').innerHTML = opts.msg || '';
         const actions = document.getElementById('modal-actions');
@@ -7050,24 +7046,22 @@ function _jfPlanoHTML(ev) {
     if (MESA_HORA_COL) {
         h += _jfParagem(mesa, '🍽️', 'Mesa no Sá',
             '<span class="jf-par-s">' + (mesa ? (pax ? pax + (pax === 1 ? ' pessoa' : ' pessoas') : 'marcada') : 'por marcar') + '</span>',
-            mesa && posso ? '<button type="button" class="jf-mudar" onclick="fecharModalComResultado(\'mesa\')">Mudar</button>' : '');
+            mesa && posso ? '<button type="button" class="jf-mudar" onclick="jogoSheetMarcarMesa(' + ev.id + ')">Mudar</button>' : '');
     }
     if (jogo) h += _jfParagem(jogo, '⚽', 'Jogo', '');
     h += '</div>';
     if (!mesa && MESA_HORA_COL) {
         if (posso) {
             const s = mesaSugerida(ev);
-            h += '<button type="button" class="jf-marcar" onclick="fecharModalComResultado(\'mesa\')">🍽️ Marcar mesa'
+            h += '<button type="button" class="jf-marcar" onclick="jogoSheetMarcarMesa(' + ev.id + ')">🍽️ Marcar mesa'
                + (s.saida ? '<small>sugestão: sair às ' + s.saida + ' · mesa às ' + s.mesa + '</small>' : '') + '</button>';
         }
-        // Os votos: a quem marca a mesa não se repetem aqui — vão na sugestão
-        // do botão e, um a um, na grelha do diálogo.
-        const grupos = posso ? [] : _horasAgrupadas(ev);
+        const grupos = _horasAgrupadas(ev);
         if (grupos.length) {
             const semHora = horasSaEvento(ev).filter(l => !l.hora).length;
             h += '<span class="jf-mesa-lbl">A que horas podem sair</span>'
                + _jfVotosHTML(grupos, semHora ? '<span class="jf-sem-horas">' + semHora + ' sem responder</span>' : '');
-        } else if (SA_HORA_COL && !posso) {
+        } else if (SA_HORA_COL) {
             h += '<div class="jf-mesa-nada">Ainda ninguém disse a que horas pode sair.</div>';
         }
     }
@@ -7076,7 +7070,7 @@ function _jfPlanoHTML(ev) {
 
 /* A lista dobrável da folha. O estado vive FORA do HTML porque a folha se
    redesenha a cada resposta: sem isto, marcar presença fechava a tabela que se
-   tinha acabado de abrir. Volta a zero a cada abertura (abrirFolhaJogo). */
+   tinha acabado de abrir. Volta a aberta a cada abertura da página (abrirFolhaJogo). */
 let _jfFold = { quem: false };
 
 function jogoSheetFold(qual) {
@@ -7214,13 +7208,15 @@ function _jogoSheetHTML(ev) {
            + '<input type="date" id="jf-data-input" value="' + _dataPtParaIso(ev.data) + '" onblur="jogoSheetEditarData(' + ev.id + ')">'
            + '</div>';
     }
-    // Primeiro o que está combinado (o plano do dia), depois o que falta a
-    // cada um responder.
-    if (MESA_HORA_COL || SAIDA_HORA_COL) h += _jfPlanoHTML(ev);
+    // Três secções, por esta ordem: o que está combinado (o plano do dia), o
+    // que falta a cada um responder, e quem vai.
+    const sec = t => '<div class="jp-sec">' + t + '</div>';
+    if (MESA_HORA_COL || SAIDA_HORA_COL) h += sec('Plano do dia') + _jfPlanoHTML(ev);
+    h += sec('As tuas respostas');
     if (vouSa === null) {
         h += '<div class="jf-aviso">A tua conta ainda não está associada a nenhum nome — pede ao administrador para te associar nas Definições.</div>';
     } else {
-        h += '<div class="jf-card"><div class="jf-card-t">As tuas respostas</div>'
+        h += '<div class="jf-card">'
            + _jfLinha('Vais ao Sá?', _jfSeg(ev.id, 'jogoSheetPresenca', vouSa));
         // A que horas posso SAIR — só a quem vai ao Sá, porque é daqui que sai a
         // hora da mesa. Um botão que abre a grelha dos quartos de hora
@@ -7229,7 +7225,7 @@ function _jogoSheetHTML(ev) {
         if (vouSa && SA_HORA_COL) {
             const minha = minhaHoraSa(ev);
             h += _jfLinha('A que horas podes sair?',
-                '<button type="button" class="jf-chip-hora' + (minha ? ' on' : '') + '" onclick="fecharModalComResultado(\'hora\')">'
+                '<button type="button" class="jf-chip-hora' + (minha ? ' on' : '') + '" onclick="jogoSheetEscolherHora(' + ev.id + ')">'
                 + (minha ? _calEsc(minha) : 'Escolher') + ' ▾</button>');
         }
         const vouJogo = vouAoJogoReal(ev);
@@ -7244,11 +7240,24 @@ function _jogoSheetHTML(ev) {
         }
         h += '</div>';
     }
-    h += _quemVaiHTML(ev);
-    // Só o admin, e só num jogo do calendário por abrir e sem consumo.
-    if (podeMarcarSemEvento(ev)) {
-        h += '<button type="button" class="jf-semev" onclick="fecharModalComResultado(\'semevento\')">🚫 Sem evento (não vamos ao Sá)</button>';
+    h += sec('Quem vai') + _quemVaiHTML(ev);
+    // As ações do jogo, no fim da página — eram os botões do fundo do modal.
+    // "Abrir jogo" só no primeiro por abrir; "Preparar" leva à página do
+    // evento SEM o abrir; "Sem evento" só o admin, num jogo do calendário sem
+    // consumo.
+    let acoes = '';
+    if (podeAbrirJogo(ev)) {
+        acoes += '<button type="button" class="jp-btn jp-prim" onclick="jogoPaginaAbrir(' + ev.id + ')">⚽ Abrir jogo'
+               + '<small>a conta do dia começa — é para lançar o que se come</small></button>';
     }
+    if (_podeGerirJogo(ev)) {
+        acoes += '<button type="button" class="jp-btn" onclick="jogoPaginaPreparar(' + ev.id + ')">Preparar o evento'
+               + '<small>menu, convocados e tesoureiro, sem abrir o jogo</small></button>';
+    }
+    if (podeMarcarSemEvento(ev)) {
+        acoes += '<button type="button" class="jf-semev" onclick="jogoPaginaSemEvento(' + ev.id + ')">🚫 Sem evento (não vamos ao Sá)</button>';
+    }
+    if (acoes) h += '<div class="jp-acoes">' + acoes + '</div>';
     return h;
 }
 
@@ -7261,9 +7270,7 @@ function _podeGerirJogo(ev) { return !!(ev && !ev.totalFatura && podeEditarEvent
 async function jogoSheetPresenca(id, vai) {
     const ok = await marcarPresenca(id, vai);
     if (!ok) return;
-    const ev = historico.find(e => String(e.id) === String(id));
-    const box = document.getElementById('modal-msg');
-    if (ev && box) box.innerHTML = _jogoSheetHTML(ev);
+    _jpRedesenhar(id);
     try { if (typeof renderInicio === 'function') renderInicio(); } catch (e) {}
     try { renderHistoricoDropdown(); } catch (e) {}
 }
@@ -7273,9 +7280,7 @@ async function jogoSheetPresenca(id, vai) {
 async function jogoSheetPresencaJogo(id, vai) {
     const ok = await marcarPresencaJogo(id, vai);
     if (!ok) return;
-    const ev = historico.find(e => String(e.id) === String(id));
-    const box = document.getElementById('modal-msg');
-    if (ev && box) box.innerHTML = _jogoSheetHTML(ev);
+    _jpRedesenhar(id);
     try { if (typeof renderInicio === 'function') renderInicio(); } catch (e) {}
 }
 
@@ -7287,7 +7292,6 @@ async function jogoSheetCarroEscolha(id, valor) {
     const ev = historico.find(e => String(e.id) === String(id));
     if (!ev) return;
     const atual = meuCarro(ev);
-    const box = document.getElementById('modal-msg');
     if (valor === atual) return;
     const meus = meusAmigos();
     const tenhoBoleia = meus.some(m => (ev.boleia || {})[m]);
@@ -7306,7 +7310,7 @@ async function jogoSheetCarroEscolha(id, valor) {
         if (ok && (valor || tenhoBoleia)) ok = await marcarBoleia(id, valor);
         if (ok && !aviso) aviso = valor ? '✓ Vais com ' + valor : '✓ Resposta apagada';
     }
-    if (box) box.innerHTML = _jogoSheetHTML(ev);
+    _jpRedesenhar(id);
     if (ok && aviso) mostrarMensagem(aviso, aviso.charAt(0) === '✓');
 }
 
@@ -7315,9 +7319,7 @@ async function jogoSheetCarroEscolha(id, valor) {
 async function jogoSheetGamebox(id, disp) {
     const ok = await marcarGamebox(id, disp);
     if (!ok) return;
-    const ev = historico.find(e => String(e.id) === String(id));
-    const box = document.getElementById('modal-msg');
-    if (ev && box) box.innerHTML = _jogoSheetHTML(ev);
+    _jpRedesenhar(id);
     try { if (typeof renderInicio === 'function') renderInicio(); } catch (e) {}
 }
 
@@ -7337,7 +7339,7 @@ function _jfVotosMapa(ev) { return new Map(_horasAgrupadas(ev).map(g => [g.hora,
 /* "A que horas podes sair?" — a resposta de cada um, numa grelha de quartos
    de hora de 5h a 1h antes do jogo, com a de 3h antes marcada como sugestão e
    os votos dos outros em cada hora. Um toque grava (e avisa quem marca a
-   mesa, ver marcarHoraSa); volta-se à folha no fim. */
+   mesa, ver marcarHoraSa); a página por baixo redesenha-se no fim. */
 async function jogoSheetEscolherHora(id) {
     const ev = historico.find(e => String(e.id) === String(id));
     if (!ev) return;
@@ -7361,7 +7363,7 @@ async function jogoSheetEscolherHora(id) {
     if (hora !== null && hora !== minha && await marcarHoraSa(id, hora)) {
         mostrarMensagem(hora ? '✓ Podes sair às ' + hora : '✓ Hora apagada', true);
     }
-    await abrirFolhaJogo(id);
+    _jpRedesenhar(id);
 }
 function jfEscolherHora(h) { fecharModalComResultado('hora:' + h); }
 
@@ -7377,7 +7379,7 @@ let _mm = null;
 async function jogoSheetMarcarMesa(id) {
     const ev = historico.find(e => String(e.id) === String(id));
     if (!ev) return;
-    if (!podeMarcarMesa(ev)) { await abrirFolhaJogo(id); return; }
+    if (!podeMarcarMesa(ev)) return;
     const saidaAntes = SAIDA_HORA_COL ? saidaHoraEvento(ev) : '';
     const mesaAntes = mesaHoraEvento(ev);
     const paxAntes = mesaPessoasEvento(ev);
@@ -7430,8 +7432,7 @@ async function jogoSheetMarcarMesa(id) {
         mostrarMensagem(novo.mesa ? '✓ Mesa às ' + novo.mesa + (novo.saida ? ' · saída às ' + novo.saida : '')
             : ('mesa' in novo ? '✓ Mesa desmarcada' : '✓ Saída às ' + novo.saida), true);
     }
-    // Volta à folha, para quem marcou continuar onde estava.
-    await abrirFolhaJogo(id);
+    _jpRedesenhar(id);
 }
 // Escolher a saída na grelha: a mesa vai atrás, meia hora depois.
 function jfMmSaida(h) {
@@ -7484,39 +7485,79 @@ async function jogoSheetEditarData(id) {
         mostrarMensagem('⚠️ Não foi possível gravar a data — tenta outra vez', false);
         return false;
     }
-    const box = document.getElementById('modal-msg');
-    if (box) box.innerHTML = _jogoSheetHTML(ev);
+    _jpRedesenhar(id);
     try { if (typeof renderInicio === 'function') renderInicio(); } catch (e) {}
     try { renderHistoricoDropdown(); } catch (e) {}
     mostrarMensagem('✓ Data atualizada', true);
     return true;
 }
 
+/* A PÁGINA do jogo por abrir (tocar num cartão dos Próximos Jogos). Foi um
+   modal, e um modal tinha de caber num ecrã: cada coisa nova obrigava a tirar
+   outra. Numa página inteira cabe o plano do dia, as respostas e quem vai, com
+   os votos à vista de todos e a tabela aberta. Fecha-se com o "Voltar" do
+   cabeçalho, com o gesto de deslizar da margem esquerda (sbVoltar, na app
+   instalada) ou com o "para trás" do browser/Android — por isso abrir põe uma
+   entrada no histórico (pushState) e o popstate fecha-a. Os diálogos (hora de
+   saída, marcar mesa) abrem por cima, como modais, e a página redesenha-se
+   quando fecham (_jpRedesenhar). */
+let _jpId = null;
+function _jpAberta() { const p = document.getElementById('page-jogo'); return !!(p && !p.hidden); }
+// Redesenha a página se for deste jogo e estiver aberta (as respostas, os
+// diálogos e o refresco chamam isto sem saber se a página ainda está à vista).
+function _jpRedesenhar(id) {
+    if (!_jpAberta() || String(_jpId) !== String(id)) return;
+    const ev = historico.find(e => String(e.id) === String(id));
+    if (!ev) { fecharPaginaJogo(); return; }
+    const t = document.getElementById('jp-titulo');
+    if (t) t.textContent = ev.descricao || 'Jogo';
+    const corpo = document.getElementById('jp-body');
+    if (corpo) corpo.innerHTML = '<div class="jp-in">' + _jogoSheetHTML(ev) + '</div>';
+}
 async function abrirFolhaJogo(id) {
     const ev = historico.find(e => String(e.id) === String(id));
-    if (!ev) return;
-    const podeAbrir = podeAbrirJogo(ev);
-    // Cada abertura da folha começa com as listas fechadas: o resumo (as
-    // perguntas e as horas do grupo) é o que tem de caber no primeiro ecrã.
-    _jfFold = { quem: false };
-    const r = await mostrarModal({
-        icon: '⚽',
-        semIcone: true,
-        title: ev.descricao || 'Jogo',
-        msg: _jogoSheetHTML(ev),
-        confirmText: podeAbrir ? 'Abrir jogo' : 'Fechar',
-        cancelText: 'Fechar',
-        semCancelar: !podeAbrir,
-        extraText: _podeGerirJogo(ev) ? 'Preparar' : ''
-    });
-    // "Preparar" leva à página do evento SEM o abrir: o jogo continua em agenda.
-    if (r === 'extra') { await navegarHistorico(ev.id); return; }
-    // O "Marcar mesa"/"Mudar" do plano e a pergunta "A que horas podes sair?"
-    // abrem cada um o seu diálogo, que devolve a esta folha no fim.
-    if (r === 'mesa') { await jogoSheetMarcarMesa(ev.id); return; }
-    if (r === 'hora') { await jogoSheetEscolherHora(ev.id); return; }
-    if (r === 'semevento') { await marcarSemEvento(ev.id); return; }
-    if (r === true && podeAbrir) await abrirJogo(ev.id);
+    const p = document.getElementById('page-jogo');
+    if (!ev || !p) return;
+    const jaAberta = _jpAberta();
+    _jpId = ev.id;
+    // A tabela de quem vai abre aberta: numa página há lugar para ela.
+    _jfFold = { quem: true };
+    p.classList.remove('sai');
+    p.hidden = false;
+    document.documentElement.classList.add('jp-aberta');
+    _jpRedesenhar(ev.id);
+    const corpo = document.getElementById('jp-body');
+    if (corpo) corpo.scrollTop = 0;
+    if (!jaAberta) { try { history.pushState({ sbJogo: String(ev.id) }, ''); } catch (e) {} }
+}
+// `doHistorico`: quem chama é o popstate (o "para trás" já tirou a entrada).
+// Fechar pelo botão ou pelo gesto tira-a aqui, para o "para trás" seguinte não
+// ficar preso numa entrada sem página.
+function fecharPaginaJogo(doHistorico) {
+    const p = document.getElementById('page-jogo');
+    if (!p || p.hidden) return;
+    _jpId = null;
+    document.documentElement.classList.remove('jp-aberta');
+    p.classList.add('sai');
+    setTimeout(() => { if (p.classList.contains('sai')) { p.hidden = true; p.classList.remove('sai'); } }, 180);
+    if (!doHistorico && history.state && history.state.sbJogo) { try { history.back(); } catch (e) {} }
+}
+window.addEventListener('popstate', () => { if (_jpAberta()) fecharPaginaJogo(true); });
+
+// As ações do fim da página: saem dela primeiro.
+async function jogoPaginaAbrir(id) {
+    fecharPaginaJogo();
+    await abrirJogo(id);
+}
+// "Preparar" leva à página do evento SEM o abrir: o jogo continua em agenda.
+async function jogoPaginaPreparar(id) {
+    fecharPaginaJogo();
+    await navegarHistorico(id);
+}
+async function jogoPaginaSemEvento(id) {
+    await marcarSemEvento(id);
+    // Se o evento foi mesmo apagado, a página já não tem o que mostrar.
+    if (!historico.some(e => String(e.id) === String(id))) fecharPaginaJogo();
 }
 
 /* ── RODADAS OFERECIDAS: quem pagou o quê aos outros (consulta) ───────────
@@ -10803,6 +10844,7 @@ function sbVoltar() {
     if (modal && modal.classList.contains('show')) return false; // confirmação a decorrer → não interferir
     const pdf = document.getElementById('pdfOverlay');
     if (pdf) { pdf.remove(); return true; }
+    if (_jpAberta()) { fecharPaginaJogo(); return true; }
     const fab = document.getElementById('fab-panel');
     if (fab && fab.style.display === 'block') { fecharFabPanel(); return true; }
     const equiv = document.getElementById('page-equivalencias');

@@ -672,10 +672,6 @@ html,body{touch-action:pan-x pan-y}
            resposta à direita, uma linha por pergunta. Vem DEPOIS do plano do
            dia — primeiro o que está combinado, depois o que falta responder. */
         .jf-card { margin-top: 10px; border: 1px solid #E6EAE4; border-radius: 12px; overflow: hidden; text-align: left; }
-        .jf-card-t {
-            padding: 8px 11px 0; font-family: var(--mono, monospace); font-size: 9.5px; font-weight: 600;
-            letter-spacing: .11em; text-transform: uppercase; color: #7C8782;
-        }
         .jf-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 11px; }
         .jf-row + .jf-row { border-top: 1px solid #EFF2EE; }
         .jf-q { font-size: 12.5px; font-weight: 700; color: #0B3B2B; }
@@ -2539,7 +2535,7 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
 /* Aviso flutuante (ver evToast no app.js) */
 .ev-toast {
     position: fixed; left: 50%; transform: translateX(-50%) translateY(12px); bottom: 92px;
-    max-width: 92%; z-index: 200; padding: 11px 16px; border-radius: 12px;
+    max-width: 92%; z-index: 99998; padding: 11px 16px; border-radius: 12px;
     background: var(--verde-escuro); color: #fff; font-size: 13.5px; font-weight: 600;
     box-shadow: 0 16px 30px -12px rgba(11,59,43,.85);
     opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
@@ -2780,3 +2776,57 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
 .rod-itv { flex: 0 0 auto; color: var(--ink-soft, #5B6661); font-size: 12px; }
 .rod-para { display: block; color: var(--ink-soft, #5B6661); font-size: 11.5px; line-height: 1.35; margin-top: 1px; }
 .rod-parte { color: var(--ink-soft, #5B6661); font-size: 11.5px; }
+
+/* ═══ PÁGINA DO JOGO POR ABRIR (#page-jogo, ver abrirFolhaJogo no app.js) ═══
+   Página inteira por cima do ecrã inicial, a entrar da direita como uma página
+   nova: cabeçalho verde com "Voltar" e o nome do jogo, e o corpo a deslizar
+   por dentro (a página por baixo fica trancada, html.jp-aberta). Os diálogos
+   das horas abrem por cima (o modal está a 99999, a página a 9990), e o aviso
+   flutuante (.ev-toast) subiu para 99998 para se ver por cima dela. O
+   conteúdo é o de sempre (_jogoSheetHTML, as classes .jf-*), agora em fundo
+   cinzento — daí os cartões passarem a branco aqui. */
+.jp { position: fixed; inset: 0; z-index: 9990; display: flex; flex-direction: column; background: #EFF1EC; animation: jpEntra .22s ease; }
+.jp[hidden] { display: none; }
+.jp.sai { animation: jpSai .18s ease forwards; }
+@keyframes jpEntra { from { transform: translateX(100%); } to { transform: none; } }
+@keyframes jpSai { from { transform: none; } to { transform: translateX(100%); } }
+html.jp-aberta, html.jp-aberta body { overflow: hidden; overscroll-behavior: none; }
+.jp-top {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 4px; background: #0B3B2B; color: #fff;
+    padding: calc(env(safe-area-inset-top, 0px) + 8px) 14px 10px 4px;
+}
+.jp-voltar, .jp-voltar:hover {
+    flex: 0 0 auto; display: inline-flex; align-items: center; gap: 1px; background: transparent; border: none;
+    color: #fff; padding: 8px 8px 8px 4px; font-family: inherit; font-size: 15px; font-weight: 600;
+    letter-spacing: normal; text-transform: none; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.jp-voltar:active { opacity: .6; }
+.jp-tit {
+    flex: 1 1 auto; min-width: 0; margin: 0; font-size: 16px; font-weight: 700; line-height: 1.25; color: #fff;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.jp-body {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+    padding: 12px 14px calc(env(safe-area-inset-bottom, 0px) + 28px);
+}
+.jp-in { max-width: 520px; margin: 0 auto; }
+.jp-sec {
+    margin: 18px 2px 7px; font-family: var(--mono, monospace); font-size: 10px; font-weight: 600;
+    letter-spacing: .12em; text-transform: uppercase; color: #5B6661;
+}
+.jp-in > .jf-sub + .jp-sec { margin-top: 10px; }
+.jp .jf-plano, .jp .jf-card { margin-top: 0; }
+.jp .jf-card, .jp .jf-tab, .jp .jf-nomes { background: #fff; }
+.jp .jf-fold { margin-top: 0; }
+.jp-acoes { display: flex; flex-direction: column; gap: 8px; margin-top: 22px; }
+.jp-btn, .jp-btn:hover {
+    display: flex; flex-direction: column; align-items: center; gap: 2px; width: 100%; padding: 11px 12px;
+    background: #fff; color: #0E5C3F; border: 1px solid #CBE1D5; border-radius: 10px;
+    font-size: 15px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; cursor: pointer;
+}
+.jp-btn.jp-prim, .jp-btn.jp-prim:hover { background: #0B3B2B; color: #fff; border-color: #0B3B2B; }
+.jp-btn small {
+    font-family: -apple-system, system-ui, sans-serif; font-size: 11.5px; font-weight: 500;
+    letter-spacing: normal; text-transform: none; opacity: .8;
+}
+.jp-btn:active { transform: scale(.98); }

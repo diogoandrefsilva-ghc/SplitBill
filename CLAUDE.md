@@ -158,7 +158,7 @@ Com o calendário criado de uma vez, "eventos em aberto" passou a incluir meia
   ordenado por **data** e já não por ordem de criação, e **só leva o que já
   aconteceu** — jogos abertos ou fechados. Os que estão por abrir não entram:
   "histórico" com jogos futuros não quer dizer nada, e vivem no ecrã inicial.
-  Como esta era a única porta para a página de um jogo por abrir, a folha do
+  Como esta era a única porta para a página de um jogo por abrir, a página do
   jogo tem o botão **Preparar** (`_podeGerirJogo`, só admin/substituto): leva à
   página do evento **sem o abrir**, para acertar menu, convocados e tesoureiro
   antes do dia.
@@ -183,32 +183,43 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
 - Secção **`JOGO ABERTO & PRESENÇAS`** no `app.js`: `jogoAberto()`,
   `jogosPorAbrir()` (ordenados por data), `podeAbrirJogo()` — **só o primeiro**
   da lista se pode abrir, abrir o de daqui a dois meses seria sempre engano —,
-  `abrirJogo()` e a folha que se abre ao tocar no cartão (`abrirFolhaJogo`).
-  A folha tem até três botões em baixo: Fechar · **Preparar** (admin/substituto,
-  abre a página do evento sem abrir o jogo) · **Abrir jogo** (só no primeiro).
-  "Preparar" usa o `extraText` do `mostrarModal`. **Marcar a mesa já não é um
-  botão daqui**: foi "Marcar horas", um de quatro botões iguais no fundo, e
-  ninguém dava por ele — agora é o botão verde do plano do dia (ver abaixo).
-  Botões dentro da folha devolvem o modal com um resultado próprio
-  (`fecharModalComResultado('mesa' | 'hora' | 'semevento')`), e o
-  `abrirFolhaJogo` abre o diálogo certo e volta à folha no fim.
-- **A folha tem de caber num ecrã** (`_jogoSheetHTML`): quem a abre vem ver a
-  que horas se sai, em que carro e a que horas é a mesa, e responder — isso
-  não pode estar atrás de scroll. Por ordem: o **plano do dia** (o que está
-  combinado), o cartão **"As tuas respostas"** (o que falta a cada um) e a
-  tabela de **quem vai**. Medido: com a mesa marcada, 572px num 375 de largura
-  (cabe num SE sem deslizar). Daí o desenho — a data numa linha de leitura
-  com um lápis (`jogoSheetMostrarData`), a hora do jogo no plano e não no
-  cabeçalho, o ⚽ grande do modal escondido (`semIcone` no `mostrarModal`:
-  são 36px, e o ⚽ já está no plano), as perguntas como linhas de um cartão
-  (`_jfLinha`/`_jfSeg`), as que só interessam a parte do grupo (a hora de
-  saída, o carro, a gamebox) só a essa parte, e quem vai numa **tabela só** —
-  nome · Sá · sai · jogo · box (`_jfTabelaHTML`) — **dobrada** (`_jfFoldHTML`,
-  estado em `_jfFold` para não fechar a cada resposta). **Coisa nova na folha =
-  ver o que sai**, senão volta a crescer. Rede de segurança, para todos os
-  modais: o `.modal-box` tem `max-height` e o `.modal-body` desliza por dentro
-  com os botões sempre à vista — num ecrã pequeno de mais (320×568) a folha
-  desliza em vez de ficar cortada em cima, como ficava.
+  `abrirJogo()` e a página que se abre ao tocar no cartão (`abrirFolhaJogo`).
+  Tocar no cartão abre a **página do jogo** (`#page-jogo` no `index.html`,
+  `abrirFolhaJogo`/`fecharPaginaJogo`): página inteira por cima do ecrã
+  inicial, a entrar da direita, com cabeçalho verde ("‹ Voltar" e o nome do
+  jogo) e o corpo a deslizar por dentro (a página de baixo fica trancada,
+  `html.jp-aberta`). **Foi um modal**, e um modal tinha de caber num ecrã:
+  cada coisa nova obrigava a tirar outra, e as horas, os carros e os votos já
+  não cabiam. Fecha-se de três maneiras, todas pelo mesmo `fecharPaginaJogo`:
+  o "Voltar"; o **gesto de deslizar** da margem esquerda (`sbSetupSwipeBack` →
+  `sbVoltar()`, que fecha a página antes de tudo o resto — só na app
+  instalada, como os outros painéis); e o **"para trás" do browser/Android**,
+  porque abrir faz `history.pushState({sbJogo})` e o `popstate` fecha-a (e
+  fechar pelo botão ou pelo gesto faz `history.back()`, para não ficar uma
+  entrada sem página). Com um diálogo aberto por cima, o gesto não fecha a
+  página (o `sbVoltar` não mexe com o modal aberto). Por ordem, três secções
+  (`.jp-sec`): **Plano do dia** · **As tuas respostas** · **Quem vai** (a
+  tabela já aberta, `_jfFold.quem = true`). No fim, as **ações** (`.jp-acoes`,
+  eram os botões do fundo do modal): **Abrir jogo** (só no primeiro, e só para
+  admin/substituto) · **Preparar o evento** (abre a página do evento sem abrir
+  o jogo) · **Sem evento** (admin). Os diálogos das horas continuam a ser
+  modais por cima da página (o modal a 99999, a página a 9990, o `.ev-toast`
+  a 99998 para se ver), e quando fecham a página redesenha-se
+  (`_jpRedesenhar`, que não faz nada se a página já não estiver aberta).
+  Qualquer resposta (`jogoSheetPresenca` & cª) também só redesenha a página.
+- **Ordem e leitura da página** (`_jogoSheetHTML`): primeiro o que está
+  combinado, depois o que falta a cada um, depois quem vai. A data numa linha
+  de leitura com um lápis (`jogoSheetMostrarData`), a hora do jogo no plano e
+  não no cabeçalho, as perguntas como linhas de um cartão (`_jfLinha`/
+  `_jfSeg`), e as que só interessam a parte do grupo (a hora de saída, o carro,
+  a gamebox) só a essa parte. Quem vai numa **tabela só** — nome · Sá · sai ·
+  jogo · box (`_jfTabelaHTML`), dobrável (`_jfFoldHTML`, estado em `_jfFold`
+  para não fechar a cada resposta) — em vez das duas listas de antes, que
+  obrigavam a cruzar nomes de cabeça. Ser página não é licença para crescer:
+  quem a abre vem ver as horas e os carros e responder, e isso tem de estar no
+  primeiro ecrã. Rede de segurança dos **modais** (para os diálogos): o
+  `.modal-box` tem `max-height` e o `.modal-body` desliza por dentro com os
+  botões sempre à vista.
 - Um evento criado à mão nasce aberto se a data for de hoje/passado; marcado para
   a frente nasce em agenda. Os do calendário nascem sempre em agenda.
 - **Vou / Não vou ao Sá:** na mesma folha, qualquer convocado marca se vai à
@@ -264,10 +275,10 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   os **carros** (`_jfCarrosHTML`): cada condutor com quem vai com ele e
   quantos são, e a dourado quem vai ao jogo **sem carro**. Enquanto a mesa
   está por marcar: a quem a pode marcar, o botão verde **"Marcar mesa"** com a
-  sugestão por baixo ("sair às 17:00 · mesa às 17:30", `mesaSugerida`); aos
-  outros, os votos ("17:00 (3p) · 17:15 · 2 sem responder"). Com a mesa
+  sugestão por baixo ("sair às 17:00 · mesa às 17:30", `mesaSugerida`); e a
+  toda a gente os votos ("17:00 (3p) · 17:15 · 2 sem responder"). Com a mesa
   marcada, a linha da mesa leva "Mudar" para quem a pode marcar, e os votos
-  saem da folha (estão no diálogo e na tabela).
+  saem do plano (estão no diálogo e na tabela).
 - **A que horas podes SAIR** (`db/sa-hora.sql`, coluna `eventos.sa_hora`,
   jsonb `{"Nome": "HH:MM"}` — **o nome ficou** de quando a pergunta era "a que
   horas podes estar no Sá"; o significado mudou, a coluna não): pergunta do
