@@ -6801,8 +6801,10 @@ async function marcarGamebox(id, disp) {
 
 /* Levo (ou deixo de levar) carro na saída de Alcochete. Só a quem vai ao jogo
    — a folha só mostra o botão nesse caso, mas confirma-se aqui à mesma (e
-   outra vez no servidor, ver db/leva-carro.sql). NÃO avisa ninguém: os carros
-   vêem-se na folha, e tocar os telemóveis por cada condutor era ruído. */
+   outra vez no servidor, ver db/leva-carro.sql). PASSAR a levar carro avisa
+   o grupo (sbNotificarLevaCarro): um carro novo é um lugar que alguém pode
+   estar à procura. Deixar de levar não avisa — quem ia nele vê-se "sem carro"
+   na página, e quem deixa de conduzir já é avisado de quantos eram. */
 async function marcarCarro(id, leva) {
     const ev = historico.find(e => String(e.id) === String(id));
     if (!ev || ev.totalFatura) return false;
@@ -6812,6 +6814,7 @@ async function marcarCarro(id, leva) {
     if (!meus.length) { mostrarMensagem('⚠️ A tua conta ainda não está associada a nenhum nome — pede ao administrador', false); return false; }
     if (leva && !vouAoJogoReal(ev)) { mostrarMensagem('⚠️ Diz primeiro que vais ao jogo', false); return false; }
 
+    const levavaAntes = meus.some(m => levaCarroPessoa(ev, m));
     const antes = Object.assign({}, ev.levaCarro || {});
     const novo = Object.assign({}, antes);
     meus.forEach(m => { if (leva) novo[m] = true; else delete novo[m]; });
@@ -6829,6 +6832,9 @@ async function marcarCarro(id, leva) {
         salvarHistoricoLocal();
         return false;
     }
+    // Só na MUDANÇA para "levo carro": escolher outra vez o mesmo não volta a
+    // tocar os telemóveis todos.
+    if (leva && !levavaAntes) sbNotificarLevaCarro(ev, meus[0]);
     return true;
 }
 
@@ -10902,6 +10908,24 @@ async function sbNotificarCarroHora(ev, condutor, hora) {
         return;
     }
     sbEnviarPush('carro_hora', carro.passageiros.map(amigo => ({ amigo, valor: 0 })), ev.descricao, condutor, { hora });
+}
+
+/* Fire-and-forget: alguém passou a LEVAR CARRO → avisa o grupo (menos o
+   próprio e quem já disse que não vai ao jogo), com a hora a que o carro sai
+   quando já se sabe. É um lugar novo, e quem está "sem carro" precisa de
+   saber antes do dia. Tipo novo ('leva_carro'): só sai depois de a função no
+   ar dizer que o conhece (_pushConhece). */
+async function sbNotificarLevaCarro(ev, condutor) {
+    if (!await _pushConhece('leva_carro')) {
+        console.warn('[SplitBill] a push-notificar no ar ainda não conhece o aviso de quem leva carro — supabase functions deploy push-notificar');
+        return;
+    }
+    const naoVao = ev.jogo || {};
+    const pessoas = _grupoParaAvisar(ev, meusAmigos())
+        .filter(amigo => naoVao[amigo] !== false)
+        .map(amigo => ({ amigo, valor: 0 }));
+    const hora = horaCarro(ev, condutor);
+    sbEnviarPush('leva_carro', pessoas, ev.descricao, condutor, hora ? { hora } : {});
 }
 
 async function sbNotificarHorarios(ev, quem, saida, mesa, numPessoas) {

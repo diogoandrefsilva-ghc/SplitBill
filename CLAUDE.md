@@ -344,7 +344,14 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   aparecer "sem carro", que é o que interessa saber; quem passa a **não ir ao
   jogo** perde o carro e a boleia (`marcarPresencaJogo`, que só manda estas
   colunas no PATCH quando mudaram, para não apagar a resposta que outro
-  acabou de gravar); o silêncio não leva carro. **Não notifica** ninguém.
+  acabou de gravar); o silêncio não leva carro. **Passar a levar carro avisa o
+  grupo** (`sbNotificarLevaCarro`, tipo `leva_carro`, depois de
+  `_pushConhece`): todos menos o condutor e quem já disse que não vai ao jogo,
+  com a hora a que o carro sai quando já se sabe ("Barrona leva carro (sai às
+  17:00) — quem quiser boleia, escolhe na app"). Só na mudança: escolher outra
+  vez "Levo o meu carro" não repete o aviso, e deixar de levar não avisa (quem
+  ia nele vê-se "sem carro"). Escolher ir no carro de alguém não avisa
+  ninguém.
   Mesmo padrão de permissões: PATCH para quem edita o evento, `marcar_carro` e
   `marcar_boleia` (`sbMarcarCarro`, `sbMarcarBoleia`) SECURITY DEFINER para os
   outros, que voltam a recusar no servidor o que a folha não deixa (carro a
