@@ -746,6 +746,10 @@ html,body{touch-action:pan-x pan-y}
             background: rgba(255,255,255,.65); border-radius: 8px; padding: 3px 4px 3px 8px;
         }
         .jf-car-n { flex: 1 1 auto; min-width: 0; }
+        /* Cada carro sai à sua hora: à cabeça da linha do carro, como as horas
+           do plano (os carros vêm por ordem de saída). */
+        .jf-car-h { flex: 0 0 auto; font-family: var(--mono, monospace); font-size: 12px; font-weight: 700; color: #0E5C3F; }
+        .jf-car-h.vazia { color: #A9B2AC; font-weight: 600; }
         .jf-car b { color: #0B3B2B; }
         .jf-car em {
             flex: 0 0 auto; font-style: normal; font-family: var(--mono, monospace); font-size: 11px;

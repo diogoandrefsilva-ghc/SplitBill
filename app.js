@@ -6451,8 +6451,26 @@ function carrosDoEvento(ev) {
         else semCarro.push(n);
     });
     const ord = (a, b) => a.localeCompare(b, 'pt');
-    carros.forEach(c => c.passageiros.sort(ord));
+    carros.forEach(c => { c.passageiros.sort(ord); c.hora = horaCarro(ev, c.condutor); });
+    // Pela ordem de saída (os sem hora no fim), e no mesmo minuto pelo nome.
+    carros.sort((a, b) => (a.hora ? 0 : 1) - (b.hora ? 0 : 1) || a.hora.localeCompare(b.hora) || ord(a.condutor, b.condutor));
     return { carros, semCarro: semCarro.sort(ord) };
+}
+
+/* A HORA DE CADA CARRO: os carros não saem todos à mesma hora. Vale a que o
+   condutor escolheu (`ev.carroHora`, "O teu carro sai às"); sem ela, a hora a
+   que ele disse que podia sair; e se nem isso, meia hora antes da mesa.
+   Por isso a hora por defeito acompanha as respostas do condutor e a mesa
+   até ele a fixar. */
+function horaCarroDefeito(ev, condutor) {
+    const minha = horaSaPessoa(ev, condutor);
+    if (minha) return minha;
+    const mesa = mesaHoraEvento(ev);
+    return mesa ? _maisMin(mesa, -MESA_DEPOIS_SAIDA) : '';
+}
+function horaCarro(ev, condutor) {
+    const h = CARRO_HORA_COL ? (ev.carroHora || {})[condutor] : '';
+    return (typeof h === 'string' && _hm2min(h) !== null) ? h : horaCarroDefeito(ev, condutor);
 }
 
 /* AS HORAS DO DIA, em quartos de hora. Cada um responde a que horas pode SAIR
@@ -6846,6 +6864,41 @@ async function marcarBoleia(id, condutor) {
     return true;
 }
 
+/* O MEU carro sai a `hora` ('' volta à hora por defeito). Só para quem leva
+   carro. Mudá-la para uma hora nova avisa quem vai nesse carro
+   (sbNotificarCarroHora) — é a eles que a hora interessa. */
+async function marcarCarroHora(id, hora) {
+    const ev = historico.find(e => String(e.id) === String(id));
+    if (!ev || ev.totalFatura) return false;
+    if (!CARRO_HORA_COL) { mostrarMensagem('⚠️ Falta a coluna eventos.carro_hora — corre db/boleia.sql no Supabase', false); return false; }
+    const meus = meusAmigos().filter(m => levaCarroPessoa(ev, m));
+    if (!meus.length) { mostrarMensagem('⚠️ Diz primeiro que levas carro', false); return false; }
+    const limpa = _hm2min(hora) !== null ? hora : '';
+    if (hora && !limpa) { mostrarMensagem('⚠️ Hora inválida', false); return false; }
+    const antesHora = horaCarro(ev, meus[0]);
+
+    const antes = Object.assign({}, ev.carroHora || {});
+    const novo = Object.assign({}, antes);
+    meus.forEach(m => { if (limpa) novo[m] = limpa; else delete novo[m]; });
+    ev.carroHora = novo;
+    salvarHistoricoLocal();
+
+    let ok;
+    if (podeEditarEvento(ev)) {
+        try { await sbGuardarEvento(ev, { apenas: ['carroHora'] }); ok = true; } catch (e) { ok = false; }
+    } else {
+        ok = await sbMarcarCarroHora(ev.id, limpa || null);
+    }
+    if (!ok) {
+        ev.carroHora = antes;
+        salvarHistoricoLocal();
+        return false;
+    }
+    const depois = horaCarro(ev, meus[0]);
+    if (depois && depois !== antesHora) sbNotificarCarroHora(ev, meus[0], depois);
+    return true;
+}
+
 /* A mesa: a hora a que ficou MARCADA (`ev.mesaHora`, migração
    db/mesa-hora.sql). É a hora do restaurante, uma só para o evento — não se
    confunde com a `saHora`, que é a de cada pessoa. Quem a põe é quem trata da
@@ -7019,7 +7072,8 @@ function _jfCarrosHTML(ev) {
     const { carros, semCarro } = carrosDoEvento(ev);
     if (!carros.length) return '';
     return '<span class="jf-cars">'
-         + carros.map(c => '<span class="jf-car"><span class="jf-car-n"><b>' + _calEsc(c.condutor) + '</b>'
+         + carros.map(c => '<span class="jf-car"><span class="jf-car-h' + (c.hora ? '' : ' vazia') + '">' + (c.hora || '--:--') + '</span>'
+             + '<span class="jf-car-n"><b>' + _calEsc(c.condutor) + '</b>'
              + (c.passageiros.length ? ' · ' + _calEsc(c.passageiros.join(', ')) : '') + '</span>'
              + '<em title="pessoas neste carro">' + (1 + c.passageiros.length) + '</em></span>').join('')
          + (boleiasAtivas() && semCarro.length
@@ -7036,13 +7090,26 @@ function _jfVotosHTML(grupos, fim) {
 }
 
 function _jfPlanoHTML(ev) {
-    const saida = SAIDA_HORA_COL ? saidaHoraEvento(ev) : '';
     const mesa = mesaHoraEvento(ev);
+    // A saída já não é uma hora só: cada carro sai à sua (horaCarro). A linha
+    // leva a do primeiro carro a sair; sem carros, meia hora antes da mesa.
+    // (A `saida_hora` de antes deixou de se mostrar e de se gravar.)
+    let saida = '';
+    if (carrosAtivos()) {
+        const cs = carrosDoEvento(ev).carros.filter(c => c.hora);
+        saida = cs.length ? cs[0].hora : (mesa ? _maisMin(mesa, -MESA_DEPOIS_SAIDA) : '');
+    } else if (SAIDA_HORA_COL) {
+        saida = saidaHoraEvento(ev);
+    }
     const jogo = horaDoJogo(ev);
     const posso = podeMarcarMesa(ev);
     const pax = mesa ? mesaPessoasEvento(ev) : '';
     let h = '<div class="jf-plano"><div class="jf-hors">';
-    if (SAIDA_HORA_COL) h += _jfParagem(saida, '🚗', 'Saída de Alcochete', _jfCarrosHTML(ev));
+    if (SAIDA_HORA_COL) {
+        const carros = _jfCarrosHTML(ev);
+        h += _jfParagem(saida, '🚗', 'Saída de Alcochete',
+            carros || (carrosAtivos() ? '<span class="jf-par-s">ainda ninguém disse que leva carro</span>' : ''));
+    }
     if (MESA_HORA_COL) {
         h += _jfParagem(mesa, '🍽️', 'Mesa no Sá',
             '<span class="jf-par-s">' + (mesa ? (pax ? pax + (pax === 1 ? ' pessoa' : ' pessoas') : 'marcada') : 'por marcar') + '</span>',
@@ -7054,7 +7121,7 @@ function _jfPlanoHTML(ev) {
         if (posso) {
             const s = mesaSugerida(ev);
             h += '<button type="button" class="jf-marcar" onclick="jogoSheetMarcarMesa(' + ev.id + ')">🍽️ Marcar mesa'
-               + (s.saida ? '<small>sugestão: sair às ' + s.saida + ' · mesa às ' + s.mesa + '</small>' : '') + '</button>';
+               + (s.mesa ? '<small>sugestão: mesa às ' + s.mesa + (saidaMaisVotada(ev) ? ' · mais votada para sair: ' + s.saida : ' · 3h antes do jogo + 30 min') + '</small>' : '') + '</button>';
         }
         const grupos = _horasAgrupadas(ev);
         if (grupos.length) {
@@ -7124,7 +7191,9 @@ function _jfSN(sim) { return '<span class="' + (sim ? 'jf-sim' : 'jf-nao') + '">
 function _jfTabelaHTML(linhas) {
     if (!linhas.length) return '<div class="jf-nomes">Ainda ninguém respondeu.</div>';
     const h = '<div class="jf-tr jf-th"><span class="jf-tn">Quem</span><span>Sá</span>'
-            + (SA_HORA_COL ? '<span>Sai</span>' : '') + '<span>Jogo</span>'
+            // "Pode": a hora a que cada um PODE sair (o voto), que não é a do
+            // carro — essa está no plano, carro a carro.
+            + (SA_HORA_COL ? '<span>Pode</span>' : '') + '<span>Jogo</span>'
             + (GAMEBOX_COL ? '<span>Box</span>' : '') + '</div>'
             + linhas.map(l => '<div class="jf-tr"><span class="jf-tn">' + _calEsc(l.nome) + '</span>'
                 + _jfSN(l.sa)
@@ -7185,7 +7254,7 @@ function _jfCarroSelectHTML(ev) {
         carrosDoEvento(ev).carros.filter(c => !meus.includes(c.condutor)).forEach(c => {
             // "(3)" é quantos já lá vão, com o condutor: o preenchimento à vista
             // na própria lista.
-            o += opt(c.condutor, 'Com ' + c.condutor + ' (' + (1 + c.passageiros.length) + ')');
+            o += opt(c.condutor, 'Com ' + c.condutor + (c.hora ? ' · ' + c.hora : '') + ' (' + (1 + c.passageiros.length) + ')');
         });
     }
     return '<select class="jf-sel' + (atual ? ' on' : '') + '" aria-label="Em que carro vais?"'
@@ -7231,7 +7300,17 @@ function _jogoSheetHTML(ev) {
         const vouJogo = vouAoJogoReal(ev);
         h += _jfLinha('Vais ao jogo?', _jfSeg(ev.id, 'jogoSheetPresencaJogo', vouJogo));
         // O carro só se pergunta a quem vai ao jogo: é para lá que os carros vão.
-        if (vouJogo && carrosAtivos()) h += _jfLinha('Em que carro vais?', _jfCarroSelectHTML(ev));
+        if (vouJogo && carrosAtivos()) {
+            h += _jfLinha('Em que carro vais?', _jfCarroSelectHTML(ev));
+            // Quem leva carro diz a que horas sai — por defeito a hora a que
+            // disse que podia sair, ou meia hora antes da mesa.
+            if (CARRO_HORA_COL && meuCarro(ev) === '__eu__') {
+                const hc = horaCarro(ev, meusAmigos().find(m => levaCarroPessoa(ev, m)));
+                h += _jfLinha('O teu carro sai às',
+                    '<button type="button" class="jf-chip-hora' + (hc ? ' on' : '') + '" onclick="jogoSheetHoraCarro(' + ev.id + ')">'
+                    + (hc || 'Escolher') + ' ▾</button>');
+            }
+        }
         // A box só se pergunta a quem já disse que NÃO vai — quem lá vai
         // ocupa a própria. É esta resposta, e já não o "não vou", que avisa o
         // grupo de que pode haver lugar (ver marcarGamebox).
@@ -7380,11 +7459,12 @@ async function jogoSheetMarcarMesa(id) {
     const ev = historico.find(e => String(e.id) === String(id));
     if (!ev) return;
     if (!podeMarcarMesa(ev)) return;
-    const saidaAntes = SAIDA_HORA_COL ? saidaHoraEvento(ev) : '';
     const mesaAntes = mesaHoraEvento(ev);
     const paxAntes = mesaPessoasEvento(ev);
     const sug = mesaSugerida(ev);
-    const saida = saidaAntes || (mesaAntes ? _maisMin(mesaAntes, -MESA_DEPOIS_SAIDA) : sug.saida);
+    // A grelha é a das horas a que se pode SAIR, e a mesa fica meia hora
+    // depois. Só a mesa se grava: cada carro sai à sua hora (horaCarro).
+    const saida = mesaAntes ? _maisMin(mesaAntes, -MESA_DEPOIS_SAIDA) : sug.saida;
     _mm = {
         saida,
         mesa: mesaAntes || _maisMin(saida, MESA_DEPOIS_SAIDA),
@@ -7396,10 +7476,10 @@ async function jogoSheetMarcarMesa(id) {
     const msg = '<div class="jf-dlg-hint">' + (jogo ? 'Jogo às ' + jogo + '. ' : '')
         + (maisVotada ? 'Já vem escolhida a mais votada' : 'Sem votos: a <span class="jf-sug-tag">sugerida</span> é 3h antes do jogo')
         + ' · os números são os votos.</div>'
-        + '<div class="jf-dlg-l">🚗 Saída de Alcochete</div>'
+        + '<div class="jf-dlg-l">🚗 A partir de que horas se sai</div>'
         + _jfGrelhaHTML(_quartosSaida(ev, [saida].concat(Array.from(votos.keys()))), saida, maisVotada ? '' : sug.saida, votos, 'jfMmSaida')
         + '<div class="jf-mm">'
-        + '<div class="jf-mm-row"><span class="jf-mm-l">🍽️ Mesa no Sá<small>meia hora depois da saída</small></span>'
+        + '<div class="jf-mm-row"><span class="jf-mm-l">🍽️ Mesa no Sá<small>meia hora depois — ajusta se o Sá não tiver</small></span>'
         + '<span class="jf-step"><button type="button" onclick="jfMmPasso(\'mesa\',-15)" aria-label="15 minutos antes">−</button>'
         + '<b id="jf-mm-mesa">' + (_mm.mesa || '--:--') + '</b>'
         + '<button type="button" onclick="jfMmPasso(\'mesa\',15)" aria-label="15 minutos depois">+</button></span></div>'
@@ -7422,19 +7502,52 @@ async function jogoSheetMarcarMesa(id) {
     let novo = null;
     if (r === true && m.mesa) {
         novo = {};
-        if (SAIDA_HORA_COL && m.saida !== saidaAntes) novo.saida = m.saida;
         if (m.mesa !== mesaAntes || Number(m.pax || 0) !== Number(paxAntes || 0)) { novo.mesa = m.mesa; novo.pessoas = m.pax; }
     } else if (r === 'extra') {
         novo = { mesa: '' };
-        if (SAIDA_HORA_COL && saidaAntes) novo.saida = '';
     }
     if (novo && Object.keys(novo).length && await marcarHorarios(id, novo)) {
-        mostrarMensagem(novo.mesa ? '✓ Mesa às ' + novo.mesa + (novo.saida ? ' · saída às ' + novo.saida : '')
-            : ('mesa' in novo ? '✓ Mesa desmarcada' : '✓ Saída às ' + novo.saida), true);
+        mostrarMensagem(novo.mesa ? '✓ Mesa às ' + novo.mesa : '✓ Mesa desmarcada', true);
     }
     _jpRedesenhar(id);
 }
-// Escolher a saída na grelha: a mesa vai atrás, meia hora depois.
+
+/* "O teu carro sai às" — para quem leva carro. A mesma grelha de quartos de
+   hora, com a hora por defeito como sugestão (a que disseste que podias sair,
+   ou meia hora antes da mesa) e, em cada hora, quantos dos que vão contigo a
+   escolheram. Mudar avisa quem vai no teu carro; "Usar a automática" tira a
+   hora escolhida e o carro volta a seguir a por defeito. */
+async function jogoSheetHoraCarro(id) {
+    const ev = historico.find(e => String(e.id) === String(id));
+    if (!ev) return;
+    const eu = meusAmigos().find(m => levaCarroPessoa(ev, m));
+    if (!eu) return;
+    const atual = horaCarro(ev, eu);
+    const defeito = horaCarroDefeito(ev, eu);
+    const fixa = !!(ev.carroHora || {})[eu];
+    const carro = carrosDoEvento(ev).carros.find(c => c.condutor === eu);
+    const votos = new Map();
+    (carro ? carro.passageiros : []).forEach(n => { const h = horaSaPessoa(ev, n); if (h) votos.set(h, (votos.get(h) || 0) + 1); });
+    const porque = horaSaPessoa(ev, eu) ? 'a que disseste que podias sair' : 'meia hora antes da mesa';
+    const r = await mostrarModal({
+        icon: '🚗',
+        title: 'A que horas sai o teu carro?',
+        msg: '<div class="jf-dlg-hint">' + (defeito ? 'A <span class="jf-sug-tag">sugerida</span> é ' + porque + '.' : 'Escolhe a hora de saída.')
+           + (carro && carro.passageiros.length ? ' Os números são os votos de quem vai contigo, e quem vai contigo é avisado.' : '') + '</div>'
+           + _jfGrelhaHTML(_quartosSaida(ev, [atual, defeito].concat(Array.from(votos.keys()))), atual, defeito, votos, 'jfEscolherHora'),
+        confirmText: 'Fechar',
+        semCancelar: true,
+        extraText: fixa ? 'Usar a automática' : ''
+    });
+    let hora = null;
+    if (typeof r === 'string' && r.indexOf('hora:') === 0) hora = r.slice(5);
+    else if (r === 'extra') hora = '';
+    if (hora !== null && (hora !== atual || (hora === '' && fixa)) && await marcarCarroHora(id, hora)) {
+        mostrarMensagem('✓ O teu carro sai às ' + horaCarro(ev, eu), true);
+    }
+    _jpRedesenhar(id);
+}
+// Escolher na grelha a hora a que se sai: a mesa vai atrás, meia hora depois.
 function jfMmSaida(h) {
     if (!_mm) return;
     _mm.saida = h;
@@ -8554,6 +8667,14 @@ let CARRO_RPC = true;
 let BOLEIA_COL = true;
 let BOLEIA_RPC = true;
 
+/* A hora a que sai cada carro, quando o condutor a escolheu
+   (`eventos.carro_hora`, {"Condutor": "HH:MM"}, migração db/boleia.sql). Sem
+   a coluna, CARRO_HORA_COL fica false: cada carro fica com a hora por defeito
+   (horaCarroDefeito) e o "O teu carro sai às" não aparece. `CARRO_HORA_RPC` é
+   a irmã para `marcar_carro_hora`. */
+let CARRO_HORA_COL = true;
+let CARRO_HORA_RPC = true;
+
 /* Pedidos de pagamento por confirmar (`pagamentos.declarado_por`, migração
    db/pagamentos-pendentes.sql) — permite a um utilizador declarar que já pagou
    uma dívida (pendente ou prescrita); fica tipo='pendente' até o admin
@@ -8631,6 +8752,7 @@ function eventoDaBD(ev, ordensDoEv, ofertasDoEv, loc) {
         saidaHora: SAIDA_HORA_COL ? (ev.saida_hora || '') : (_loc.saidaHora || ''),
         levaCarro: (LEVA_CARRO_COL && ev.leva_carro && typeof ev.leva_carro === 'object') ? ev.leva_carro : (_temObj(_loc.levaCarro) || {}),
         boleia: (BOLEIA_COL && ev.boleia && typeof ev.boleia === 'object') ? ev.boleia : (_temObj(_loc.boleia) || {}),
+        carroHora: (CARRO_HORA_COL && ev.carro_hora && typeof ev.carro_hora === 'object') ? ev.carro_hora : (_temObj(_loc.carroHora) || {}),
         // as dívidas recalculam-se a partir dos pagamentos
         dividas: {},
         fatura: (FATURA_COL && ev.fatura) ? ev.fatura : (_loc.fatura || null),
@@ -8665,6 +8787,7 @@ async function sbCarregarDados() {
             SAIDA_HORA_COL = tem('saida_hora');
             LEVA_CARRO_COL = tem('leva_carro');
             BOLEIA_COL = tem('boleia');
+            CARRO_HORA_COL = tem('carro_hora');
             JOGO_ID_COL = tem('jogo_id');
         }
         if (!JOGO_ID_COL) console.warn('[SplitBill] coluna eventos.jogo_id ausente — corre db/jogo-id.sql para os jogos virem sozinhos do calendário do Goals');
@@ -8677,6 +8800,7 @@ async function sbCarregarDados() {
         if (!SAIDA_HORA_COL) console.warn('[SplitBill] coluna eventos.saida_hora ausente — corre db/saida-hora.sql para pôr a hora de saída de Alcochete');
         if (!LEVA_CARRO_COL) console.warn('[SplitBill] coluna eventos.leva_carro ausente — corre db/leva-carro.sql para cada um poder dizer que leva carro');
         if (!BOLEIA_COL) console.warn('[SplitBill] coluna eventos.boleia ausente — corre db/boleia.sql para cada um dizer em que carro vai');
+        if (!CARRO_HORA_COL) console.warn('[SplitBill] coluna eventos.carro_hora ausente — corre db/boleia.sql para cada condutor acertar a hora do carro');
         if (!FATURA_COL) console.warn('[SplitBill] coluna eventos.fatura ausente — corre db/fatura-detalhe.sql para guardar o detalhe da fatura no servidor');
         if (!AMIGOS_COL || !MENU_COL) console.warn('[SplitBill] colunas eventos.amigos/menu ausentes — corre db/convocados-menu.sql para os convocados e o menu do evento viajarem entre dispositivos');
 
@@ -8864,7 +8988,7 @@ function _evAssinatura(ev) {
     if (!ev) return '';
     return JSON.stringify([ev.ordens, ev.ofertas, ev.totalFatura, ev.pagador, ev.amigos,
         ev.menu, ev.fatura, ev.aberto, ev.jogo, ev.gamebox, ev.saHora, ev.mesaHora,
-        ev.mesaPessoas, ev.saidaHora, ev.levaCarro, ev.boleia, ev.substituto, ev.descricao, ev.data]);
+        ev.mesaPessoas, ev.saidaHora, ev.levaCarro, ev.boleia, ev.carroHora, ev.substituto, ev.descricao, ev.data]);
 }
 
 // Relê do servidor SÓ o evento que está no ecrã. Devolve true se mudou alguma
@@ -9199,6 +9323,31 @@ async function sbMarcarBoleia(eventoId, condutor) {
     }
 }
 
+/* Irmã das anteriores para a HORA DO CARRO (db/boleia.sql): só nos nomes desta
+   conta que levam carro. `hora` a null volta à hora por defeito. */
+async function sbMarcarCarroHora(eventoId, hora) {
+    if (!_sbSession) return false;
+    if (!CARRO_HORA_RPC) { mostrarMensagem('⚠️ Falta a função marcar_carro_hora — corre db/boleia.sql no Supabase', false); return false; }
+    try {
+        const r = await sbFetch(`${SB_URL}/rest/v1/rpc/marcar_carro_hora`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Accept': 'application/json' }),
+            body: JSON.stringify({ p_evento_id: eventoId, p_hora: hora || null })
+        });
+        if (r.status === 404) {
+            CARRO_HORA_RPC = false;
+            mostrarMensagem('⚠️ Falta a função marcar_carro_hora — corre db/boleia.sql no Supabase', false);
+            return false;
+        }
+        await sbOk(r, 'marcar a hora do carro');
+        return true;
+    } catch (e) {
+        console.error('Erro ao marcar a hora do carro:', e);
+        mostrarMensagem('⚠️ Não gravado [' + (e.ctx || 'rede') + ']: ' + sbErroLegivel(e), false);
+        return false;
+    }
+}
+
 // Sincroniza uma tabela-pai (ordens/ofertas) + a tabela-filho respetiva
 // (ordem_amigos/oferta_para) com o padrão UPSERT + PRUNE: insere/atualiza tudo
 // PRIMEIRO e só DEPOIS remove o que sobra. Nunca apaga linhas-pai antes de a
@@ -9285,7 +9434,8 @@ async function sbGuardarEvento(ev, opts) {
                 // Mesma razão da mesaHora: NULL é "por definir", '' o CHECK recusava.
                 saidaHora: () => { if (SAIDA_HORA_COL) campos.saida_hora = saidaHoraEvento(ev) || null; },
                 levaCarro: () => { if (LEVA_CARRO_COL) campos.leva_carro = ev.levaCarro || {}; },
-                boleia: () => { if (BOLEIA_COL) campos.boleia = ev.boleia || {}; }
+                boleia: () => { if (BOLEIA_COL) campos.boleia = ev.boleia || {}; },
+                carroHora: () => { if (CARRO_HORA_COL) campos.carro_hora = ev.carroHora || {}; }
             };
             apenas.forEach(campo => { if (camposDisponiveis[campo]) camposDisponiveis[campo](); });
         } else {
@@ -9303,6 +9453,7 @@ async function sbGuardarEvento(ev, opts) {
             if (SAIDA_HORA_COL) campos.saida_hora = saidaHoraEvento(ev) || null;
             if (LEVA_CARRO_COL) campos.leva_carro = ev.levaCarro || {};
             if (BOLEIA_COL) campos.boleia = ev.boleia || {};
+            if (CARRO_HORA_COL) campos.carro_hora = ev.carroHora || {};
             // `aberto` só vai se souber o valor: um evento anterior à migração tem
             // isto a undefined e escrever false punha-o de volta em agenda.
             if (ABERTO_COL && ev.aberto != null) campos.aberto = !!ev.aberto;
@@ -10740,6 +10891,19 @@ function _pushConhece(tipo) {
    continua a ser o 'mesa_marcada' de sempre. Se a push-notificar ainda não
    conhecer o aviso da saída (deploy por fazer), a saída grava-se e vê-se na
    folha, mas não avisa ninguém — e a mesa, se mudou, avisa como sempre. */
+/* Fire-and-forget: o condutor mudou a hora do carro → avisa quem vai nesse
+   carro (e só esses). Tipo novo ('carro_hora'): só sai depois de a função no
+   ar dizer que o conhece (_pushConhece). */
+async function sbNotificarCarroHora(ev, condutor, hora) {
+    const carro = carrosDoEvento(ev).carros.find(c => c.condutor === condutor);
+    if (!carro || !carro.passageiros.length || !hora) return;
+    if (!await _pushConhece('carro_hora')) {
+        console.warn('[SplitBill] a push-notificar no ar ainda não conhece o aviso da hora do carro — supabase functions deploy push-notificar');
+        return;
+    }
+    sbEnviarPush('carro_hora', carro.passageiros.map(amigo => ({ amigo, valor: 0 })), ev.descricao, condutor, { hora });
+}
+
 async function sbNotificarHorarios(ev, quem, saida, mesa, numPessoas) {
     if (saida && await _pushConhece('saida_marcada')) {
         const pessoas = _grupoParaAvisar(ev, meusAmigos()).map(amigo => ({ amigo, valor: 0 }));
