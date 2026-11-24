@@ -578,6 +578,13 @@ html,body{touch-action:pan-x pan-y}
             padding: 20px 18px 16px;
             text-align: center;
         }
+        /* Rede de segurança: uma janela mais alta do que o ecrã (a folha do
+           jogo num telemóvel pequeno) desliza por dentro, com os botões
+           sempre à vista — antes ficava cortada em cima, sem forma de lá
+           chegar. As que cabem não mudam nada. */
+        .modal-box { display: flex; flex-direction: column; max-height: calc(100vh - 30px); max-height: calc(100dvh - 30px); }
+        .modal-box > .modal-body { min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        .modal-box > .modal-actions { flex: 0 0 auto; }
         .modal-body .modal-icon {
             font-size: 28px;
             margin-bottom: 8px;
@@ -630,8 +637,8 @@ html,body{touch-action:pan-x pan-y}
         .modal-actions button + button { border-left: 1px solid #E6EAE4; }
 
         /* Folha de um jogo por abrir (ecrã inicial › Próximos Jogos em Alvalade):
-           data, as três perguntas num cartão de linhas, o resumo da mesa e as
-           listas dobráveis de quem vai. Tudo desenhado para caber num ecrã
+           a data, o plano do dia (saída · mesa · jogo, com os carros), o cartão
+           "As tuas respostas" e a tabela dobrável de quem vai. Tudo para caber num ecrã
            sem rolar — daí não haver aqui um título por pergunta nem notas de
            rodapé. Os botões neutralizam a regra global button:hover (verde
            escuro), que de outra forma ganhava sempre e no telemóvel ficava
@@ -661,11 +668,11 @@ html,body{touch-action:pan-x pan-y}
         .jf-data-edit[hidden] { display: none; }
         .jf-data-edit input[type="date"] { flex: 1; font-family: var(--mono, monospace); font-size: 12.5px; }
 
-        /* Cartão das respostas: pergunta à esquerda, botões à direita, uma
-           linha por pergunta. Antes era um título e dois botões de largura
-           inteira cada — três perguntas enchiam meio ecrã. */
-        .jf-card { margin-top: 12px; border: 1px solid #E6EAE4; border-radius: 12px; overflow: hidden; text-align: left; }
-        .jf-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 11px; }
+        /* Cartão das respostas ("As tuas respostas"): pergunta à esquerda,
+           resposta à direita, uma linha por pergunta. Vem DEPOIS do plano do
+           dia — primeiro o que está combinado, depois o que falta responder. */
+        .jf-card { margin-top: 10px; border: 1px solid #E6EAE4; border-radius: 12px; overflow: hidden; text-align: left; }
+        .jf-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 11px; }
         .jf-row + .jf-row { border-top: 1px solid #EFF2EE; }
         .jf-q { font-size: 12.5px; font-weight: 700; color: #0B3B2B; }
         .jf-seg { display: flex; border: 1px solid #E6EAE4; border-radius: 8px; overflow: hidden; flex: 0 0 auto; }
@@ -677,97 +684,96 @@ html,body{touch-action:pan-x pan-y}
         .jf-sbtn.vou.on, .jf-sbtn.vou.on:hover { background: #E2EFE8; color: #0E5C3F; }
         .jf-sbtn.nao.on, .jf-sbtn.nao.on:hover { background: rgba(179,64,47,.10); color: #B3402F; }
         .jf-sbtn:active { transform: scale(.97); }
-        .jf-chip-hora {
-            flex: 0 0 auto; width: auto; font-family: var(--mono, monospace); font-size: 12.5px;
-            font-weight: 700; color: #A9B2AC; background: #F3F5F1; border: 1px solid #E6EAE4;
-            border-radius: 8px; padding: 6px 10px;
+        /* "A que horas podes sair?" é um botão que abre a grelha dos quartos de
+           hora; cinzento enquanto não há resposta, verde com ela. */
+        .jf-chip-hora, .jf-chip-hora:hover {
+            flex: 0 0 auto; font-family: var(--mono, monospace); font-size: 12.5px; font-weight: 700;
+            color: #7C8782; background: #F3F5F1; border: 1px solid #E6EAE4; border-radius: 8px;
+            padding: 6px 10px; letter-spacing: normal; text-transform: none; cursor: pointer; line-height: 1.2;
         }
-        .jf-chip-hora.on { color: #0E5C3F; background: #E2EFE8; border-color: #CBE1D5; }
-        /* "Levo carro": por baixo de "Vais ao jogo?", só a quem vai — e não uma
-           linha sua, que a folha tem de caber num ecrã. Um botão que liga e
-           desliga (o silêncio não leva carro). Desfaz o button global
-           (maiúsculas, Barlow, verde e o :hover colado do telemóvel), como os
-           outros botões da folha. */
-        .jf-q-extra { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
-        .jf-carro, .jf-carro:hover {
-            background: #fff; border: 1px solid #E6EAE4; border-radius: 20px; color: #7C8782;
-            font-family: inherit; font-size: 11.5px; font-weight: 600; letter-spacing: normal;
-            text-transform: none; padding: 4px 10px; line-height: 1.2; cursor: pointer;
+        .jf-chip-hora.on, .jf-chip-hora.on:hover { color: #0E5C3F; background: #E2EFE8; border-color: #CBE1D5; }
+        /* "Em que carro vais?": um <select> com o desenho do chip. O
+           appearance:none global tira-lhe a seta, que volta aqui num SVG. */
+        .jf-sel {
+            flex: 0 1 auto; min-width: 0; max-width: 60%; width: auto; font-family: inherit; font-size: 12px;
+            font-weight: 600; color: #7C8782; border: 1px solid #E6EAE4; border-radius: 8px;
+            padding: 6px 24px 6px 10px; line-height: 1.2; text-overflow: ellipsis;
+            background: #F3F5F1 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237C8782' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 9px center;
         }
-        .jf-carro.on, .jf-carro.on:hover { background: #E2EFE8; border-color: #CBE1D5; color: #0E5C3F; }
-        .jf-carro:active { transform: scale(.97); }
+        .jf-sel.on { color: #0E5C3F; background-color: #E2EFE8; border-color: #CBE1D5; }
 
         .jf-aviso { margin-top: 12px; font-size: 12px; color: #B3402F; line-height: 1.45; }
 
-        /* As horas do grupo e a mesa. Em cima, as horas que MANDAM, pela ordem
-           do dia — a saída de Alcochete e a mesa marcada no Sá —, as maiores
-           coisas da caixa; são o diálogo "Marcar horas" de quem organiza e texto
-           para todos os outros. Por baixo, enquanto a mesa está por marcar, o
-           resumo dos votos: cada hora com quanta gente a votou, que é o que
-           ajuda a escolher a da mesa e não uma conclusão da app. Com a mesa
-           marcada os votos saem da folha — já cumpriram o que tinham a
-           cumprir, e o lugar deles é o da hora de saída. */
-        .jf-mesa { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: #E2EFE8; text-align: left; }
-        .jf-mesa.vazia { font-size: 12px; color: #5B6661; line-height: 1.45; }
-        .jf-mesa-lbl {
-            display: block; font-family: var(--mono, monospace); font-size: 9.5px; font-weight: 600;
-            letter-spacing: .11em; text-transform: uppercase; color: #4C7A64;
-        }
-        /* Uma hora do grupo por linha: o símbolo num círculo, o NOME da hora e
-           a hora em grande à direita — nunca uma hora solta (com a da mesa
-           sozinha, já houve quem perguntasse de que era). Na folha os círculos
-           ligam-se por um ponteado vertical (.jf-hors::before), o caminho de
-           Alcochete ao Sá — sem custar altura nenhuma, que um separador entre
-           linhas custava. Os círculos são opacos para o ponteado passar por
-           trás deles. O diálogo usa o mesmo desenho, com o campo no lugar da
-           hora (e sem o ponteado). */
+        /* O PLANO DO DIA: uma agenda — a hora à esquerda, o símbolo, o nome —,
+           pela ordem do dia: saída de Alcochete · mesa no Sá · jogo. As horas
+           que faltam são "--:--" no lugar delas. Os círculos ligam-se por um
+           ponteado (.jf-hors::before, à altura do centro dos círculos: 46px da
+           hora + 8 de intervalo + 13 do raio); são opacos para o ponteado
+           passar por trás. Só a saída tem mais de uma linha (os carros), e é a
+           primeira — o ponteado acaba no centro do último círculo. */
+        .jf-plano { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: #E2EFE8; text-align: left; }
         .jf-hors { position: relative; }
         .jf-hors::before {
-            content: ''; position: absolute; left: 12px; top: 13px; bottom: 13px;
+            content: ''; position: absolute; left: 66px; top: 13px; bottom: 13px;
             border-left: 2px dotted rgba(14,92,63,.32);
         }
-        .jf-hor { display: flex; align-items: center; gap: 9px; }
-        .jf-hor + .jf-hor { margin-top: 8px; }
-        .jf-hors + .jf-mesa-lbl, .jf-hor + .jf-mesa-lbl { margin-top: 10px; }
+        .jf-par { display: flex; align-items: flex-start; gap: 8px; }
+        .jf-par + .jf-par { margin-top: 6px; }
+        .jf-par-h {
+            flex: 0 0 46px; font-family: var(--mono, monospace); font-size: 15px; font-weight: 700;
+            color: #0E5C3F; line-height: 26px;
+        }
+        .jf-par-h.vazia { color: #A9B2AC; font-weight: 600; }
         .jf-hor-ic {
             position: relative; flex: 0 0 26px; width: 26px; height: 26px; border-radius: 50%; background: #F8FBF9;
             display: flex; align-items: center; justify-content: center; font-size: 13px; line-height: 1;
         }
-        .jf-hor-ic:empty { background: none; }
-        .jf-hor-txt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-        .jf-hor > strong {
-            flex: 0 0 auto; font-family: var(--mono, monospace); font-size: 23px; font-weight: 700;
-            color: #0E5C3F; line-height: 1.1;
+        .jf-par-txt { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 5px; }
+        .jf-par-n { font-size: 13px; font-weight: 700; color: #0B3B2B; line-height: 26px; }
+        .jf-par-s { font-size: 12px; color: #4C7A64; line-height: 26px; }
+        .jf-par-s::before { content: '· '; }
+        .jf-mudar, .jf-mudar:hover {
+            flex: 0 0 auto; margin-top: 2px; background: #fff; border: 1px solid #CBE1D5; color: #0E5C3F;
+            border-radius: 8px; padding: 4px 10px; font-family: inherit; font-size: 11.5px; font-weight: 600;
+            letter-spacing: normal; text-transform: none; line-height: 1.2; cursor: pointer;
         }
-        .jf-hor-sub { font-size: 11.5px; color: #4C7A64; line-height: 1.2; }
-        .jf-hor-por { flex: 0 0 auto; font-size: 11.5px; font-style: italic; color: #5B6661; }
-        /* Diálogo: o campo, e à direita o ✕ que o apaga. O ✕ só se esconde a
-           fingir (visibility) para os campos não saltarem de lado quando ele
-           some — e o nº de pessoas guarda o mesmo lugar vazio, para os três
-           campos acabarem na mesma vertical, mais colado à linha da mesa. */
-        .jf-hor-campo { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
-        .jf-hor-x, .jf-hor-x:hover {
-            flex: 0 0 24px; width: 24px; height: 24px; padding: 0; border-radius: 50%;
-            border: 1px solid #CBE1D5; background: #fff; color: #7C8782; font-size: 11px; font-weight: 400;
-            line-height: 1; letter-spacing: normal; cursor: pointer;
-            display: inline-flex; align-items: center; justify-content: center;
+        /* Os carros, por baixo da saída: um por linha, o condutor a negrito,
+           quem vai com ele, e quantos são à direita. "Sem carro" a dourado:
+           é quem ainda anda à procura de lugar. */
+        .jf-cars { flex: 1 1 100%; display: flex; flex-direction: column; gap: 3px; margin: 1px 0 2px; }
+        .jf-car {
+            display: flex; align-items: center; gap: 6px; font-size: 12px; color: #2F5446; line-height: 1.3;
+            background: rgba(255,255,255,.65); border-radius: 8px; padding: 3px 4px 3px 8px;
         }
-        .jf-hor-x[hidden] { display: inline-flex; visibility: hidden; }
-        .jf-hor-x:active { transform: scale(.92); color: #B3402F; }
-        .jf-hor + .jf-hor-pax { margin-top: 6px; }
-        /* Num ecrã estreito o campo da hora (mais largo ainda com AM/PM) não
-           deixava lugar ao nome — "Saída de Alcochete" saía cortado. Aí a
-           linha parte: o nome em cima, o campo por baixo, encostado à direita. */
-        .jf-hor-dlg .jf-hor { flex-wrap: wrap; row-gap: 5px; }
-        .jf-hor-dlg .jf-hor-txt { flex: 1 1 90px; min-width: 90px; }
-        .jf-hor-dlg .jf-hor-campo { margin-left: auto; }
-        .jf-mesa-input {
-            flex: 0 0 auto; width: auto; font-family: var(--mono, monospace); font-size: 17px;
-            font-weight: 700; color: #A9B2AC; background: #fff; border: 1px solid #CBE1D5;
-            border-radius: 9px; padding: 4px 9px;
+        .jf-car-n { flex: 1 1 auto; min-width: 0; }
+        /* Cada carro sai à sua hora: à cabeça da linha do carro, como as horas
+           do plano (os carros vêm por ordem de saída). */
+        .jf-car-h { flex: 0 0 auto; font-family: var(--mono, monospace); font-size: 12px; font-weight: 700; color: #0E5C3F; }
+        .jf-car-h.vazia { color: #A9B2AC; font-weight: 600; }
+        .jf-car b { color: #0B3B2B; }
+        .jf-car em {
+            flex: 0 0 auto; font-style: normal; font-family: var(--mono, monospace); font-size: 11px;
+            font-weight: 700; color: #0E5C3F; background: #fff; border-radius: 10px; padding: 1px 7px;
         }
-        .jf-mesa-input.on { color: #0E5C3F; }
-        .jf-mesa-input[type="number"] { width: 52px; text-align: right; }
+        .jf-car.sem { background: transparent; color: #8A6D12; padding-left: 2px; }
+        /* "Marcar mesa": o botão principal da folha para quem marca a mesa —
+           verde cheio e de largura inteira, com a sugestão por baixo. */
+        .jf-marcar, .jf-marcar:hover {
+            display: flex; flex-direction: column; align-items: center; gap: 2px; width: 100%; margin-top: 10px;
+            padding: 10px 12px; background: #0E7A4F; color: #fff; border: none; border-radius: 10px;
+            font-size: 15px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; cursor: pointer;
+            box-shadow: 0 6px 14px -8px rgba(14,122,79,.7);
+        }
+        .jf-marcar small {
+            font-family: var(--body, -apple-system, system-ui, sans-serif); font-size: 11.5px; font-weight: 500;
+            letter-spacing: normal; text-transform: none; opacity: .9;
+        }
+        .jf-marcar:active { transform: scale(.98); }
+        .jf-mesa-lbl {
+            display: block; font-family: var(--mono, monospace); font-size: 9.5px; font-weight: 600;
+            letter-spacing: .11em; text-transform: uppercase; color: #4C7A64;
+        }
+        .jf-hors + .jf-mesa-lbl, .jf-marcar + .jf-mesa-lbl { margin-top: 10px; }
         .jf-mesa-nada { margin-top: 8px; font-size: 11.5px; color: #5B6661; line-height: 1.4; }
         .jf-mesa-horas { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
         .jf-mesa-horas span {
@@ -778,6 +784,43 @@ html,body{touch-action:pan-x pan-y}
         .jf-mesa-horas .jf-sem-horas {
             font-family: inherit; font-size: 11.5px; font-weight: 400; color: #5B6661; background: rgba(255,255,255,.45);
         }
+
+        /* Os diálogos das horas ("A que horas podes sair?" e "Marcar mesa"): a
+           mesma grelha de quartos de hora — só se escolhem horas certas —, com
+           a sugerida a tracejado dourado, a escolhida a verde cheio e, num
+           crachá, quantos já a votaram. */
+        .jf-dlg-hint { text-align: left; font-size: 12px; color: #5B6661; line-height: 1.45; margin-bottom: 10px; }
+        .jf-sug-tag {
+            display: inline-block; border: 1.5px dashed #C9A227; background: #FFFCF2; color: #8A6D12;
+            border-radius: 6px; padding: 0 5px; font-size: 11px; font-weight: 600; line-height: 1.4;
+        }
+        .jf-dlg-l { text-align: left; font-size: 13px; font-weight: 700; color: #0B3B2B; margin: 2px 0 8px; }
+        .jf-grelha { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+        .jf-gh, .jf-gh:hover {
+            position: relative; padding: 10px 0; background: #fff; border: 1px solid #E6EAE4; border-radius: 9px;
+            color: #0B3B2B; font-family: var(--mono, monospace); font-size: 14px; font-weight: 700;
+            letter-spacing: normal; line-height: 1; cursor: pointer;
+        }
+        .jf-gh.sug, .jf-gh.sug:hover { border: 1.5px dashed #C9A227; background: #FFFCF2; }
+        .jf-gh.on, .jf-gh.on:hover { background: #0E7A4F; border: 1px solid #0E7A4F; color: #fff; }
+        .jf-gh em {
+            position: absolute; top: -7px; right: -5px; min-width: 17px; height: 17px; padding: 0 4px;
+            border-radius: 9px; background: #0B3B2B; color: #fff; font-style: normal; font-size: 10px;
+            font-weight: 700; line-height: 17px; box-shadow: 0 0 0 2px #fff;
+        }
+        .jf-gh:active { transform: scale(.96); }
+        .jf-mm { margin-top: 12px; border: 1px solid #E6EAE4; border-radius: 12px; overflow: hidden; }
+        .jf-mm-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 11px; text-align: left; }
+        .jf-mm-row + .jf-mm-row { border-top: 1px solid #EFF2EE; }
+        .jf-mm-l { display: flex; flex-direction: column; font-size: 13px; font-weight: 700; color: #0B3B2B; }
+        .jf-mm-l small { font-size: 11px; font-weight: 400; color: #7C8782; }
+        .jf-step { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+        .jf-step button, .jf-step button:hover {
+            width: 30px; height: 30px; padding: 0; border-radius: 50%; border: 1px solid #CBE1D5; background: #fff;
+            color: #0E5C3F; font-size: 17px; font-weight: 700; line-height: 1; letter-spacing: normal; cursor: pointer;
+        }
+        .jf-step button:active { transform: scale(.92); }
+        .jf-step b { min-width: 54px; text-align: center; font-family: var(--mono, monospace); font-size: 18px; color: #0E5C3F; }
 
         /* Listas dobráveis (quem vai ao Sá / ao jogo): o resumo é a linha, o
            detalhe abre-se por baixo dela sem moldura repetida. */
@@ -2496,7 +2539,7 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
 /* Aviso flutuante (ver evToast no app.js) */
 .ev-toast {
     position: fixed; left: 50%; transform: translateX(-50%) translateY(12px); bottom: 92px;
-    max-width: 92%; z-index: 200; padding: 11px 16px; border-radius: 12px;
+    max-width: 92%; z-index: 99998; padding: 11px 16px; border-radius: 12px;
     background: var(--verde-escuro); color: #fff; font-size: 13.5px; font-weight: 600;
     box-shadow: 0 16px 30px -12px rgba(11,59,43,.85);
     opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
@@ -2737,3 +2780,57 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
 .rod-itv { flex: 0 0 auto; color: var(--ink-soft, #5B6661); font-size: 12px; }
 .rod-para { display: block; color: var(--ink-soft, #5B6661); font-size: 11.5px; line-height: 1.35; margin-top: 1px; }
 .rod-parte { color: var(--ink-soft, #5B6661); font-size: 11.5px; }
+
+/* ═══ PÁGINA DO JOGO POR ABRIR (#page-jogo, ver abrirFolhaJogo no app.js) ═══
+   Página inteira por cima do ecrã inicial, a entrar da direita como uma página
+   nova: cabeçalho verde com "Voltar" e o nome do jogo, e o corpo a deslizar
+   por dentro (a página por baixo fica trancada, html.jp-aberta). Os diálogos
+   das horas abrem por cima (o modal está a 99999, a página a 9990), e o aviso
+   flutuante (.ev-toast) subiu para 99998 para se ver por cima dela. O
+   conteúdo é o de sempre (_jogoSheetHTML, as classes .jf-*), agora em fundo
+   cinzento — daí os cartões passarem a branco aqui. */
+.jp { position: fixed; inset: 0; z-index: 9990; display: flex; flex-direction: column; background: #EFF1EC; animation: jpEntra .22s ease; }
+.jp[hidden] { display: none; }
+.jp.sai { animation: jpSai .18s ease forwards; }
+@keyframes jpEntra { from { transform: translateX(100%); } to { transform: none; } }
+@keyframes jpSai { from { transform: none; } to { transform: translateX(100%); } }
+html.jp-aberta, html.jp-aberta body { overflow: hidden; overscroll-behavior: none; }
+.jp-top {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 4px; background: #0B3B2B; color: #fff;
+    padding: calc(env(safe-area-inset-top, 0px) + 8px) 14px 10px 4px;
+}
+.jp-voltar, .jp-voltar:hover {
+    flex: 0 0 auto; display: inline-flex; align-items: center; gap: 1px; background: transparent; border: none;
+    color: #fff; padding: 8px 8px 8px 4px; font-family: inherit; font-size: 15px; font-weight: 600;
+    letter-spacing: normal; text-transform: none; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.jp-voltar:active { opacity: .6; }
+.jp-tit {
+    flex: 1 1 auto; min-width: 0; margin: 0; font-size: 16px; font-weight: 700; line-height: 1.25; color: #fff;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.jp-body {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+    padding: 12px 14px calc(env(safe-area-inset-bottom, 0px) + 28px);
+}
+.jp-in { max-width: 520px; margin: 0 auto; }
+.jp-sec {
+    margin: 18px 2px 7px; font-family: var(--mono, monospace); font-size: 10px; font-weight: 600;
+    letter-spacing: .12em; text-transform: uppercase; color: #5B6661;
+}
+.jp-in > .jf-sub + .jp-sec { margin-top: 10px; }
+.jp .jf-plano, .jp .jf-card { margin-top: 0; }
+.jp .jf-card, .jp .jf-tab, .jp .jf-nomes { background: #fff; }
+.jp .jf-fold { margin-top: 0; }
+.jp-acoes { display: flex; flex-direction: column; gap: 8px; margin-top: 22px; }
+.jp-btn, .jp-btn:hover {
+    display: flex; flex-direction: column; align-items: center; gap: 2px; width: 100%; padding: 11px 12px;
+    background: #fff; color: #0E5C3F; border: 1px solid #CBE1D5; border-radius: 10px;
+    font-size: 15px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; cursor: pointer;
+}
+.jp-btn.jp-prim, .jp-btn.jp-prim:hover { background: #0B3B2B; color: #fff; border-color: #0B3B2B; }
+.jp-btn small {
+    font-family: -apple-system, system-ui, sans-serif; font-size: 11.5px; font-weight: 500;
+    letter-spacing: normal; text-transform: none; opacity: .8;
+}
+.jp-btn:active { transform: scale(.98); }

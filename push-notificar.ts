@@ -1,6 +1,6 @@
 // supabase/functions/push-notificar/index.ts
 // SplitBill — Envia notificações Web Push (Notification/Push API, sem
-// Telegram). Oito momentos, todos chamados pela app:
+// Telegram). Nove momentos, todos chamados pela app:
 //   'divida'              fecharComFatura() → todos os devedores do evento
 //                          que acabou de fechar, com o nome de quem pagou a
 //                          conta (em `quem`) para o aviso dizer a quem entregar
@@ -21,8 +21,10 @@
 //                          dizer box livre (pode já estar dada, ou ficar
 //                          livre só até certa hora) (fire-and-forget)
 //   'hora_sa'              marcarHoraSa() → só quem trata da marcação da mesa
-//                          no Sá, com a hora a partir da qual a pessoa pode lá
-//                          estar (fire-and-forget)
+//                          no Sá, com a hora a que a pessoa pode SAIR (o nome
+//                          do tipo ficou de quando era "a que horas podes estar
+//                          no Sá"; a mesa é agora a saída mais meia hora)
+//                          (fire-and-forget)
 //   'mesa_marcada'         marcarMesaHora() → o grupo todo menos quem a marcou:
 //                          a mesa ficou marcada a uma hora, e isso é o que
 //                          toda a gente estava à espera de saber. É o inverso
@@ -32,7 +34,12 @@
 //                          a hora a que se sai de Alcochete. Quando a mesa
 //                          mudou no mesmo Guardar, vem junto (`horaMesa`,
 //                          `pessoasMesa`) — um aviso por gesto, não dois
-//                          (fire-and-forget)
+//                          (fire-and-forget). A app já não o manda desde que
+//                          cada carro sai à sua hora; fica para as versões
+//                          antigas da app que ainda andem por aí
+//   'carro_hora'           marcarCarroHora() → só quem vai no carro de quem o
+//                          leva (`quem`): o condutor mudou a hora a que o carro
+//                          sai (fire-and-forget)
 //
 // Um `tipo` que a função não conheça é RECUSADO (400). Antes caía no texto da
 // 'divida', e um aviso novo enviado por uma app mais recente do que este
@@ -47,7 +54,7 @@
 // (404/410) são apagadas aqui mesmo. O texto da notificação é sempre
 // escolhido AQUI (por `tipo`), nunca vindo livre do cliente — só os nomes/
 // valores são interpolados, a `hora` do 'hora_sa'/'mesa_marcada'/
-// 'saida_marcada' e a `horaMesa` do 'saida_marcada' só entram depois de
+// 'saida_marcada'/'carro_hora' e a `horaMesa` do 'saida_marcada' só entram depois de
 // passar pelo formato HH:MM (são os únicos campos de TEXTO que o cliente
 // escolhe), e o `pessoasMesa` (nº de pessoas da mesa) só entra sendo um
 // inteiro 1–99 — opcional, fica de fora da frase sem ele.
@@ -169,7 +176,8 @@ type Tipo =
   | "gamebox"
   | "hora_sa"
   | "mesa_marcada"
-  | "saida_marcada";
+  | "saida_marcada"
+  | "carro_hora";
 
 // Os tipos que esta versão sabe escrever — é também a resposta à pergunta da
 // app ({tipo: 'tipos'}) antes de usar um tipo novo.
@@ -181,6 +189,7 @@ const TIPOS: Tipo[] = [
   "hora_sa",
   "mesa_marcada",
   "saida_marcada",
+  "carro_hora",
 ];
 
 // Nem todos os momentos falam de dinheiro: 'gamebox', 'hora_sa',
@@ -205,8 +214,8 @@ function montarMensagem(
   }
   if (tipo === "hora_sa") {
     return {
-      title: "🍽️ Hora para o Sá",
-      body: `${quem || "Alguém"} pode estar no Sá a partir das ${hora}${suf}`,
+      title: "🚗 Hora de saída",
+      body: `${quem || "Alguém"} pode sair a partir das ${hora}${suf}`,
     };
   }
   if (tipo === "mesa_marcada") {
@@ -227,6 +236,12 @@ function montarMensagem(
     return {
       title: horaMesa ? "🚗 Saída de Alcochete e mesa no Sá" : "🚗 Saída de Alcochete",
       body: `${quem || "Alguém"} marcou a saída de Alcochete para as ${hora}${mesa}${suf}`,
+    };
+  }
+  if (tipo === "carro_hora") {
+    return {
+      title: "🚗 Hora do carro",
+      body: `${quem || "Quem conduz"} mudou a hora do carro: sai às ${hora}${suf}`,
     };
   }
   if (tipo === "pagamento_declarado") {
@@ -300,7 +315,7 @@ Deno.serve(async (req) => {
     // fora da frase.
     const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
     const horaOk = HHMM.test(hora ?? "") ? hora : "";
-    if ((tipoOk === "hora_sa" || tipoOk === "mesa_marcada" || tipoOk === "saida_marcada") && !horaOk) {
+    if ((tipoOk === "hora_sa" || tipoOk === "mesa_marcada" || tipoOk === "saida_marcada" || tipoOk === "carro_hora") && !horaOk) {
       return json({ error: "hora inválida" }, 400);
     }
     const horaMesaOk = tipoOk === "saida_marcada" && HHMM.test(horaMesa ?? "") ? horaMesa : "";
