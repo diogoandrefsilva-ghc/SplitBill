@@ -298,8 +298,12 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   `push-notificar.ts`, agora "X pode sair a partir das 17:00". Mesmo padrão de
   permissões: PATCH para quem edita o evento, `marcar_hora_sa`
   (`sbMarcarHoraSa`) SECURITY DEFINER para os outros; sem a migração
-  `SA_HORA_COL=false` esconde a pergunta. **Votos de antes da mudança** (no jogo
-  de 25/11/2026) estão em hora de chegada ao Sá, não de saída.
+  `SA_HORA_COL=false` esconde a pergunta. **Votos de antes da mudança:** no
+  jogo de 25/11/2026 (o único por fechar na altura) os três dados à pergunta
+  antiga (Filipe, Rogélio, João Hélder) foram **já convertidos** à mão para
+  hora de saída (−30 min); os do Mestre, Barrona e Diogo foram dados depois
+  da mudança e ficaram como estavam. **Não voltar a converter.** Os eventos
+  já fechados ficaram com as horas de chegada de então — são histórico.
 - **Marcar a mesa** (`db/mesa-hora.sql` + `db/mesa-pessoas.sql`:
   `eventos.mesa_hora`, `mesa_pessoas`): as horas acima são as que cada um
   **pode**; esta é a que ficou **combinada** com o Sá. Quem a põe é quem trata
