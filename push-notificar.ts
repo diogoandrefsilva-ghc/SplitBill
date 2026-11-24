@@ -1,6 +1,6 @@
 // supabase/functions/push-notificar/index.ts
 // SplitBill — Envia notificações Web Push (Notification/Push API, sem
-// Telegram). Sete momentos, todos chamados pela app:
+// Telegram). Oito momentos, todos chamados pela app:
 //   'divida'              fecharComFatura() → todos os devedores do evento
 //                          que acabou de fechar, com o nome de quem pagou a
 //                          conta (em `quem`) para o aviso dizer a quem entregar
@@ -28,17 +28,29 @@
 //                          toda a gente estava à espera de saber. É o inverso
 //                          do 'hora_sa' — aquele recolhe, este anuncia
 //                          (fire-and-forget)
+//   'saida_marcada'        marcarHorarios() → o grupo todo menos quem a pôs:
+//                          a hora a que se sai de Alcochete. Quando a mesa
+//                          mudou no mesmo Guardar, vem junto (`horaMesa`,
+//                          `pessoasMesa`) — um aviso por gesto, não dois
+//                          (fire-and-forget)
+//
+// Um `tipo` que a função não conheça é RECUSADO (400). Antes caía no texto da
+// 'divida', e um aviso novo enviado por uma app mais recente do que este
+// deploy chegava ao grupo todo como "ficaste a dever €0.00". Pela mesma razão
+// a app pergunta antes de usar um tipo novo ({tipo: 'tipos'}, sem envio
+// nenhum): só esta versão responde com a lista — a anterior devolvia
+// {enviados: 0} sem a lista, e a app fica sem o aviso em vez de o dar errado.
 //
 // Resolve amigo→email via `amigo_users` (mesma tabela usada nas outras
 // políticas de equivalência) e manda o push a cada `push_subscriptions`
 // dessa pessoa. Subscriptions que já não existem do lado do browser
 // (404/410) são apagadas aqui mesmo. O texto da notificação é sempre
 // escolhido AQUI (por `tipo`), nunca vindo livre do cliente — só os nomes/
-// valores são interpolados, a `hora` do 'hora_sa'/'mesa_marcada' só entra
-// depois de passar pelo formato HH:MM (é o único campo de TEXTO que o
-// cliente escolhe), e o `pessoasMesa` do 'mesa_marcada' (nº de pessoas da
-// mesa) só entra sendo um inteiro 1–99 — opcional, fica de fora da frase
-// sem ele.
+// valores são interpolados, a `hora` do 'hora_sa'/'mesa_marcada'/
+// 'saida_marcada' e a `horaMesa` do 'saida_marcada' só entram depois de
+// passar pelo formato HH:MM (são os únicos campos de TEXTO que o cliente
+// escolhe), e o `pessoasMesa` (nº de pessoas da mesa) só entra sendo um
+// inteiro 1–99 — opcional, fica de fora da frase sem ele.
 //
 // Chamada pelo browser com o JWT do utilizador (verify_jwt fica LIGADO no
 // deploy). Por cima disso confirma-se que o email consta de
@@ -156,11 +168,24 @@ type Tipo =
   | "pedido_acesso"
   | "gamebox"
   | "hora_sa"
-  | "mesa_marcada";
+  | "mesa_marcada"
+  | "saida_marcada";
 
-// Nem todos os momentos falam de dinheiro: 'gamebox', 'hora_sa' e
-// 'mesa_marcada' vêm sem valor (ou com zero), e um .toFixed() direto num
-// undefined rebentava a função toda.
+// Os tipos que esta versão sabe escrever — é também a resposta à pergunta da
+// app ({tipo: 'tipos'}) antes de usar um tipo novo.
+const TIPOS: Tipo[] = [
+  "divida",
+  "pagamento_declarado",
+  "lembrete",
+  "gamebox",
+  "hora_sa",
+  "mesa_marcada",
+  "saida_marcada",
+];
+
+// Nem todos os momentos falam de dinheiro: 'gamebox', 'hora_sa',
+// 'mesa_marcada' e 'saida_marcada' vêm sem valor (ou com zero), e um
+// .toFixed() direto num undefined rebentava a função toda.
 function montarMensagem(
   tipo: Tipo,
   p: Pessoa,
@@ -168,6 +193,7 @@ function montarMensagem(
   quem?: string,
   hora?: string,
   pessoasMesa?: number,
+  horaMesa?: string,
 ) {
   const suf = descricao ? ` — ${descricao}` : "";
   const valor = (p.valor ?? 0).toFixed(2);
@@ -190,6 +216,17 @@ function montarMensagem(
     return {
       title: "🍽️ Mesa marcada no Sá",
       body: `${quem || "Alguém"} marcou a mesa para as ${hora}${pax}${suf}`,
+    };
+  }
+  if (tipo === "saida_marcada") {
+    // A mesa só vem quando mudou no MESMO Guardar do diálogo "Marcar horas" — e aí
+    // vai na mesma frase, com o nome de cada hora: são duas horas no mesmo
+    // aviso, e nenhuma pode ficar sem dizer de que é.
+    const pax = pessoasMesa ? ` (${pessoasMesa} ${pessoasMesa === 1 ? "pessoa" : "pessoas"})` : "";
+    const mesa = horaMesa ? ` e a mesa no Sá para as ${horaMesa}${pax}` : "";
+    return {
+      title: horaMesa ? "🚗 Saída de Alcochete e mesa no Sá" : "🚗 Saída de Alcochete",
+      body: `${quem || "Alguém"} marcou a saída de Alcochete para as ${hora}${mesa}${suf}`,
     };
   }
   if (tipo === "pagamento_declarado") {
@@ -223,14 +260,15 @@ Deno.serve(async (req) => {
     const emailChamador = await emailDoToken(auth);
     if (!emailChamador) return json({ error: "não autorizado" }, 403);
 
-    const { pessoas, descricao, quem, tipo, email, hora, pessoasMesa } = (await req.json()) as {
+    const { pessoas, descricao, quem, tipo, email, hora, pessoasMesa, horaMesa } = (await req.json()) as {
       pessoas?: Pessoa[];
       descricao?: string;
       quem?: string;
-      tipo?: Tipo;
+      tipo?: Tipo | "tipos";
       email?: string;
       hora?: string;
       pessoasMesa?: number;
+      horaMesa?: string;
     };
 
     // 'pedido_acesso': único caso em que NÃO se exige allowed_users — é
@@ -247,16 +285,25 @@ Deno.serve(async (req) => {
 
     if (!(await estaAutorizado(emailChamador))) return json({ error: "não autorizado" }, 403);
 
-    const TIPOS: Tipo[] = ["pagamento_declarado", "lembrete", "gamebox", "hora_sa", "mesa_marcada"];
-    const tipoOk: Tipo = tipo && TIPOS.includes(tipo) ? tipo : "divida";
+    // A pergunta da app antes de usar um tipo novo (ver o topo): não envia nada.
+    if (tipo === "tipos") return json({ enviados: 0, falhados: 0, tipos: TIPOS });
+
+    // Sem tipo é a 'divida' (o momento mais antigo, de antes de haver tipos);
+    // um tipo que esta versão não conheça é recusado em vez de virar dívida.
+    const tipoOk: Tipo | null = !tipo ? "divida" : (TIPOS.includes(tipo as Tipo) ? (tipo as Tipo) : null);
+    if (!tipoOk) return json({ error: "tipo desconhecido" }, 400);
     if (!Array.isArray(pessoas) || pessoas.length === 0) return json({ enviados: 0, falhados: 0 });
 
-    // Único texto do cliente que chega ao corpo de uma notificação — por isso
-    // passa pelo formato antes de lá entrar. Sem hora válida não há aviso a dar.
-    const horaOk = /^([01]\d|2[0-3]):[0-5]\d$/.test(hora ?? "") ? hora : "";
-    if ((tipoOk === "hora_sa" || tipoOk === "mesa_marcada") && !horaOk) {
+    // Únicos textos do cliente que chegam ao corpo de uma notificação — por
+    // isso passam pelo formato antes de lá entrar. Sem hora válida não há aviso
+    // a dar; a da mesa que acompanha a da saída é opcional, e inválida fica de
+    // fora da frase.
+    const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+    const horaOk = HHMM.test(hora ?? "") ? hora : "";
+    if ((tipoOk === "hora_sa" || tipoOk === "mesa_marcada" || tipoOk === "saida_marcada") && !horaOk) {
       return json({ error: "hora inválida" }, 400);
     }
+    const horaMesaOk = tipoOk === "saida_marcada" && HHMM.test(horaMesa ?? "") ? horaMesa : "";
     // `pessoasMesa` é sempre um número (nunca texto livre) — opcional, e só
     // entra na frase quando é um inteiro positivo razoável.
     const pessoasMesaOk =
@@ -286,7 +333,7 @@ Deno.serve(async (req) => {
         const emailP = emailPorAmigo.get(p.amigo);
         if (!emailP) return;
         const payload = JSON.stringify({
-          ...montarMensagem(tipoOk, p, descricao, quem, horaOk, pessoasMesaOk),
+          ...montarMensagem(tipoOk, p, descricao, quem, horaOk, pessoasMesaOk, horaMesaOk),
           url: "/SplitBill/",
         });
         const r = await enviarParaSubs(subs.filter((s) => s.email === emailP), payload);

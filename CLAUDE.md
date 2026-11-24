@@ -18,9 +18,9 @@ App pessoal de divisão de contas ("dia de jogo").
 
 ## Como NÃO gastar tokens à toa (importante)
 - **Não leias o `app.js` inteiro.** Está dividido em secções com comentários `/* ── título ── */`. Para achar algo, faz `grep` pelo título e lê só esse troço. Secções:
-  Custom confirm modal · **Pagador & Contas (dívidas)** · Page switching · FAB · **Core: cálculo de saldos** (dívidas + pagamentos) · Render · **Ecrã do evento** (quadrantes, folhas, o + em dois passos) · Payment form · Edit Ordem inline · **Importar Fatura** (foto/PDF → Gemini → conferência artigo a artigo) · **Calendário do Sporting** (ler `goals.jogos`, guardar o mínimo cá) · **Jogo aberto & presenças** (abrir o jogo, vou/não vou, hora do Sá) · **Rodadas oferecidas** (consulta por pessoa) · Configs · **Supabase** (+ Sessão/refresh do token, Permissões, **Refresco** do evento no ecrã, Agregação global, IDs únicos, Equivalências amigo↔conta)
+  Custom confirm modal · **Pagador & Contas (dívidas)** · Page switching · FAB · **Core: cálculo de saldos** (dívidas + pagamentos) · Render · **Ecrã do evento** (quadrantes, folhas, o + em dois passos) · Payment form · Edit Ordem inline · **Importar Fatura** (foto/PDF → Gemini → conferência artigo a artigo) · **Calendário do Sporting** (ler `goals.jogos`, guardar o mínimo cá) · **Jogo aberto & presenças** (abrir o jogo, vou/não vou, hora do Sá, saída de Alcochete e mesa) · **Rodadas oferecidas** (consulta por pessoa) · Configs · **Supabase** (+ Sessão/refresh do token, Permissões, **Refresco** do evento no ecrã, Agregação global, IDs únicos, Equivalências amigo↔conta)
 - `fatura-restaurante.ts` — Edge Function (Deno) que lê a fatura com o Gemini. **Não corre no site**: vive no Supabase, faz-se deploy à parte (`supabase functions deploy fatura-restaurante`). É irmã da `fatura-ocr` da FestasBV — mesmo projeto Supabase, schema e prompt diferentes.
-- `push-notificar.ts` — a outra Edge Function, a das notificações Web Push. Também **não corre no site** (`supabase functions deploy push-notificar`): se mexeres nos `tipo` daqui, o texto novo só aparece depois desse deploy. O corpo da notificação é escolhido **lá**, nunca vem livre do cliente — só nomes, valores, as horas (a do Sá e a da mesa, validadas `HH:MM` dos dois lados) e o nº de pessoas da mesa (validado inteiro 1–99 dos dois lados, opcional) são interpolados.
+- `push-notificar.ts` — a outra Edge Function, a das notificações Web Push. Também **não corre no site** (`supabase functions deploy push-notificar`): se mexeres nos `tipo` daqui, o texto novo só aparece depois desse deploy. O corpo da notificação é escolhido **lá**, nunca vem livre do cliente — só nomes, valores, as horas (a do Sá, a da mesa e a da saída de Alcochete, validadas `HH:MM` dos dois lados) e o nº de pessoas da mesa (validado inteiro 1–99 dos dois lados, opcional) são interpolados. **`tipo` novo = a app pergunta antes** (`_pushConhece`, um pedido `{tipo:'tipos'}` sem destinatários): a versão desta função anterior à saída de Alcochete mandava um tipo que não conhecesse para o texto da **dívida** — um aviso novo, chegado antes do deploy, aparecia ao grupo todo como "ficaste a dever €0.00". Agora um tipo desconhecido leva 400, e só a versão nova responde à pergunta com a lista; sem a lista, a app fica sem esse aviso em vez de o dar errado.
 - **Fatura guardada:** o detalhe lido fica em `estado.fatura` e persiste na coluna `eventos.fatura` (jsonb, `db/fatura-detalhe.sql`). A correspondência linha-da-fatura ↔ artigo do menu **não** se guarda — é recalculada a cada render (`faturaConferir()`), de propósito: se o menu do evento mudar, a conferência acompanha. Sem a migração, `FATURA_COL=false` e a fatura fica só no localStorage.
 - **Equivalência de nomes sugerida** (`_frSugestoesEquiv`): quando o talão escreve
   um nome que não se parece com nada ("Lacrau Moscat" para o que na app é "Villa
@@ -185,12 +185,17 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   da lista se pode abrir, abrir o de daqui a dois meses seria sempre engano —,
   `abrirJogo()` e a folha que se abre ao tocar no cartão (`abrirFolhaJogo`).
   A folha tem até quatro botões: Fechar · **Preparar** (admin/substituto, abre a
-  página do evento sem abrir o jogo) · **Marcar mesa** / **Mudar mesa** (quem
-  pode marcar a mesa, ver abaixo) · **Abrir jogo** (só no primeiro). "Preparar"
-  usa o `extraText` do `mostrarModal`, "Marcar mesa" o `extraText2` — irmão
-  novo do primeiro, para as duas escolhas poderem aparecer ao mesmo tempo.
+  página do evento sem abrir o jogo) · **Marcar horas** / **Mudar horas** (quem
+  organiza o dia, ver abaixo; sem `db/saida-hora.sql` volta a ser **Marcar
+  mesa** / **Mudar mesa**) · **Abrir jogo** (só no primeiro). "Preparar" usa o
+  `extraText` do `mostrarModal`, "Marcar horas" o `extraText2` — irmão novo do
+  primeiro, para as duas escolhas poderem aparecer ao mesmo tempo. **Nomes de
+  duas palavras de propósito:** com os quatro botões, um nome que não parta em
+  duas linhas ("Horários") empurrava o "Abrir jogo" para fora de um ecrã de
+  375px.
 - **A folha tem de caber num ecrã** (`_jogoSheetHTML`): quem a abre vem
-  responder e ver a que horas é a mesa, e isso não pode estar atrás de scroll.
+  responder e ver a que horas se sai de Alcochete (e em que carros) e a que
+  horas é a mesa, e isso não pode estar atrás de scroll.
   Daí o desenho actual — a data numa linha de leitura com um lápis
   (`jogoSheetMostrarData`) em vez de um campo sempre à vista, as perguntas
   como linhas de um cartão (`_jfLinha`/`_jfSeg`) em vez de títulos com
@@ -199,8 +204,9 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   **ao sair do campo** (`onblur`) em vez de um botão Guardar cada — o `change`
   do seletor dispara a cada roda que se mexe, e gravar aí era um PATCH e uma
   notificação por volta, com o redesenho a fechar o seletor na cara de quem o
-  estava a usar. A hora da MESA é a exceção: fica noutro sítio (ver abaixo),
-  de propósito longe da hora do Sá, e só grava com um "Guardar" explícito; e
+  estava a usar. As horas do GRUPO (a saída de Alcochete e a mesa) são a
+  exceção: ficam noutro sítio (ver abaixo), de propósito longe da hora do Sá,
+  e só gravam com um "Guardar" explícito; e
   quem vai numa **tabela só** — nome · Sá · horas · jogo · box
   (`_jfTabelaHTML`) — **dobrada** (`_jfFoldHTML`, estado em `_jfFold` para não
   fechar a cada resposta). A tabela substituiu duas listas para as mesmas
@@ -255,10 +261,14 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
 - **A que horas podes estar no Sá** (`db/sa-hora.sql`, coluna
   `eventos.sa_hora`, jsonb `{"Nome": "HH:MM"}`): terceira pergunta da folha,
   só para quem já disse que **vai** ao Sá. Saber quem vai nunca chegou para
-  marcar a mesa — falta saber a que horas cada um lá pode estar. A folha mostra
-  o **resumo dos votos** e mais nada (`_horasResumoHTML`, `_horasAgrupadas`):
-  cada hora com quanta gente a votou, "17:30 (2p)", e quantos ainda não
-  responderam. **Não conclui hora nenhuma** — já concluiu (a do último a poder
+  marcar a mesa — falta saber a que horas cada um lá pode estar. A pergunta é
+  "Podes estar **no Sá** às" — com a saída de Alcochete na mesma folha, um
+  "Podes estar às" solto podia ser lido como a hora de lá estar. Enquanto a
+  mesa está por marcar, a folha mostra o **resumo dos votos** e mais nada
+  (`_horasResumoHTML`, `_horasAgrupadas`, `_jfVotosHTML`): cada hora com quanta
+  gente a votou, "17:30 (2p)", e quantos ainda não responderam. Com a mesa
+  marcada os votos **saem da folha** (ver a mesa, abaixo). **Não conclui hora
+  nenhuma** — já concluiu (a do último a poder
   chegar, `mesaSaEvento`, entretanto apagada) e dizia menos do que os votos:
   com uns a chegar às 16:00 e outros às 19:00 a mesa não se pede a uma hora só,
   e quem a marca lê melhor o mapa. O nome a nome está na tabela dobrada
@@ -276,41 +286,94 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   marcação (`GESTOR_MESA_SA`), o admin ou o substituto do evento — é uma hora
   do grupo, não uma resposta pessoal, daí a permissão apertada
   (`podeMarcarMesa`, e do lado do servidor a `marcar_mesa_hora`, que confirma o
-  mesmo). Na folha, o **resumo** (`_horasResumoHTML`) é só leitura — "Mesa
-  marcada para" ou "Mesa por marcar" — em destaque por cima dos votos, e com
-  ela marcada os votos ficam mais discretos (`.jf-mesa.marcada`): já cumpriram
-  o que tinham a cumprir. Quem não a pode marcar não vê linha nenhuma enquanto
-  a mesa estiver por marcar.
-  **Marcar/mudar é o botão próprio "Marcar mesa"/"Mudar mesa" da folha**
-  (`jogoSheetMarcarMesa`, ver acima), **não** um campo ao lado de "Podes estar
-  às": os dois já foram dois `<input type="time">` na mesma folha, e picar a
-  mesa a mais em vez da própria hora já aconteceu — sem volta atrás, porque
-  gravar avisa o grupo todo. O botão abre um diálogo à parte com os votos por
-  referência, um `Guardar` explícito (nada de gravar `onblur`) e um
-  `Desmarcar` quando já há hora — a `extraText` desse diálogo, sem confundir
-  com o `extraText2` da folha que o abre. **Se a mesa passar a ser de outra
-  pessoa muda-se em dois sítios:** `GESTOR_MESA_SA` no `app.js` (quem recebe a
-  notificação das horas) e a chave `gestor_mesa` em `splitbill.config` (quem
-  pode gravar). Marcar a mesa **notifica o grupo** (`sbNotificarMesa`, tipo
-  `mesa_marcada` na `push-notificar.ts`) — é o inverso do `hora_sa`, que
-  recolhe: este anuncia, e é a resposta que toda a gente esperava. Só na
-  **mudança** para uma hora nova: desmarcar não toca em telemóvel nenhum, e
-  gravar a mesma hora outra vez também não. Sem a migração, `MESA_HORA_COL=false`
-  e a folha volta a mostrar só o resumo dos votos (sem o botão). O formato
-  `HH:MM` é validado nos **dois** lados: é o único texto escolhido pelo
-  utilizador que chega ao corpo de uma notificação.
+  mesmo). Na folha, o **resumo** (`_horasResumoHTML`) é só leitura: a mesa é
+  uma linha "🍽️ **Mesa marcada no Sá** · 20:30", por baixo da da saída de
+  Alcochete (ver a seguir) e em destaque por cima dos votos. **Nunca uma hora
+  solta:** já foi "Mesa marcada para 20:30" e houve quem perguntasse de que
+  era a hora — com duas horas do grupo na mesma folha, cada uma diz sempre o
+  seu nome (`_jfHorarioHTML`). Com a mesa marcada os votos **saem da folha**:
+  já cumpriram o que tinham a cumprir, e o lugar deles é o da hora de saída
+  (continuam no diálogo e, nome a nome, na tabela dobrada). Por marcar, só
+  quem a pode pôr vê a linha ("Mesa no Sá · por marcar"; sem nenhuma das duas
+  horas, um lembrete só, "Saída e mesa · por marcar").
+  **Marcar/mudar é o botão próprio "Marcar horas"/"Mudar horas" da folha**
+  (`jogoSheetHorarios`, ver acima), **não** um campo ao lado de "Podes estar
+  no Sá às": os dois já foram dois `<input type="time">` na mesma folha, e
+  picar a mesa a mais em vez da própria hora já aconteceu — sem volta atrás,
+  porque gravar avisa o grupo todo. O botão abre um diálogo à parte ("Horas do
+  jogo", com a hora do jogo em cima) com a saída, a mesa, o nº de pessoas e os
+  votos por referência, e um `Guardar` explícito (nada de gravar `onblur`).
+  Desmarcar é o **✕** de cada hora (`jfHoraLimpar`) — era um botão
+  `Desmarcar` do diálogo, que com duas horas não dizia qual; o ✕ só se esconde
+  com `visibility`, para os campos não saltarem. Quem grava é a
+  `marcarHorarios(id, novo)`, com **só o que mudou** em `novo`. **Se a mesa
+  passar a ser de outra pessoa muda-se em dois sítios:** `GESTOR_MESA_SA` no
+  `app.js` (quem recebe a notificação das horas) e a chave `gestor_mesa` em
+  `splitbill.config` (quem pode gravar — a mesa e a saída). Marcar a mesa
+  **notifica o grupo** (`sbNotificarMesa`, tipo `mesa_marcada` na
+  `push-notificar.ts`) — é o inverso do `hora_sa`, que recolhe: este anuncia,
+  e é a resposta que toda a gente esperava. Só na **mudança** para uma hora
+  nova: desmarcar não toca em telemóvel nenhum, e gravar a mesma hora outra
+  vez (ou só o nº de pessoas) também não. Sem a migração,
+  `MESA_HORA_COL=false` e a folha volta a mostrar só o resumo dos votos. O
+  formato `HH:MM` é validado nos **dois** lados: as horas são o único texto
+  escolhido pelo utilizador que chega ao corpo de uma notificação.
 - **O nº de pessoas da mesa** (`db/mesa-pessoas.sql`, coluna
   `eventos.mesa_pessoas`, inteiro 1–99, **opcional** — nem sempre se sabe ao
   telefone): irmã da hora, gravada pela MESMA `marcar_mesa_hora` (agora com um
-  terceiro parâmetro, `p_pessoas`) e no MESMO diálogo "Marcar mesa" — não faria
-  sentido dois sítios para uma decisão tomada num só telefonema. Desmarcar a
-  mesa (`p_hora` a `NULL`) limpa o nº de pessoas com ela — uma mesa por marcar
-  não tem gente combinada para lado nenhum (`mesaPessoasEvento`). No resumo da
-  folha aparece por baixo da hora (`.jf-mesa-pax`) só quando há valor; a
-  notificação (`pessoasMesa` no corpo do pedido a `push-notificar.ts`, **nunca**
-  a chave `pessoas`, que já é a lista de destinatários do push) só o menciona
-  quando é um inteiro válido — sem ele a frase fica igual à de antes. Sem a
-  migração, `MESA_PESSOAS_COL=false` e o campo esconde-se, ficando só a hora.
+  terceiro parâmetro, `p_pessoas`) e no MESMO diálogo "Marcar horas" — não
+  faria sentido dois sítios para uma decisão tomada num só telefonema.
+  Desmarcar a mesa (`p_hora` a `NULL`) limpa o nº de pessoas com ela — uma mesa
+  por marcar não tem gente combinada para lado nenhum (`mesaPessoasEvento`). No
+  resumo da folha aparece por baixo de "Mesa marcada no Sá" (`.jf-hor-sub`) só
+  quando há valor; a notificação (`pessoasMesa` no corpo do pedido a
+  `push-notificar.ts`, **nunca** a chave `pessoas`, que já é a lista de
+  destinatários do push) só o menciona quando é um inteiro válido — sem ele a
+  frase fica igual à de antes. Sem a migração, `MESA_PESSOAS_COL=false` e o
+  campo esconde-se, ficando só a hora.
+- **A hora de saída de Alcochete** (`db/saida-hora.sql`, coluna
+  `eventos.saida_hora`, texto `HH:MM`): no dia de jogo o grupo sai junto de
+  Alcochete, e essa hora andava combinada por fora da app. É a **outra hora do
+  grupo**, irmã da da mesa: a mesma gente a põe (`_podeOrganizarDia` — o
+  admin, o substituto do evento ou o `gestor_mesa`; `podeMarcarSaida`), no
+  mesmo diálogo, e do lado do servidor a `marcar_saida_hora` (SECURITY DEFINER)
+  confirma o mesmo. É função à parte e não um quarto parâmetro da
+  `marcar_mesa_hora` porque é outra decisão — a mesa combina-se ao telefone com
+  o restaurante, a saída no grupo; **se um dia for de outra pessoa**, separa-se
+  lá com uma chave nova em `splitbill.config`. Na folha é a **primeira linha**
+  do resumo, pela ordem do dia: "🚗 Saída de Alcochete · 17:15", e os dois
+  círculos ligam-se por um ponteado vertical (`.jf-hors::before`) — o caminho
+  de Alcochete ao Sá, sem custar altura nenhuma (um separador entre as linhas
+  custava, e a folha tem de caber num ecrã). Marcá-la **notifica o grupo**
+  (`sbNotificarHorarios`, tipo `saida_marcada`), e quando a mesa mudou no
+  mesmo Guardar vai **no mesmo aviso** (`horaMesa`, `pessoasMesa`): um toque
+  por gesto, não dois. Só a mesa continua a ser o `mesa_marcada` de sempre.
+  Como `saida_marcada` é um tipo novo, só se manda depois de a função no ar
+  dizer que o conhece (`_pushConhece`, ver `push-notificar.ts` lá em cima):
+  sem o deploy, a saída grava-se e vê-se, mas não avisa ninguém — e a mesa,
+  se mudou, avisa como sempre. Sem a migração, `SAIDA_HORA_COL=false`: a linha
+  não aparece, o diálogo fica só com a mesa e o botão volta a "Marcar mesa".
+- **Quem leva carro — os condutores** (`db/leva-carro.sql`, coluna
+  `eventos.leva_carro`, jsonb `{"Nome": true}`): a saída dizia a que horas se
+  sai de Alcochete, mas não em que carros. Cada um responde por si num botão
+  **"🚗 Levo carro"** que liga e desliga, **por baixo de "Vais ao jogo?"** e
+  só a quem vai (`_jfLinha` com `extra`, `.jf-q-extra`/`.jf-carro`) — não uma
+  linha sua, que a folha tem de caber num ecrã. A linha da saída passa a dizer
+  **"2 carros: Barrona e Diogo"** (`_carrosTxt`, por ordem alfabética — o jsonb
+  não guarda a ordem das respostas), e havendo carros aparece a toda a gente
+  mesmo com a hora "por definir"; na tabela dobrada quem conduz leva **🚗** em
+  vez do ✓ na coluna do jogo, e o diálogo "Marcar horas" mostra os carros por
+  baixo da saída, para quem acerta a hora. É a **gamebox ao contrário**: só
+  conta para quem VAI ao jogo (`levaCarroPessoa`), quem passa a não ir perde-o
+  (`marcarPresencaJogo`, que só manda a coluna no PATCH quando mudou, para não
+  apagar o carro que outro acabou de gravar), e o silêncio não leva carro — só
+  o sim se guarda, e um "não levo" explícito não dizia nada a ninguém. **Não
+  notifica** ninguém: os carros vêem-se na folha. Mesmo padrão de permissões:
+  PATCH para quem edita o evento, `marcar_carro` (`sbMarcarCarro`) SECURITY
+  DEFINER para os outros, que volta a recusar no servidor o carro a quem disse
+  que não vai ao jogo. Só existe **com a saída** (`carrosAtivos()` =
+  `LEVA_CARRO_COL && SAIDA_HORA_COL`): sem uma das duas migrações o botão não
+  aparece.
 - O cartão do jogo por abrir tem cor própria (`.sbi-fut`, dourado/creme). O verde
   (`.sbi-open`) é do jogo em aberto: são coisas diferentes e não se podem
   confundir.

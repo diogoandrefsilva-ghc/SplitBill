@@ -683,27 +683,84 @@ html,body{touch-action:pan-x pan-y}
             border-radius: 8px; padding: 6px 10px;
         }
         .jf-chip-hora.on { color: #0E5C3F; background: #E2EFE8; border-color: #CBE1D5; }
+        /* "Levo carro": por baixo de "Vais ao jogo?", só a quem vai — e não uma
+           linha sua, que a folha tem de caber num ecrã. Um botão que liga e
+           desliga (o silêncio não leva carro). Desfaz o button global
+           (maiúsculas, Barlow, verde e o :hover colado do telemóvel), como os
+           outros botões da folha. */
+        .jf-q-extra { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
+        .jf-carro, .jf-carro:hover {
+            background: #fff; border: 1px solid #E6EAE4; border-radius: 20px; color: #7C8782;
+            font-family: inherit; font-size: 11.5px; font-weight: 600; letter-spacing: normal;
+            text-transform: none; padding: 4px 10px; line-height: 1.2; cursor: pointer;
+        }
+        .jf-carro.on, .jf-carro.on:hover { background: #E2EFE8; border-color: #CBE1D5; color: #0E5C3F; }
+        .jf-carro:active { transform: scale(.97); }
 
         .jf-aviso { margin-top: 12px; font-size: 12px; color: #B3402F; line-height: 1.45; }
 
-        /* A mesa. Em cima, a hora a que ficou MARCADA — a que manda, e por isso
-           a maior coisa da caixa; é o campo de quem trata da marcação e texto
-           para todos os outros. Por baixo, o resumo dos votos: cada hora com
-           quanta gente a votou, que é o que ajudou a escolher a de cima e não
-           uma conclusão da app. Com a mesa marcada, os votos ficam mais
-           discretos (.marcada) — já cumpriram o que tinham a cumprir. */
+        /* As horas do grupo e a mesa. Em cima, as horas que MANDAM, pela ordem
+           do dia — a saída de Alcochete e a mesa marcada no Sá —, as maiores
+           coisas da caixa; são o diálogo "Marcar horas" de quem organiza e texto
+           para todos os outros. Por baixo, enquanto a mesa está por marcar, o
+           resumo dos votos: cada hora com quanta gente a votou, que é o que
+           ajuda a escolher a da mesa e não uma conclusão da app. Com a mesa
+           marcada os votos saem da folha — já cumpriram o que tinham a
+           cumprir, e o lugar deles é o da hora de saída. */
         .jf-mesa { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: #E2EFE8; text-align: left; }
         .jf-mesa.vazia { font-size: 12px; color: #5B6661; line-height: 1.45; }
         .jf-mesa-lbl {
             display: block; font-family: var(--mono, monospace); font-size: 9.5px; font-weight: 600;
             letter-spacing: .11em; text-transform: uppercase; color: #4C7A64;
         }
-        .jf-mesa-res { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-        .jf-mesa-res + .jf-mesa-lbl { margin-top: 9px; }
-        .jf-mesa-res strong {
-            font-family: var(--mono, monospace); font-size: 23px; font-weight: 700;
+        /* Uma hora do grupo por linha: o símbolo num círculo, o NOME da hora e
+           a hora em grande à direita — nunca uma hora solta (com a da mesa
+           sozinha, já houve quem perguntasse de que era). Na folha os círculos
+           ligam-se por um ponteado vertical (.jf-hors::before), o caminho de
+           Alcochete ao Sá — sem custar altura nenhuma, que um separador entre
+           linhas custava. Os círculos são opacos para o ponteado passar por
+           trás deles. O diálogo usa o mesmo desenho, com o campo no lugar da
+           hora (e sem o ponteado). */
+        .jf-hors { position: relative; }
+        .jf-hors::before {
+            content: ''; position: absolute; left: 12px; top: 13px; bottom: 13px;
+            border-left: 2px dotted rgba(14,92,63,.32);
+        }
+        .jf-hor { display: flex; align-items: center; gap: 9px; }
+        .jf-hor + .jf-hor { margin-top: 8px; }
+        .jf-hors + .jf-mesa-lbl, .jf-hor + .jf-mesa-lbl { margin-top: 10px; }
+        .jf-hor-ic {
+            position: relative; flex: 0 0 26px; width: 26px; height: 26px; border-radius: 50%; background: #F8FBF9;
+            display: flex; align-items: center; justify-content: center; font-size: 13px; line-height: 1;
+        }
+        .jf-hor-ic:empty { background: none; }
+        .jf-hor-txt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .jf-hor > strong {
+            flex: 0 0 auto; font-family: var(--mono, monospace); font-size: 23px; font-weight: 700;
             color: #0E5C3F; line-height: 1.1;
         }
+        .jf-hor-sub { font-size: 11.5px; color: #4C7A64; line-height: 1.2; }
+        .jf-hor-por { flex: 0 0 auto; font-size: 11.5px; font-style: italic; color: #5B6661; }
+        /* Diálogo: o campo, e à direita o ✕ que o apaga. O ✕ só se esconde a
+           fingir (visibility) para os campos não saltarem de lado quando ele
+           some — e o nº de pessoas guarda o mesmo lugar vazio, para os três
+           campos acabarem na mesma vertical, mais colado à linha da mesa. */
+        .jf-hor-campo { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
+        .jf-hor-x, .jf-hor-x:hover {
+            flex: 0 0 24px; width: 24px; height: 24px; padding: 0; border-radius: 50%;
+            border: 1px solid #CBE1D5; background: #fff; color: #7C8782; font-size: 11px; font-weight: 400;
+            line-height: 1; letter-spacing: normal; cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        .jf-hor-x[hidden] { display: inline-flex; visibility: hidden; }
+        .jf-hor-x:active { transform: scale(.92); color: #B3402F; }
+        .jf-hor + .jf-hor-pax { margin-top: 6px; }
+        /* Num ecrã estreito o campo da hora (mais largo ainda com AM/PM) não
+           deixava lugar ao nome — "Saída de Alcochete" saía cortado. Aí a
+           linha parte: o nome em cima, o campo por baixo, encostado à direita. */
+        .jf-hor-dlg .jf-hor { flex-wrap: wrap; row-gap: 5px; }
+        .jf-hor-dlg .jf-hor-txt { flex: 1 1 90px; min-width: 90px; }
+        .jf-hor-dlg .jf-hor-campo { margin-left: auto; }
         .jf-mesa-input {
             flex: 0 0 auto; width: auto; font-family: var(--mono, monospace); font-size: 17px;
             font-weight: 700; color: #A9B2AC; background: #fff; border: 1px solid #CBE1D5;
@@ -711,9 +768,7 @@ html,body{touch-action:pan-x pan-y}
         }
         .jf-mesa-input.on { color: #0E5C3F; }
         .jf-mesa-input[type="number"] { width: 52px; text-align: right; }
-        .jf-mesa-pax { margin-top: 2px; font-size: 11.5px; color: #4C7A64; }
         .jf-mesa-nada { margin-top: 8px; font-size: 11.5px; color: #5B6661; line-height: 1.4; }
-        .jf-mesa-horas + .jf-mesa-res, .jf-mesa-nada + .jf-mesa-res { margin-top: 9px; }
         .jf-mesa-horas { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
         .jf-mesa-horas span {
             font-family: var(--mono, monospace); font-size: 12px; font-weight: 700; color: #0E5C3F;
@@ -722,9 +777,6 @@ html,body{touch-action:pan-x pan-y}
         .jf-mesa-horas em { font-style: normal; font-weight: 400; color: #5B6661; margin-left: 3px; }
         .jf-mesa-horas .jf-sem-horas {
             font-family: inherit; font-size: 11.5px; font-weight: 400; color: #5B6661; background: rgba(255,255,255,.45);
-        }
-        .jf-mesa.marcada .jf-mesa-horas span {
-            font-size: 11px; font-weight: 600; color: #43705C; background: rgba(255,255,255,.5); padding: 3px 9px;
         }
 
         /* Listas dobráveis (quem vai ao Sá / ao jogo): o resumo é a linha, o
@@ -765,6 +817,7 @@ html,body{touch-action:pan-x pan-y}
         .jf-nao { color: #C9D2CB; }
         .jf-tht { font-family: var(--mono, monospace); font-size: 11.5px; font-weight: 700; color: #0E5C3F; }
         .jf-tht.vazia { color: #C9D2CB; font-weight: 400; }
+        .jf-tcar { font-size: 12px; line-height: 1; }
         .jf-nomes {
             border: 1px solid #E6EAE4; border-top: none; border-radius: 0 0 10px 10px;
             padding: 9px 11px; font-size: 12px; color: #5B6661; line-height: 1.45; text-align: left;
