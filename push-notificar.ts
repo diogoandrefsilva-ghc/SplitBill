@@ -21,8 +21,10 @@
 //                          dizer box livre (pode já estar dada, ou ficar
 //                          livre só até certa hora) (fire-and-forget)
 //   'hora_sa'              marcarHoraSa() → só quem trata da marcação da mesa
-//                          no Sá, com a hora a partir da qual a pessoa pode lá
-//                          estar (fire-and-forget)
+//                          no Sá, com a hora a que a pessoa pode SAIR (o nome
+//                          do tipo ficou de quando era "a que horas podes estar
+//                          no Sá"; a mesa é agora a saída mais meia hora)
+//                          (fire-and-forget)
 //   'mesa_marcada'         marcarMesaHora() → o grupo todo menos quem a marcou:
 //                          a mesa ficou marcada a uma hora, e isso é o que
 //                          toda a gente estava à espera de saber. É o inverso
@@ -205,8 +207,8 @@ function montarMensagem(
   }
   if (tipo === "hora_sa") {
     return {
-      title: "🍽️ Hora para o Sá",
-      body: `${quem || "Alguém"} pode estar no Sá a partir das ${hora}${suf}`,
+      title: "🚗 Hora de saída",
+      body: `${quem || "Alguém"} pode sair a partir das ${hora}${suf}`,
     };
   }
   if (tipo === "mesa_marcada") {
