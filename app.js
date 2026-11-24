@@ -6288,6 +6288,13 @@ function jogosDoHistoricoLista() {
    `marcar_gamebox` (ver sbMarcarPresenca, sbMarcarPresencaJogo,
    sbMarcarHoraSa, sbMarcarGamebox).
 
+   Colado ao "vou" do jogo há ainda o "Levo carro" (`ev.levaCarro`, migração
+   db/leva-carro.sql): os condutores da saída de Alcochete, que a linha da
+   saída conta ("2 carros: Diogo e Barrona"). É um botão por baixo da
+   pergunta e não uma linha sua — a folha tem de caber num ecrã. Mesmo padrão
+   da gamebox, ao contrário: só a quem vai, e quem deixa de ir perde-o
+   (levaCarroPessoa, marcarCarro, `marcar_carro` / sbMarcarCarro).
+
    TRÊS DAS RESPOSTAS SAEM DAQUI EM NOTIFICAÇÃO, porque só servem se chegarem
    antes do dia: uma box disponibilizada avisa o grupo de que há lugar a mais
    (sbNotificarGamebox), uma hora do Sá avisa quem marca a mesa
@@ -6381,6 +6388,45 @@ function tenhoGameboxDisponivel(ev) {
 // Jogos mostra e que a folha resume.
 function gameboxDisponiveis(ev) {
     return Object.keys((ev && ev.gamebox) || {}).filter(n => gameboxDisponivelPessoa(ev, n));
+}
+
+/* O carro: quem vai ao jogo diz se LEVA CARRO na saída de Alcochete
+   (`ev.levaCarro`, migração db/leva-carro.sql). São os condutores que a linha
+   da saída mostra — "2 carros: Diogo e Barrona". As regras espelham as da
+   gamebox, ao contrário:
+   1) só conta para quem VAI ao jogo — quem passa a não ir perde o carro
+      (marcarPresencaJogo), e a folha só oferece o botão a quem vai;
+   2) o silêncio não leva carro: só o sim se guarda, e deixar de levar apaga
+      a chave. Um "não levo" explícito não dizia nada a ninguém.
+   Sem a hora de saída (SAIDA_HORA_COL) não há carros: é dela que partem. */
+function carrosAtivos() { return LEVA_CARRO_COL && SAIDA_HORA_COL; }
+function levaCarroPessoa(ev, nome) {
+    if (!carrosAtivos()) return false;
+    return (ev.levaCarro || {})[nome] === true && vaiAoJogoPessoa(ev, nome);
+}
+// Levo EU carro? true/false, ou null se a conta não tem nome associado.
+function levoCarro(ev) {
+    const meus = meusAmigos();
+    if (!meus.length) return null;
+    return meus.some(m => levaCarroPessoa(ev, m));
+}
+// Os condutores deste jogo, por ordem alfabética — o jsonb não guarda a ordem
+// por que foram respondendo.
+function condutoresEvento(ev) {
+    return Object.keys((ev && ev.levaCarro) || {})
+        .filter(n => levaCarroPessoa(ev, n))
+        .sort((a, b) => a.localeCompare(b, 'pt'));
+}
+// "Diogo" · "Diogo e Barrona" · "Barrona, Diogo e Nuno".
+function _nomesPt(nomes) {
+    return nomes.length < 2 ? (nomes[0] || '') : nomes.slice(0, -1).join(', ') + ' e ' + nomes[nomes.length - 1];
+}
+// O que a saída diz dos carros, já escapado: "2 carros: Diogo e Barrona". ''
+// sem nenhum — um "0 carros" a cada jogo era ruído, como o "0 box".
+function _carrosTxt(ev) {
+    if (!carrosAtivos()) return '';
+    const c = condutoresEvento(ev);
+    return c.length ? c.length + (c.length === 1 ? ' carro: ' : ' carros: ') + _calEsc(_nomesPt(c)) : '';
 }
 
 // A que horas ESTE NOME pode estar no Sá? '' = ainda não respondeu. Só conta
@@ -6568,21 +6614,36 @@ async function marcarPresencaJogo(id, vai) {
         meus.forEach(m => { delete g[m]; });
         ev.gamebox = g;
     }
+    // O inverso para o carro: quem passa a NÃO ir ao jogo deixa de levar carro
+    // para lá, e a saída deixa de o contar.
+    const antesCarro = Object.assign({}, ev.levaCarro || {});
+    const largaCarro = !vai && meus.some(m => Object.prototype.hasOwnProperty.call(antesCarro, m));
+    if (largaCarro) {
+        const c = Object.assign({}, antesCarro);
+        meus.forEach(m => { delete c[m]; });
+        ev.levaCarro = c;
+    }
     salvarHistoricoLocal();
 
     let ok;
     if (podeEditarEvento(ev)) {
-        try { await sbGuardarEvento(ev, { apenas: ['jogo', 'gamebox'] }); ok = true; } catch (e) { ok = false; }
+        // O carro só vai no PATCH quando mudou: escrever a coluna inteira sem
+        // razão podia apagar o "levo carro" que outro acabou de gravar.
+        const apenas = ['jogo', 'gamebox'].concat(largaCarro ? ['levaCarro'] : []);
+        try { await sbGuardarEvento(ev, { apenas }); ok = true; } catch (e) { ok = false; }
     } else {
         ok = await sbMarcarPresencaJogo(ev.id, vai);
         // A resposta ao jogo e a box vivem em colunas diferentes e a função do
         // servidor só mexe na primeira — sem esta segunda chamada a box ficava
         // anunciada como livre para quem afinal vai ao jogo.
         if (ok && vai && tinhaBox && GAMEBOX_COL) await sbMarcarGamebox(ev.id, null);
+        // Idem para o carro de quem deixou de ir.
+        if (ok && largaCarro && LEVA_CARRO_COL) await sbMarcarCarro(ev.id, false);
     }
     if (!ok) {
         ev.jogo = antes;
         ev.gamebox = antesBox;
+        ev.levaCarro = antesCarro;
         salvarHistoricoLocal();
         return false;
     }
@@ -6628,6 +6689,39 @@ async function marcarGamebox(id, disp) {
     // box não é notícia para ninguém — quem a queria já foi falar com quem a
     // deu.
     if (disp && !antesDisp) sbNotificarGamebox(ev, meus[0] || '');
+    return true;
+}
+
+/* Levo (ou deixo de levar) carro na saída de Alcochete. Só a quem vai ao jogo
+   — a folha só mostra o botão nesse caso, mas confirma-se aqui à mesma (e
+   outra vez no servidor, ver db/leva-carro.sql). NÃO avisa ninguém: os carros
+   vêem-se na folha, e tocar os telemóveis por cada condutor era ruído. */
+async function marcarCarro(id, leva) {
+    const ev = historico.find(e => String(e.id) === String(id));
+    if (!ev || ev.totalFatura) return false;
+    if (!LEVA_CARRO_COL) { mostrarMensagem('⚠️ Falta a coluna eventos.leva_carro — corre db/leva-carro.sql no Supabase', false); return false; }
+    if (!SAIDA_HORA_COL) { mostrarMensagem('⚠️ Falta a coluna eventos.saida_hora — corre db/saida-hora.sql no Supabase', false); return false; }
+    const meus = meusAmigos();
+    if (!meus.length) { mostrarMensagem('⚠️ A tua conta ainda não está associada a nenhum nome — pede ao administrador', false); return false; }
+    if (leva && !vouAoJogoReal(ev)) { mostrarMensagem('⚠️ Diz primeiro que vais ao jogo', false); return false; }
+
+    const antes = Object.assign({}, ev.levaCarro || {});
+    const novo = Object.assign({}, antes);
+    meus.forEach(m => { if (leva) novo[m] = true; else delete novo[m]; });
+    ev.levaCarro = novo;
+    salvarHistoricoLocal();
+
+    let ok;
+    if (podeEditarEvento(ev)) {
+        try { await sbGuardarEvento(ev, { apenas: ['levaCarro'] }); ok = true; } catch (e) { ok = false; }
+    } else {
+        ok = await sbMarcarCarro(ev.id, !!leva);
+    }
+    if (!ok) {
+        ev.levaCarro = antes;
+        salvarHistoricoLocal();
+        return false;
+    }
     return true;
 }
 
@@ -6806,14 +6900,17 @@ function _horasResumoHTML(ev) {
     // Pela ordem do dia: primeiro sai-se de Alcochete, depois é a mesa. Por
     // marcar, só quem as pode pôr vê a linha — aos outros não diz nada.
     const por = t => '<span class="jf-hor-por">' + t + '</span>';
+    // Os carros vão por baixo da saída — é dela que partem. Havendo carros, a
+    // linha aparece a toda a gente, mesmo com a hora ainda por definir.
+    const carros = _carrosTxt(ev);
     let horarios = '';
-    if (!saida && !marcada && podeMarcarSaida(ev) && podeMarcarMesa(ev)) {
+    if (!saida && !marcada && !carros && podeMarcarSaida(ev) && podeMarcarMesa(ev)) {
         // Nada marcado ainda: um lembrete só — duas linhas "por marcar" eram
         // altura gasta a dizer a mesma coisa.
         horarios = _jfHorarioHTML('🕒', 'Saída e mesa', '', '', por('por marcar'));
     } else {
-        if (saida || podeMarcarSaida(ev)) {
-            horarios += _jfHorarioHTML('🚗', 'Saída de Alcochete', saida, '', por('por definir'));
+        if (saida || carros || podeMarcarSaida(ev)) {
+            horarios += _jfHorarioHTML('🚗', 'Saída de Alcochete', saida, carros, por('por definir'));
         }
         if (marcada || podeMarcarMesa(ev)) {
             const pessoas = marcada ? mesaPessoasEvento(ev) : '';
@@ -6879,7 +6976,8 @@ function _jfFoldHTML(qual, resumo, corpo) {
 function _quemVaiLinhas(ev) {
     const noSa = horasSaEvento(ev).map(l => ({
         nome: l.nome, hora: l.hora, sa: true,
-        jogo: vaiAoJogoPessoa(ev, l.nome), box: gameboxDisponivelPessoa(ev, l.nome)
+        jogo: vaiAoJogoPessoa(ev, l.nome), box: gameboxDisponivelPessoa(ev, l.nome),
+        carro: levaCarroPessoa(ev, l.nome)
     }));
     const fora = new Set(Object.keys(ev.jogo || {}).concat(Object.keys(ev.gamebox || {})));
     const outros = Array.from(fora)
@@ -6887,7 +6985,8 @@ function _quemVaiLinhas(ev) {
         .sort((a, b) => a.localeCompare(b, 'pt'))
         .map(nome => ({
             nome, hora: '', sa: false,
-            jogo: vaiAoJogoPessoa(ev, nome), box: gameboxDisponivelPessoa(ev, nome)
+            jogo: vaiAoJogoPessoa(ev, nome), box: gameboxDisponivelPessoa(ev, nome),
+            carro: levaCarroPessoa(ev, nome)
         }));
     return noSa.concat(outros);
 }
@@ -6905,7 +7004,9 @@ function _jfTabelaHTML(linhas) {
             + linhas.map(l => '<div class="jf-tr"><span class="jf-tn">' + _calEsc(l.nome) + '</span>'
                 + _jfSN(l.sa)
                 + (SA_HORA_COL ? '<span class="jf-tht' + (l.hora ? '' : ' vazia') + '">' + (l.hora ? _calEsc(l.hora) : '—') + '</span>' : '')
-                + _jfSN(l.jogo)
+                // Quem vai ao jogo e leva carro: 🚗 em vez do ✓, na mesma
+                // coluna — os condutores sem mais uma coluna na tabela.
+                + (l.carro ? '<span class="jf-sim jf-tcar" title="Leva carro">🚗</span>' : _jfSN(l.jogo))
                 + (GAMEBOX_COL ? _jfSN(l.box) : '') + '</div>').join('');
     return '<div class="jf-tab' + (SA_HORA_COL ? '' : ' sem-horas') + (GAMEBOX_COL ? ' com-box' : '') + '">' + h + '</div>';
 }
@@ -6924,7 +7025,9 @@ function _quemVaiHTML(ev) {
 }
 
 // Uma linha do cartão de respostas: pergunta à esquerda, resposta à direita.
-function _jfLinha(pergunta, controlo) {
+// `extra` vai por baixo da pergunta (o "Levo carro" da linha do jogo).
+function _jfLinha(pergunta, controlo, extra) {
+    if (extra) return '<div class="jf-row"><span class="jf-q jf-q-extra"><span>' + pergunta + '</span>' + extra + '</span>' + controlo + '</div>';
     return '<div class="jf-row"><span class="jf-q">' + pergunta + '</span>' + controlo + '</div>';
 }
 // Botão duplo Vou/Não vou. `vai` pode ser null (conta sem nome associado), e
@@ -6980,7 +7083,14 @@ function _jogoSheetHTML(ev) {
                 + ' value="' + _calEsc(minha) + '" onblur="jogoSheetHoraSa(' + ev.id + ')">');
         }
         const vouJogo = vouAoJogoReal(ev);
-        h += _jfLinha('Vais ao jogo?', _jfSeg(ev.id, 'jogoSheetPresencaJogo', vouJogo));
+        // "Levo carro" é um "vou, e levo carro": só a quem vai ao jogo, e por
+        // baixo desta pergunta em vez de numa linha sua — a folha tem de caber
+        // num ecrã. O mesmo toque liga e desliga (jogoSheetCarro).
+        const levo = vouJogo && carrosAtivos() ? levoCarro(ev) : null;
+        const carro = levo === null ? ''
+            : '<button type="button" class="jf-carro' + (levo ? ' on' : '') + '" aria-pressed="' + (levo ? 'true' : 'false') + '"'
+              + ' onclick="jogoSheetCarro(' + ev.id + ')">🚗 Levo carro' + (levo ? ' ✓' : '') + '</button>';
+        h += _jfLinha('Vais ao jogo?', _jfSeg(ev.id, 'jogoSheetPresencaJogo', vouJogo), carro);
         // A box só se pergunta a quem já disse que NÃO vai — quem lá vai
         // ocupa a própria. É esta resposta, e já não o "não vou", que avisa o
         // grupo de que pode haver lugar (ver marcarGamebox).
@@ -7022,6 +7132,17 @@ async function jogoSheetPresencaJogo(id, vai) {
     const box = document.getElementById('modal-msg');
     if (ev && box) box.innerHTML = _jogoSheetHTML(ev);
     try { if (typeof renderInicio === 'function') renderInicio(); } catch (e) {}
+}
+
+// Irmã das anteriores para o carro: o mesmo botão liga e desliga. Redesenha a
+// folha — a linha da saída conta os carros, e a tabela marca quem conduz.
+async function jogoSheetCarro(id) {
+    const ev = historico.find(e => String(e.id) === String(id));
+    if (!ev) return;
+    const ok = await marcarCarro(id, !levoCarro(ev));
+    if (!ok) return;
+    const box = document.getElementById('modal-msg');
+    if (box) box.innerHTML = _jogoSheetHTML(ev);
 }
 
 // Irmã das anteriores para a gamebox. Redesenha a folha (a resposta muda a
@@ -7083,7 +7204,8 @@ async function jogoSheetHorarios(id) {
 
     let msg = ficha.hora ? '<div class="jf-sub">' + _calEsc(ev.data || '') + ' · jogo às ' + _calEsc(ficha.hora) + '</div>' : '';
     msg += '<div class="jf-mesa jf-hor-dlg">';
-    if (comSaida) msg += _jfHorarioHTML('🚗', 'Saída de Alcochete', '', '', campo('jf-saida-dialog-input', saida));
+    // Os carros por baixo da saída: quem acerta a hora vê com quem pode contar.
+    if (comSaida) msg += _jfHorarioHTML('🚗', 'Saída de Alcochete', '', _carrosTxt(ev), campo('jf-saida-dialog-input', saida));
     if (comMesa) {
         msg += _jfHorarioHTML('🍽️', 'Mesa no Sá', '', '', campo('jf-mesa-dialog-input', marcada));
         // O nº de pessoas é da mesa: vai colado à linha dela, e com o lugar do
@@ -8193,6 +8315,14 @@ let MESA_PESSOAS_COL = true;
 let SAIDA_HORA_COL = true;
 let SAIDA_HORA_RPC = true;
 
+/* Quem LEVA CARRO na saída de Alcochete (`eventos.leva_carro`, migração
+   db/leva-carro.sql) — os condutores; cada um responde por si, colado ao "vou"
+   do jogo. Só existe com a saída (SAIDA_HORA_COL): é dela que os carros
+   partem. Sem a coluna, LEVA_CARRO_COL fica false e o "Levo carro" não
+   aparece. `CARRO_RPC` é a irmã para `marcar_carro`. */
+let LEVA_CARRO_COL = true;
+let CARRO_RPC = true;
+
 /* Pedidos de pagamento por confirmar (`pagamentos.declarado_por`, migração
    db/pagamentos-pendentes.sql) — permite a um utilizador declarar que já pagou
    uma dívida (pendente ou prescrita); fica tipo='pendente' até o admin
@@ -8268,6 +8398,7 @@ function eventoDaBD(ev, ordensDoEv, ofertasDoEv, loc) {
         mesaHora: MESA_HORA_COL ? (ev.mesa_hora || '') : (_loc.mesaHora || ''),
         mesaPessoas: MESA_PESSOAS_COL ? (ev.mesa_pessoas || null) : (_loc.mesaPessoas || null),
         saidaHora: SAIDA_HORA_COL ? (ev.saida_hora || '') : (_loc.saidaHora || ''),
+        levaCarro: (LEVA_CARRO_COL && ev.leva_carro && typeof ev.leva_carro === 'object') ? ev.leva_carro : (_temObj(_loc.levaCarro) || {}),
         // as dívidas recalculam-se a partir dos pagamentos
         dividas: {},
         fatura: (FATURA_COL && ev.fatura) ? ev.fatura : (_loc.fatura || null),
@@ -8300,6 +8431,7 @@ async function sbCarregarDados() {
             MESA_HORA_COL = tem('mesa_hora');
             MESA_PESSOAS_COL = tem('mesa_pessoas');
             SAIDA_HORA_COL = tem('saida_hora');
+            LEVA_CARRO_COL = tem('leva_carro');
             JOGO_ID_COL = tem('jogo_id');
         }
         if (!JOGO_ID_COL) console.warn('[SplitBill] coluna eventos.jogo_id ausente — corre db/jogo-id.sql para os jogos virem sozinhos do calendário do Goals');
@@ -8310,6 +8442,7 @@ async function sbCarregarDados() {
         if (!MESA_HORA_COL) console.warn('[SplitBill] coluna eventos.mesa_hora ausente — corre db/mesa-hora.sql para o gestor da mesa poder pôr a hora a que a marcou');
         if (!MESA_PESSOAS_COL) console.warn('[SplitBill] coluna eventos.mesa_pessoas ausente — corre db/mesa-pessoas.sql para guardar quantas pessoas ficam na mesa');
         if (!SAIDA_HORA_COL) console.warn('[SplitBill] coluna eventos.saida_hora ausente — corre db/saida-hora.sql para pôr a hora de saída de Alcochete');
+        if (!LEVA_CARRO_COL) console.warn('[SplitBill] coluna eventos.leva_carro ausente — corre db/leva-carro.sql para cada um poder dizer que leva carro');
         if (!FATURA_COL) console.warn('[SplitBill] coluna eventos.fatura ausente — corre db/fatura-detalhe.sql para guardar o detalhe da fatura no servidor');
         if (!AMIGOS_COL || !MENU_COL) console.warn('[SplitBill] colunas eventos.amigos/menu ausentes — corre db/convocados-menu.sql para os convocados e o menu do evento viajarem entre dispositivos');
 
@@ -8497,7 +8630,7 @@ function _evAssinatura(ev) {
     if (!ev) return '';
     return JSON.stringify([ev.ordens, ev.ofertas, ev.totalFatura, ev.pagador, ev.amigos,
         ev.menu, ev.fatura, ev.aberto, ev.jogo, ev.gamebox, ev.saHora, ev.mesaHora,
-        ev.mesaPessoas, ev.saidaHora, ev.substituto, ev.descricao, ev.data]);
+        ev.mesaPessoas, ev.saidaHora, ev.levaCarro, ev.substituto, ev.descricao, ev.data]);
 }
 
 // Relê do servidor SÓ o evento que está no ecrã. Devolve true se mudou alguma
@@ -8780,6 +8913,32 @@ async function sbMarcarSaidaHora(eventoId, hora) {
     }
 }
 
+/* Irmã da sbMarcarGamebox para o CARRO (db/leva-carro.sql): só mexe nos nomes
+   desta conta, e o servidor volta a confirmar que quem disse que não vai ao
+   jogo não leva carro. `leva` a false apaga a resposta. */
+async function sbMarcarCarro(eventoId, leva) {
+    if (!_sbSession) return false;
+    if (!CARRO_RPC) { mostrarMensagem('⚠️ Falta a função marcar_carro — corre db/leva-carro.sql no Supabase', false); return false; }
+    try {
+        const r = await sbFetch(`${SB_URL}/rest/v1/rpc/marcar_carro`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Accept': 'application/json' }),
+            body: JSON.stringify({ p_evento_id: eventoId, p_leva: !!leva })
+        });
+        if (r.status === 404) {
+            CARRO_RPC = false;
+            mostrarMensagem('⚠️ Falta a função marcar_carro — corre db/leva-carro.sql no Supabase', false);
+            return false;
+        }
+        await sbOk(r, 'marcar o carro');
+        return true;
+    } catch (e) {
+        console.error('Erro ao marcar o carro:', e);
+        mostrarMensagem('⚠️ Não gravado [' + (e.ctx || 'rede') + ']: ' + sbErroLegivel(e), false);
+        return false;
+    }
+}
+
 // Sincroniza uma tabela-pai (ordens/ofertas) + a tabela-filho respetiva
 // (ordem_amigos/oferta_para) com o padrão UPSERT + PRUNE: insere/atualiza tudo
 // PRIMEIRO e só DEPOIS remove o que sobra. Nunca apaga linhas-pai antes de a
@@ -8864,7 +9023,8 @@ async function sbGuardarEvento(ev, opts) {
                 mesaHora: () => { if (MESA_HORA_COL) campos.mesa_hora = mesaHoraEvento(ev) || null; },
                 mesaPessoas: () => { if (MESA_PESSOAS_COL) campos.mesa_pessoas = mesaPessoasEvento(ev) || null; },
                 // Mesma razão da mesaHora: NULL é "por definir", '' o CHECK recusava.
-                saidaHora: () => { if (SAIDA_HORA_COL) campos.saida_hora = saidaHoraEvento(ev) || null; }
+                saidaHora: () => { if (SAIDA_HORA_COL) campos.saida_hora = saidaHoraEvento(ev) || null; },
+                levaCarro: () => { if (LEVA_CARRO_COL) campos.leva_carro = ev.levaCarro || {}; }
             };
             apenas.forEach(campo => { if (camposDisponiveis[campo]) camposDisponiveis[campo](); });
         } else {
@@ -8880,6 +9040,7 @@ async function sbGuardarEvento(ev, opts) {
             if (MESA_HORA_COL) campos.mesa_hora = mesaHoraEvento(ev) || null;
             if (MESA_PESSOAS_COL) campos.mesa_pessoas = mesaPessoasEvento(ev) || null;
             if (SAIDA_HORA_COL) campos.saida_hora = saidaHoraEvento(ev) || null;
+            if (LEVA_CARRO_COL) campos.leva_carro = ev.levaCarro || {};
             // `aberto` só vai se souber o valor: um evento anterior à migração tem
             // isto a undefined e escrever false punha-o de volta em agenda.
             if (ABERTO_COL && ev.aberto != null) campos.aberto = !!ev.aberto;

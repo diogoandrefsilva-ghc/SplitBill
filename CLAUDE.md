@@ -194,8 +194,8 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   duas linhas ("Horários") empurrava o "Abrir jogo" para fora de um ecrã de
   375px.
 - **A folha tem de caber num ecrã** (`_jogoSheetHTML`): quem a abre vem
-  responder e ver a que horas se sai de Alcochete e a que horas é a mesa, e
-  isso não pode estar atrás de scroll.
+  responder e ver a que horas se sai de Alcochete (e em que carros) e a que
+  horas é a mesa, e isso não pode estar atrás de scroll.
   Daí o desenho actual — a data numa linha de leitura com um lápis
   (`jogoSheetMostrarData`) em vez de um campo sempre à vista, as perguntas
   como linhas de um cartão (`_jfLinha`/`_jfSeg`) em vez de títulos com
@@ -353,6 +353,27 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   sem o deploy, a saída grava-se e vê-se, mas não avisa ninguém — e a mesa,
   se mudou, avisa como sempre. Sem a migração, `SAIDA_HORA_COL=false`: a linha
   não aparece, o diálogo fica só com a mesa e o botão volta a "Marcar mesa".
+- **Quem leva carro — os condutores** (`db/leva-carro.sql`, coluna
+  `eventos.leva_carro`, jsonb `{"Nome": true}`): a saída dizia a que horas se
+  sai de Alcochete, mas não em que carros. Cada um responde por si num botão
+  **"🚗 Levo carro"** que liga e desliga, **por baixo de "Vais ao jogo?"** e
+  só a quem vai (`_jfLinha` com `extra`, `.jf-q-extra`/`.jf-carro`) — não uma
+  linha sua, que a folha tem de caber num ecrã. A linha da saída passa a dizer
+  **"2 carros: Barrona e Diogo"** (`_carrosTxt`, por ordem alfabética — o jsonb
+  não guarda a ordem das respostas), e havendo carros aparece a toda a gente
+  mesmo com a hora "por definir"; na tabela dobrada quem conduz leva **🚗** em
+  vez do ✓ na coluna do jogo, e o diálogo "Marcar horas" mostra os carros por
+  baixo da saída, para quem acerta a hora. É a **gamebox ao contrário**: só
+  conta para quem VAI ao jogo (`levaCarroPessoa`), quem passa a não ir perde-o
+  (`marcarPresencaJogo`, que só manda a coluna no PATCH quando mudou, para não
+  apagar o carro que outro acabou de gravar), e o silêncio não leva carro — só
+  o sim se guarda, e um "não levo" explícito não dizia nada a ninguém. **Não
+  notifica** ninguém: os carros vêem-se na folha. Mesmo padrão de permissões:
+  PATCH para quem edita o evento, `marcar_carro` (`sbMarcarCarro`) SECURITY
+  DEFINER para os outros, que volta a recusar no servidor o carro a quem disse
+  que não vai ao jogo. Só existe **com a saída** (`carrosAtivos()` =
+  `LEVA_CARRO_COL && SAIDA_HORA_COL`): sem uma das duas migrações o botão não
+  aparece.
 - O cartão do jogo por abrir tem cor própria (`.sbi-fut`, dourado/creme). O verde
   (`.sbi-open`) é do jogo em aberto: são coisas diferentes e não se podem
   confundir.
