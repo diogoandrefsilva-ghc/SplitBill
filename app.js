@@ -5931,15 +5931,14 @@ async function _jogoCriarEvento(j, id, amigos, menu) {
    duplicar o mesmo jogo. */
 async function sincronizarJogosDoGoals() {
     if (!isAdmin() || !JOGO_ID_COL || !GOALS_JOGOS.length) return null;
-    // Os jogos marcados "Sem evento" nunca voltam a ser criados. A lista pode
-    // ainda não ter chegado (esta função arranca sem await): sem ela, criava-se
-    // outra vez o evento que o admin acabou de apagar — por isso lê-se aqui.
+    // Os jogos marcados "Sem evento" TAMBÉM têm evento (já não se apaga: é
+    // nele que vivem quem vai ao jogo e os carros), por isso criam-se como os
+    // outros — e nascem já "sem Sá", porque a marca é pelo jogo_id. Lê-se a
+    // lista antes, para o ecrã não os mostrar com Sá no instante entre os dois.
     if (JOGOS_SEM_EVENTO === null) await carregarJogosSemEvento();
-    var semEv = JOGOS_SEM_EVENTO || [];
     var hoje = _calHoje();
     var jogos = GOALS_JOGOS.filter(function (j) {
-        return _calEmAlvalade(j) && String(j.data || '') >= hoje
-            && semEv.indexOf(String(j.id)) < 0;
+        return _calEmAlvalade(j) && String(j.data || '') >= hoje;
     });
     if (!jogos.length) return null;
 
@@ -6026,12 +6025,31 @@ function _jogoSincResumo(r) {
 
 /* ── JOGOS SEM EVENTO (splitbill.config, chave `jogos_sem_evento`) ────────
    Nem todos os jogos do calendário acabam no Sá (o grupo não foi). O admin
-   marca-o "Sem evento": o evento por abrir apaga-se e o id do jogo do Goals
-   fica aqui, para a sincronização não o criar outra vez. Mesma tabela genérica
-   dos convocados — sem migração nova. `null` = ainda não lida (ou a tabela
-   não existe). Só se marca um jogo por abrir e sem consumo: apagar um evento
-   levava com ele as presenças e as ordens. */
+   marca-o "Sem evento" e o id do jogo do Goals fica aqui. Mesma tabela
+   genérica dos convocados — sem migração nova. `null` = ainda não lida (ou a
+   tabela não existe). Só se marca um jogo por abrir e sem consumo.
+
+   O EVENTO JÁ NÃO SE APAGA: fica, marcado "sem Sá" (eventoSemSa). Apagá-lo
+   levava com ele quem ia ao jogo e em que carro — e isso interessa na mesma,
+   haja Sá ou não. Um jogo sem Sá não se abre (não há conta), não entra no
+   "Em aberto" nem trava a abertura do seguinte (jogoAberto, jogosPorAbrir), a
+   página do jogo esconde tudo o que é do Sá (a pergunta, a hora de sair, a
+   mesa) e fica com o jogo, os carros e a box. Depois do dia vai para o
+   Histórico, numa ficha apagada que abre essa página. Os marcados antes desta
+   mudança ficaram sem evento (foi apagado); os que ainda estão por jogar
+   voltam a nascer pela sincronização, já marcados. */
 let JOGOS_SEM_EVENTO = null;   // ids (string) de goals.jogos
+
+// Este evento é de um jogo marcado "sem Sá"? (Só os do calendário: é pelo
+// jogo_id que a marca se guarda.)
+function eventoSemSa(ev) {
+    return !!(ev && ev.jogoId != null && JOGOS_SEM_EVENTO
+              && JOGOS_SEM_EVENTO.indexOf(String(ev.jogoId)) >= 0);
+}
+// O dia do jogo já passou (hoje ainda não conta como passado)?
+function jogoJaPassou(ev) {
+    return !!(ev && (_parsePgtoData(ev.data) || 0) && _parsePgtoData(ev.data) < _hojeInicio());
+}
 
 async function carregarJogosSemEvento() {
     try {
@@ -6061,92 +6079,99 @@ async function _guardarJogosSemEvento(ids) {
 // Pode marcar: admin, jogo do calendário (tem jogo_id), por abrir e sem consumo.
 function podeMarcarSemEvento(ev) {
     return !!(ev && isAdmin() && CONFIG_TABELA && JOGO_ID_COL && ev.jogoId != null
-              && !ev.totalFatura && !jogoAberto(ev)
+              && !eventoSemSa(ev) && !ev.totalFatura && !jogoAberto(ev)
               && !(ev.estado && ev.estado.ordens && ev.estado.ordens.length)
               && !(ev.ordens && ev.ordens.length));
 }
 
 async function marcarSemEvento(id) {
     const ev = historico.find(e => String(e.id) === String(id));
-    if (!podeMarcarSemEvento(ev)) return;
+    if (!podeMarcarSemEvento(ev)) return false;
     const ok = await mostrarModal({
         icon: '🚫',
-        title: 'Jogo sem evento?',
-        msg: '<strong>' + _calEsc(ev.descricao || 'Jogo') + '</strong> (' + _calEsc(ev.data || '—') + ') deixa de aparecer nos Próximos Jogos e o evento é apagado, com as presenças já marcadas.<br><br>Fica no Histórico, apagado, e é tocando nele que o podes repor.',
-        confirmText: 'Sem evento',
+        title: 'Não vamos ao Sá?',
+        msg: '<strong>' + _calEsc(ev.descricao || 'Jogo') + '</strong> (' + _calEsc(ev.data || '—') + ') fica sem Sá: deixa de se perguntar quem vai ao Sá, a hora de sair e a mesa, e o jogo não se abre para conta.<br><br>Quem vai ao jogo, os carros e as boleias ficam como estão — e depois do dia vê-se no Histórico.',
+        confirmText: 'Sem Sá',
         cancelText: 'Cancelar',
         danger: true
     });
-    if (!ok) return;
+    if (!ok) return false;
     try {
         if (JOGOS_SEM_EVENTO === null) await carregarJogosSemEvento();
         const ids = (JOGOS_SEM_EVENTO || []).slice();
         const jid = String(ev.jogoId);
         if (ids.indexOf(jid) < 0) ids.push(jid);
-        // Primeiro a marca, depois o apagar: se o apagar falhar, o evento fica
-        // e a marca não faz mal; ao contrário, a sincronização recriava-o.
         await _guardarJogosSemEvento(ids);
-    } catch (e) { mostrarMensagem('⚠️ Não gravado: ' + sbErroLegivel(e), false); return; }
-    if (!await sbApagarEvento(ev.id)) return;
-    historico = historico.filter(e => String(e.id) !== String(ev.id));
-    salvarHistoricoLocal();
-    if (String(eventoAtualId) === String(ev.id)) {
-        if (historico.length > 0) carregarEvento(eventoPorDefeito()); else limparEstadoEvento();
-    }
+    } catch (e) { mostrarMensagem('⚠️ Não gravado: ' + sbErroLegivel(e), false); return false; }
     try { renderHistoricoDropdown(); } catch (e) {}
     try { renderInicio(); } catch (e) {}
-    mostrarMensagem('✓ Jogo marcado como sem evento', true);
+    mostrarMensagem('✓ Jogo sem Sá — ficam o jogo e os carros', true);
+    return true;
 }
 
-// Repor: tira a marca e o evento volta. Num jogo por acontecer quem o cria é a
-// sincronização, como a todos os outros; num jogo que JÁ PASSOU a sincronização
-// não toca (nunca cria eventos com data velha), por isso cria-se aqui — e já
-// ABERTO, com a fotografia do menu de hoje como no abrirJogo(): repor um jogo
-// que passou é dizer que afinal se foi ao Sá, e é para lançar o que se comeu.
-// A porta é a ficha apagada no painel do Histórico (só admin).
+// Repor: tira a marca e volta a haver Sá. Hoje o evento fica sempre (só os
+// marcados antes de a marca deixar de o apagar é que não o têm). Com evento:
+// num jogo por acontecer basta a marca sair; num jogo que JÁ PASSOU abre-se,
+// com a fotografia do menu de hoje como no abrirJogo() — repor um jogo que
+// passou é dizer que afinal se foi ao Sá, e é para lançar o que se comeu.
+// Sem evento (os antigos): num jogo por acontecer quem o cria é a
+// sincronização; num que já passou cria-se aqui, já aberto.
 async function reporSemEvento(jogoId) {
     if (!isAdmin()) return;
     const jid = String(jogoId);
     const j = (GOALS_JOGOS_PASSADOS || []).concat(GOALS_JOGOS || []).find(x => String(x.id) === jid);
-    const passado = !!(j && String(j.data || '') < _calHoje());
+    const evJa = historico.find(e => e.jogoId != null && String(e.jogoId) === jid);
+    const passado = evJa ? jogoJaPassou(evJa) : !!(j && String(j.data || '') < _calHoje());
     try {
         await _guardarJogosSemEvento((JOGOS_SEM_EVENTO || []).filter(i => i !== jid));
     } catch (e) { mostrarMensagem('⚠️ Não gravado: ' + sbErroLegivel(e), false); return; }
-    if (passado) {
+    const abrirJa = async ev => {
+        const menuHoje = catalogoMenuObj();
+        if (Object.keys(menuHoje).length) ev.menu = menuHoje;
+        if (ABERTO_COL) {
+            ev.aberto = true;
+            try { await sbGuardarEvento(ev); } catch (e) { ev.aberto = false; }
+        }
+        salvarHistoricoLocal();
+    };
+    if (evJa) {
+        if (passado && !evJa.totalFatura) await abrirJa(evJa);
+    } else if (passado && j) {
         try {
             const ev = await _jogoCriarEvento(j, nextId(), amigosPorDefeito(), menuBaseNovoEvento());
-            const menuHoje = catalogoMenuObj();
-            if (Object.keys(menuHoje).length) ev.menu = menuHoje;
-            if (ABERTO_COL) {
-                ev.aberto = true;
-                try { await sbGuardarEvento(ev); } catch (e) { ev.aberto = false; }
-            }
-            salvarHistoricoLocal();
+            await abrirJa(ev);
         } catch (e) { mostrarMensagem('⚠️ Evento não criado: ' + sbErroLegivel(e), false); return; }
     } else {
         try { await sincronizarJogosDoGoals(); } catch (e) {}
     }
     try { renderHistoricoDropdown(); } catch (e) {}
     try { renderInicio(); } catch (e) {}
-    mostrarMensagem(passado ? '✓ Jogo reposto no histórico' : '✓ Jogo reposto nos Próximos Jogos', true);
+    mostrarMensagem(passado ? '✓ Jogo reposto: já aberto, para lançar o consumo' : '✓ Jogo reposto: volta a haver Sá', true);
 }
 
 // Toque numa ficha "sem Sá" do Histórico (só admin): confirma e repõe.
 async function reporSemEventoConfirmar(jogoId) {
     if (!isAdmin()) return;
     const j = (GOALS_JOGOS_PASSADOS || []).concat(GOALS_JOGOS || []).find(x => String(x.id) === String(jogoId));
+    const evJa = historico.find(e => e.jogoId != null && String(e.jogoId) === String(jogoId));
+    const passado = evJa ? jogoJaPassou(evJa) : !!(j && String(j.data || '') < _calHoje());
+    const nome = evJa ? (evJa.descricao || 'Jogo') : (j ? _calDescricao(j) : 'Jogo');
+    const data = evJa ? (evJa.data || '') : (j ? _calPt(j.data) : '');
     const ok = await mostrarModal({
         icon: '↩️',
-        title: 'Repor o evento?',
-        msg: '<strong>' + _calEsc(j ? _calDescricao(j) : 'Jogo') + '</strong>' + (j ? ' (' + _calEsc(_calPt(j.data)) + ')' : '')
-            + ' foi marcado como <em>sem evento</em> — o grupo não foi ao Sá.<br><br>Repor cria o evento de novo'
-            + (j && String(j.data || '') < _calHoje() ? ', já aberto, para se lançar o consumo.' : ', nos Próximos Jogos.'),
+        title: 'Afinal há Sá?',
+        msg: '<strong>' + _calEsc(nome) + '</strong>' + (data ? ' (' + _calEsc(data) + ')' : '')
+            + ' está marcado <em>sem Sá</em>.<br><br>'
+            + (passado
+                ? (evJa ? 'Repor abre o jogo, para se lançar o consumo.' : 'Repor cria o evento de novo, já aberto, para se lançar o consumo.')
+                : (evJa ? 'Repor volta a perguntar quem vai ao Sá e a deixar marcar a mesa.' : 'Repor cria o evento de novo, nos Próximos Jogos.')),
         confirmText: 'Repor',
         cancelText: 'Cancelar'
     });
-    if (!ok) return;
+    if (!ok) return false;
     await reporSemEvento(jogoId);
     try { if (typeof sbiRenderHistorico === 'function') sbiRenderHistorico(); } catch (e) {}
+    return true;
 }
 
 // Jogos marcados, com a ficha do Goals, para o admin os poder repor.
@@ -6244,6 +6269,14 @@ function jogosDoHistoricoLista() {
     const ids = JOGOS_SEM_EVENTO || [];
     if (ids.length) {
         const hoje = _hojeInicio(), vistos = {};
+        // Os sem Sá com evento (o caso de hoje): a ficha apagada abre a página
+        // do jogo, com quem foi e em que carro.
+        historico.forEach(ev => {
+            if (!eventoSemSa(ev) || !jogoJaPassou(ev)) return;
+            vistos[String(ev.jogoId)] = true;
+            l.push({ semSa: true, ev, data: ev.data, ficha: fichaJogoHistorico(ev) });
+        });
+        // Os marcados antes de a marca deixar de apagar o evento: só a ficha do Goals.
         (GOALS_JOGOS_PASSADOS || []).concat(GOALS_JOGOS || []).forEach(j => {
             const id = String(j.id);
             if (vistos[id] || ids.indexOf(id) < 0 || !_calEmAlvalade(j)) return;
@@ -6313,6 +6346,8 @@ function _hojeInicio() { const d = new Date(); d.setHours(0, 0, 0, 0); return d.
 // O jogo está mesmo aberto (dia de jogo, conta por fechar)?
 function jogoAberto(ev) {
     if (!ev || ev.totalFatura) return false;
+    // Sem Sá não há conta: nunca está "em aberto", seja qual for a data.
+    if (eventoSemSa(ev)) return false;
     if (ev.aberto === true) return true;
     if (ev.aberto === false) return false;
     // null/undefined = evento anterior à migração (ou migração por correr):
@@ -6323,7 +6358,8 @@ function jogoAberto(ev) {
 // Jogos por abrir, do mais próximo para o mais longe.
 function jogosPorAbrir() {
     return historico
-        .filter(ev => !ev.totalFatura && !jogoAberto(ev))
+        // Os sem Sá não se abrem: deixá-los aqui travava a abertura do seguinte.
+        .filter(ev => !ev.totalFatura && !jogoAberto(ev) && !eventoSemSa(ev))
         .sort((a, b) => (_parsePgtoData(a.data) || 0) - (_parsePgtoData(b.data) || 0));
 }
 // Só o PRIMEIRO da lista se pode abrir: abrir o jogo de daqui a dois meses é
@@ -6911,6 +6947,8 @@ async function marcarCarroHora(id, hora) {
    marcação (GESTOR_MESA_SA), o admin ou o substituto do evento: é uma hora do
    grupo, e não faria sentido qualquer um a mudar. */
 function mesaHoraEvento(ev) {
+    // Sem Sá não há mesa (a que tenha ficado de antes volta com o repor).
+    if (eventoSemSa(ev)) return '';
     const h = (ev && ev.mesaHora) || '';
     return /^([01]\d|2[0-3]):[0-5]\d$/.test(h) ? h : '';
 }
@@ -6936,7 +6974,7 @@ function _podeOrganizarDia(ev) {
     if (!ev || ev.totalFatura) return false;
     return podeEditarEvento(ev) || meusAmigos().includes(GESTOR_MESA_SA);
 }
-function podeMarcarMesa(ev) { return MESA_HORA_COL && _podeOrganizarDia(ev); }
+function podeMarcarMesa(ev) { return MESA_HORA_COL && !eventoSemSa(ev) && _podeOrganizarDia(ev); }
 function podeMarcarSaida(ev) { return SAIDA_HORA_COL && _podeOrganizarDia(ev); }
 
 /* Grava as horas do grupo que mudaram no diálogo "Marcar mesa"
@@ -7114,16 +7152,19 @@ function _jfPlanoHTML(ev) {
     if (SAIDA_HORA_COL) {
         const carros = _jfCarrosHTML(ev);
         h += _jfParagem(saida, '🚗', 'Saída de Alcochete',
-            carros || (carrosAtivos() ? '<span class="jf-par-s">ainda ninguém disse que leva carro</span>' : ''));
+            carros || (carrosAtivos() ? '<span class="jf-par-s">' + (jogoJaPassou(ev) ? 'nenhum carro registado' : 'ainda ninguém disse que leva carro') + '</span>' : ''));
     }
-    if (MESA_HORA_COL) {
+    const semSa = eventoSemSa(ev);
+    // Já aberto, fechado ou passado: o plano é o que foi, não se marca nada.
+    const fixo = !!(ev.totalFatura || jogoAberto(ev) || jogoJaPassou(ev));
+    if (MESA_HORA_COL && !semSa) {
         h += _jfParagem(mesa, '🍽️', 'Mesa no Sá',
             '<span class="jf-par-s">' + (mesa ? (pax ? pax + (pax === 1 ? ' pessoa' : ' pessoas') : 'marcada') : 'por marcar') + '</span>',
-            mesa && posso ? '<button type="button" class="jf-mudar" onclick="jogoSheetMarcarMesa(' + ev.id + ')">Mudar</button>' : '');
+            mesa && posso && !fixo ? '<button type="button" class="jf-mudar" onclick="jogoSheetMarcarMesa(' + ev.id + ')">Mudar</button>' : '');
     }
     if (jogo) h += _jfParagem(jogo, '⚽', 'Jogo', '');
     h += '</div>';
-    if (!mesa && MESA_HORA_COL) {
+    if (!mesa && MESA_HORA_COL && !semSa && !fixo) {
         if (posso) {
             const s = mesaSugerida(ev);
             h += '<button type="button" class="jf-marcar" onclick="jogoSheetMarcarMesa(' + ev.id + ')">🍽️ Marcar mesa'
@@ -7172,8 +7213,9 @@ function _jfFoldHTML(qual, resumo, corpo) {
 // nenhum. Quem deu a box é o caso mais fácil de perder: não vai ao jogo nem
 // ao Sá, e é dele que o grupo anda à procura.
 function _quemVaiLinhas(ev) {
+    const semSa = eventoSemSa(ev);
     const noSa = horasSaEvento(ev).map(l => ({
-        nome: l.nome, hora: l.hora, sa: true,
+        nome: l.nome, hora: semSa ? '' : l.hora, sa: !semSa,
         jogo: vaiAoJogoPessoa(ev, l.nome), box: gameboxDisponivelPessoa(ev, l.nome),
         carro: levaCarroPessoa(ev, l.nome)
     }));
@@ -7194,21 +7236,23 @@ function _jfSN(sim) { return '<span class="' + (sim ? 'jf-sim' : 'jf-nao') + '">
 // Cada migração em falta tira uma coluna: sem db/sa-hora.sql saem as horas
 // (.sem-horas), sem db/gamebox.sql não entra a box (.com-box). O resumo dos
 // votos também não chega a aparecer sem a primeira.
-function _jfTabelaHTML(linhas) {
+// `semSa`: o jogo não tem Sá — saem as colunas do Sá e da hora (.sem-sa).
+function _jfTabelaHTML(linhas, semSa) {
     if (!linhas.length) return '<div class="jf-nomes">Ainda ninguém respondeu.</div>';
-    const h = '<div class="jf-tr jf-th"><span class="jf-tn">Quem</span><span>Sá</span>'
+    const horas = SA_HORA_COL && !semSa;
+    const h = '<div class="jf-tr jf-th"><span class="jf-tn">Quem</span>' + (semSa ? '' : '<span>Sá</span>')
             // "Pode": a hora a que cada um PODE sair (o voto), que não é a do
             // carro — essa está no plano, carro a carro.
-            + (SA_HORA_COL ? '<span>Pode</span>' : '') + '<span>Jogo</span>'
+            + (horas ? '<span>Pode</span>' : '') + '<span>Jogo</span>'
             + (GAMEBOX_COL ? '<span>Box</span>' : '') + '</div>'
             + linhas.map(l => '<div class="jf-tr"><span class="jf-tn">' + _calEsc(l.nome) + '</span>'
-                + _jfSN(l.sa)
-                + (SA_HORA_COL ? '<span class="jf-tht' + (l.hora ? '' : ' vazia') + '">' + (l.hora ? _calEsc(l.hora) : '—') + '</span>' : '')
+                + (semSa ? '' : _jfSN(l.sa))
+                + (horas ? '<span class="jf-tht' + (l.hora ? '' : ' vazia') + '">' + (l.hora ? _calEsc(l.hora) : '—') + '</span>' : '')
                 // Quem vai ao jogo e leva carro: 🚗 em vez do ✓, na mesma
                 // coluna — os condutores sem mais uma coluna na tabela.
                 + (l.carro ? '<span class="jf-sim jf-tcar" title="Leva carro">🚗</span>' : _jfSN(l.jogo))
                 + (GAMEBOX_COL ? _jfSN(l.box) : '') + '</div>').join('');
-    return '<div class="jf-tab' + (SA_HORA_COL ? '' : ' sem-horas') + (GAMEBOX_COL ? ' com-box' : '') + '">' + h + '</div>';
+    return '<div class="jf-tab' + (horas ? '' : ' sem-horas') + (semSa ? ' sem-sa' : '') + (GAMEBOX_COL ? ' com-box' : '') + '">' + h + '</div>';
 }
 
 function _quemVaiHTML(ev) {
@@ -7219,9 +7263,13 @@ function _quemVaiHTML(ev) {
     // A linha fechada leva as contagens: é o que antes obrigava a duas listas
     // separadas só para as ler. As boxes só aparecem quando há alguma — é a
     // única das três que é notícia, e um "0 box" a cada jogo era ruído.
-    const resumo = '<strong>' + nSa + '</strong> ' + _pluralVai(nSa) + ' ao Sá · <strong>' + nJogo + '</strong> ao jogo'
+    const semSa = eventoSemSa(ev);
+    const nCarros = carrosAtivos() ? carrosDoEvento(ev).carros.length : 0;
+    const resumo = (semSa ? '<strong>' + nJogo + '</strong> ' + _pluralVai(nJogo) + ' ao jogo'
+                          : '<strong>' + nSa + '</strong> ' + _pluralVai(nSa) + ' ao Sá · <strong>' + nJogo + '</strong> ao jogo')
+                 + (semSa && nCarros ? ' · <strong>' + nCarros + '</strong> ' + (nCarros === 1 ? 'carro' : 'carros') : '')
                  + (nBox ? ' · <strong>' + nBox + '</strong> box ' + (nBox === 1 ? 'livre' : 'livres') : '');
-    return _jfFoldHTML('quem', resumo, _jfTabelaHTML(linhas));
+    return _jfFoldHTML('quem', resumo, _jfTabelaHTML(linhas, semSa));
 }
 
 // Uma linha do cartão de respostas: pergunta à esquerda, resposta à direita.
@@ -7269,10 +7317,19 @@ function _jfCarroSelectHTML(ev) {
 
 function _jogoSheetHTML(ev) {
     const vouSa = vouAoSa(ev);
-    const gere = _podeGerirJogo(ev);
+    const semSa = eventoSemSa(ev);
+    // A página serve também DEPOIS do dia (Relatórios do evento, ficha sem Sá
+    // do Histórico): é aí que se vê quem foi e em que carro. Aberto o jogo, as
+    // perguntas do Sá calam-se (quem lá está é quem consome); fechada a conta,
+    // não se responde a nada — o servidor também já recusa.
+    const aberto = jogoAberto(ev);
+    const fechado = !!ev.totalFatura;
+    const passou = jogoJaPassou(ev);
+    const gere = _podeGerirJogo(ev) && !aberto && !passou;
     // Cabeçalho: a data, com o lápis para quem pode gerir o jogo. A hora do
     // jogo passou para o plano do dia, ao lado das outras.
     let h = '<div class="jf-sub">' + _calEsc(ev.data || '—')
+          + (semSa ? ' · <span class="jf-semsa">sem Sá</span>' : '')
           + (gere ? '<button type="button" class="jf-pencil" onclick="jogoSheetMostrarData()" aria-label="Mudar a data">✎</button>' : '')
           + '</div>';
     // Grava ao SAIR do campo (onblur): o `change` do seletor de datas dispara a
@@ -7286,33 +7343,38 @@ function _jogoSheetHTML(ev) {
     // Três secções, por esta ordem: o que está combinado (o plano do dia), o
     // que falta a cada um responder, e quem vai.
     const sec = t => '<div class="jp-sec">' + t + '</div>';
-    if (MESA_HORA_COL || SAIDA_HORA_COL) h += sec('Plano do dia') + _jfPlanoHTML(ev);
-    h += sec('As tuas respostas');
-    if (vouSa === null) {
+    if (MESA_HORA_COL || SAIDA_HORA_COL) h += sec(passou || aberto || fechado ? 'Como foi o dia' : 'Plano do dia') + _jfPlanoHTML(ev);
+    const perguntasSa = !semSa && !aberto && !passou;
+    if (fechado) {
+        // Conta fechada: só leitura.
+    } else if (vouSa === null) {
+        h += sec('As tuas respostas');
         h += '<div class="jf-aviso">A tua conta ainda não está associada a nenhum nome — pede ao administrador para te associar nas Definições.</div>';
     } else {
+        h += sec(passou ? 'Foste?' : 'As tuas respostas');
         h += '<div class="jf-card">'
-           + _jfLinha('Vais ao Sá?', _jfSeg(ev.id, 'jogoSheetPresenca', vouSa));
+           + (perguntasSa ? _jfLinha('Vais ao Sá?', _jfSeg(ev.id, 'jogoSheetPresenca', vouSa)) : '');
         // A que horas posso SAIR — só a quem vai ao Sá, porque é daqui que sai a
         // hora da mesa. Um botão que abre a grelha dos quartos de hora
         // (jogoSheetEscolherHora): um campo de horas do sistema abria numa hora
         // qualquer e deixava escolher 17:23.
-        if (vouSa && SA_HORA_COL) {
+        if (perguntasSa && vouSa && SA_HORA_COL) {
             const minha = minhaHoraSa(ev);
             h += _jfLinha('A que horas podes sair?',
                 '<button type="button" class="jf-chip-hora' + (minha ? ' on' : '') + '" onclick="jogoSheetEscolherHora(' + ev.id + ')">'
                 + (minha ? _calEsc(minha) : 'Escolher') + ' ▾</button>');
         }
         const vouJogo = vouAoJogoReal(ev);
-        h += _jfLinha('Vais ao jogo?', _jfSeg(ev.id, 'jogoSheetPresencaJogo', vouJogo));
+        h += _jfLinha(passou ? 'Foste ao jogo?' : 'Vais ao jogo?', _jfSeg(ev.id, 'jogoSheetPresencaJogo', vouJogo,
+                      passou ? '✓ Fui' : null, passou ? '✕ Não' : null));
         // O carro só se pergunta a quem vai ao jogo: é para lá que os carros vão.
         if (vouJogo && carrosAtivos()) {
-            h += _jfLinha('Em que carro vais?', _jfCarroSelectHTML(ev));
+            h += _jfLinha(passou ? 'Em que carro foste?' : 'Em que carro vais?', _jfCarroSelectHTML(ev));
             // Quem leva carro diz a que horas sai — por defeito a hora a que
             // disse que podia sair, ou meia hora antes da mesa.
             if (CARRO_HORA_COL && meuCarro(ev) === '__eu__') {
                 const hc = horaCarro(ev, meusAmigos().find(m => levaCarroPessoa(ev, m)));
-                h += _jfLinha('O teu carro sai às',
+                h += _jfLinha(passou ? 'O teu carro saiu às' : 'O teu carro sai às',
                     '<button type="button" class="jf-chip-hora' + (hc ? ' on' : '') + '" onclick="jogoSheetHoraCarro(' + ev.id + ')">'
                     + (hc || 'Escolher') + ' ▾</button>');
             }
@@ -7320,12 +7382,13 @@ function _jogoSheetHTML(ev) {
         // A box só se pergunta a quem já disse que NÃO vai — quem lá vai
         // ocupa a própria. É esta resposta, e já não o "não vou", que avisa o
         // grupo de que pode haver lugar (ver marcarGamebox).
-        if (vouJogo === false && GAMEBOX_COL) {
+        // Depois do dia (ou com o jogo aberto) já não há box a dar.
+        if (vouJogo === false && GAMEBOX_COL && !aberto && !passou) {
             h += _jfLinha('Gamebox disponível?', _jfSeg(ev.id, 'jogoSheetGamebox', tenhoGameboxDisponivel(ev), '✓ Sim', '✕ Não'));
         }
         h += '</div>';
     }
-    h += sec('Quem vai') + _quemVaiHTML(ev);
+    h += sec(passou || aberto || fechado ? 'Quem foi' : 'Quem vai') + _quemVaiHTML(ev);
     // As ações do jogo, no fim da página — eram os botões do fundo do modal.
     // "Abrir jogo" só no primeiro por abrir; "Preparar" leva à página do
     // evento SEM o abrir; "Sem evento" só o admin, num jogo do calendário sem
@@ -7335,12 +7398,16 @@ function _jogoSheetHTML(ev) {
         acoes += '<button type="button" class="jp-btn jp-prim" onclick="jogoPaginaAbrir(' + ev.id + ')">⚽ Abrir jogo'
                + '<small>a conta do dia começa — é para lançar o que se come</small></button>';
     }
-    if (_podeGerirJogo(ev)) {
+    if (_podeGerirJogo(ev) && !semSa && !aberto) {
         acoes += '<button type="button" class="jp-btn" onclick="jogoPaginaPreparar(' + ev.id + ')">Preparar o evento'
                + '<small>menu, convocados e tesoureiro, sem abrir o jogo</small></button>';
     }
     if (podeMarcarSemEvento(ev)) {
         acoes += '<button type="button" class="jf-semev" onclick="jogoPaginaSemEvento(' + ev.id + ')">🚫 Sem evento (não vamos ao Sá)</button>';
+    }
+    if (semSa && isAdmin() && CONFIG_TABELA && !fechado) {
+        acoes += '<button type="button" class="jp-btn" onclick="jogoPaginaReporSa(' + ev.id + ')">↩️ Afinal há Sá'
+               + '<small>' + (passou ? 'abre o jogo, para lançar o consumo' : 'volta a perguntar quem vai ao Sá e a mesa') + '</small></button>';
     }
     if (acoes) h += '<div class="jp-acoes">' + acoes + '</div>';
     return h;
@@ -7673,10 +7740,25 @@ async function jogoPaginaPreparar(id) {
     fecharPaginaJogo();
     await navegarHistorico(id);
 }
+// "Sem evento" já não apaga o evento: a página fica, sem as coisas do Sá.
 async function jogoPaginaSemEvento(id) {
-    await marcarSemEvento(id);
-    // Se o evento foi mesmo apagado, a página já não tem o que mostrar.
-    if (!historico.some(e => String(e.id) === String(id))) fecharPaginaJogo();
+    if (await marcarSemEvento(id)) _jpRedesenhar(id);
+}
+async function jogoPaginaReporSa(id) {
+    const ev = historico.find(e => String(e.id) === String(id));
+    if (!ev || ev.jogoId == null) return;
+    const passou = jogoJaPassou(ev);
+    if (!await reporSemEventoConfirmar(ev.jogoId)) return;
+    // Num jogo que já passou, repor abre-o: vai-se para a conta. Por jogar,
+    // fica-se na página, agora com o Sá.
+    if (passou && jogoAberto(ev)) { fecharPaginaJogo(); try { if (typeof sbiFecharHistorico === 'function') sbiFecharHistorico(); } catch (e) {} await navegarHistorico(id); }
+    else _jpRedesenhar(id);
+}
+// Relatórios › Jogo e carros: a mesma página, para o evento que está no ecrã
+// — é por aqui que se vê, depois do dia, quem foi ao jogo e em que carro.
+function evAbrirJogoECarros() {
+    evFecharSheet();
+    if (eventoAtualId != null) abrirFolhaJogo(eventoAtualId);
 }
 
 /* ── RODADAS OFERECIDAS: quem pagou o quê aos outros (consulta) ───────────
@@ -8432,7 +8514,9 @@ function eventoPorDefeito() {
     const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
     const t0 = hoje.getTime();
     let melhor = null, melhorFuturo = 2, melhorDist = Infinity;
-    historico.forEach(ev => {
+    // Um jogo sem Sá não tem conta: abrir a app nele era um ecrã vazio.
+    const cands = historico.filter(ev => !eventoSemSa(ev));
+    (cands.length ? cands : historico).forEach(ev => {
         const t = _parsePgtoData(ev.data) || 0;
         const futuro = t > t0 ? 1 : 0;
         const dist = Math.abs(t - t0);
@@ -10901,6 +10985,8 @@ function _pushConhece(tipo) {
    carro (e só esses). Tipo novo ('carro_hora'): só sai depois de a função no
    ar dizer que o conhece (_pushConhece). */
 async function sbNotificarCarroHora(ev, condutor, hora) {
+    // Depois do dia é só registo de quem foi em que carro: não se acorda ninguém.
+    if (jogoJaPassou(ev)) return;
     const carro = carrosDoEvento(ev).carros.find(c => c.condutor === condutor);
     if (!carro || !carro.passageiros.length || !hora) return;
     if (!await _pushConhece('carro_hora')) {
@@ -10916,6 +11002,7 @@ async function sbNotificarCarroHora(ev, condutor, hora) {
    saber antes do dia. Tipo novo ('leva_carro'): só sai depois de a função no
    ar dizer que o conhece (_pushConhece). */
 async function sbNotificarLevaCarro(ev, condutor) {
+    if (jogoJaPassou(ev)) return;   // depois do dia é só registo
     if (!await _pushConhece('leva_carro')) {
         console.warn('[SplitBill] a push-notificar no ar ainda não conhece o aviso de quem leva carro — supabase functions deploy push-notificar');
         return;
