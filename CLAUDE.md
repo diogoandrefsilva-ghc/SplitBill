@@ -783,21 +783,49 @@ vir da cache.
   **quem carrega um evento fora do arranque redesenha a seguir**, senão fica
   outra vez o ecrã de antes.
 
-## Gravar por cima: a cópia velha de um telemóvel não pode desfazer o fecho
+## Gravar: só o que mudou, e nunca num evento fechado (secção `GRAVAR SÓ O QUE MUDOU`)
 **Caso que o pagou (25/11/2026):** o Mestre fechou a conta às 20:51:46 (divisão
-gravada, notificações enviadas) e 16s depois o telemóvel do admin regravou o
-evento inteiro com a cópia que tinha de antes do fecho — `total_fatura`,
-`pagador` e `fatura` voltaram a NULL. O telemóvel do Mestre refrescou, viu a
-conta aberta, e ele fechou outra vez: segundo aviso a toda a gente. O
-`sbGuardarEvento` sem `apenas` manda **tudo** o que este telemóvel tem, e quem o
-dispara não sabe se o servidor mudou entretanto.
-- **A guarda do fecho** (`sbGuardarEvento`): se cá a conta está aberta, o PATCH
-  leva `&total_fatura=is.null`. Fechada no servidor → zero linhas →
-  `_sbContaJaFechada()` confirma que o evento existe, relê-o
-  (`refrescarEventoAtual({id, forcar})`), avisa e **não grava mais nada** —
-  nem as ordens, cujo prune apagaria as que a cópia velha não conhece. Sem essa
-  confirmação, zero linhas era lido como "evento apagado" e a cópia local ia
-  para o lixo.
+gravada, notificações enviadas) e 16s depois o puxar-para-atualizar do admin
+regravou o evento inteiro com a cópia que tinha de antes do fecho —
+`total_fatura`, `pagador` e `fatura` voltaram a NULL. O telemóvel do Mestre
+refrescou, viu a conta aberta, e ele fechou outra vez: segundo aviso a toda a
+gente. O `sbGuardarEvento` mandava **tudo** o que o telemóvel tinha — todas as
+colunas, todas as ordens e ofertas, e um *prune* que apagava no servidor as que
+a cópia não conhecesse: com o admin e o substituto a lançar ao mesmo tempo, a
+ordem de um apagava-se com a gravação do outro.
+- **A fotografia** (`ev._srv`, `_sbFotografia`): uma versão (hash) de cada
+  coluna e de cada ordem/oferta, tal como estão no servidor. Tira-se no
+  `eventoDaBD()` (carga e refresco) e põe-se em dia peça a peça à medida que
+  cada gravação passa. Gravar é mandar a **diferença**: só as colunas que
+  mudaram; as ordens/ofertas novas ou alteradas (upsert) e as que **esta
+  cópia** apagou (DELETE pelo id). O que outro telemóvel lançou não está nem na
+  fotografia nem na cópia — não se lhe toca. Nada mudou = nenhum pedido. O
+  prune por ausência acabou (o `sbSyncFilhos` ficou só para o diagnóstico).
+- **A fotografia anda com a cópia de trabalho** (`estado._srv`, posto no
+  `carregarEvento` e devolvido ao histórico no `salvarNoLocalStorage`). Se o
+  refresco trocar a linha do histórico com uma folha aberta, a edição que sair
+  dela compara-se com a fotografia de onde veio — com a nova, as ordens que os
+  outros lançaram entretanto pareciam apagadas cá e iam-se.
+- **Conta fechada = evento parado.** Fechada na fotografia → nem se tenta
+  (`'fechada'`; o que mudou cá — ler a fatura para consulta — fica só neste
+  telemóvel, sem aviso). Aberta cá → cada gravação leva
+  `&total_fatura=is.null` (ou, se só mudam ordens, um GET a confirmar antes,
+  `_sbContaAberta`); fechada no servidor → `_sbSemLinha()` confirma que o
+  evento existe, relê-o (`refrescarEventoAtual({id, forcar})`), avisa e **não
+  grava mais nada**. Sem essa confirmação, zero linhas era lido como "evento
+  apagado" e a cópia local ia para o lixo; e se o evento existe aberto e mesmo
+  assim não houve linha, é a RLS — erro, não purga.
+- **Fechar vai em último:** primeiro o pagador e as ordens corrigidas pela
+  fatura, por fim o `total_fatura` — também com a guarda, para não fechar por
+  cima de quem fechou entretanto. Se alguém fechou primeiro, o
+  `fecharComFatura` não grava a divisão nem avisa ninguém, e relê a divisão de
+  quem fechou (`sbLerDivisao`).
+- O `sbGuardarEvento` devolve `'ok'`, `'fechada'` ou `'apagado'`. As respostas
+  da folha (`apenas`) só contam como gravadas com `'ok'`, senão revertem.
+- **O refresco não troca o evento com uma gravação por sair ou a meio**
+  (`_sbAutoSaveTimer`, `_sbGuardandoEvento`, também verificados quando a
+  leitura chega): a resposta seria de antes da edição, e o auto-save a seguir
+  compararia o servidor consigo próprio — a edição perdia-se.
 - **Só reabrir pode pôr a conta a NULL**: `sbGravarReabertura()` (Reabrir,
   Desbloquear, Limpar evento) grava já, com `{reabrir:true}`, sem guarda. Um
   caminho novo que reabra a conta tem de passar por ela — o auto-save seria
@@ -815,11 +843,10 @@ dispara não sabe se o servidor mudou entretanto.
   carregar em Fechar outra vez) e **ninguém é notificado**; a notificação só sai
   com o evento e a divisão gravados. Antes avisava sempre — com a rede do
   estádio, "ficaste a dever" de uma conta que não tinha fechado.
-- **O que a guarda NÃO cobre:** uma cópia velha de uma conta aberta continua a
-  poder regravar as outras colunas e podar ordens de outros (é o mesmo `apenas`
-  que já protege as respostas da folha). O que se fez foi tirar os gatilhos;
-  uma versão por linha (`updated_at` + PATCH condicional) é o passo seguinte, se
-  voltar a morder.
+- **O que continua possível:** duas pessoas a mexer na MESMA coisa (a mesma
+  ordem, a mesma coluna) ao mesmo tempo — ganha a última. A conta fechada só é
+  garantida por esta app: o servidor não recusa escritas a um evento fechado
+  (só as `marcar_*`); uma versão antiga da app em cache ainda o podia fazer.
 
 ## Arranque sem rede: a cópia deste telemóvel, só de leitura
 No estádio a app abria **vazia** (o `init()` só corria depois de TODOS os dados
