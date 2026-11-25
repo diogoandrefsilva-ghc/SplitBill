@@ -2102,6 +2102,39 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
     font-family: var(--display); font-weight: 700; font-size: 27px; line-height: 1;
     color: var(--verde-escuro); flex: 0 0 auto;
 }
+/* Conta fechada num valor diferente do lançado: o lançado rasurado ao lado da
+   fatura, e por baixo do rótulo quanto a fatura acertou. Fica na coluna do
+   rótulo (à altura do valor) para o cartão não crescer. */
+.ev-mesa-vs {
+    font-size: 16px; font-weight: 600; color: #8A938D; margin-right: 8px;
+    text-decoration-thickness: 1.5px;
+}
+.ev-mesa-sub {
+    display: block; margin-top: 3px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 11.5px; font-weight: 600; text-transform: none; letter-spacing: normal;
+    color: var(--verde);
+}
+.ev-mesa-sub.mais { color: var(--rubro); }
+/* display:block é regra de autor e ganha ao [hidden] do browser. */
+.ev-mesa-sub[hidden] { display: none; }
+
+/* Arranque sem rede: a app mostra a cópia deste telemóvel, só de leitura (ver
+   ARRANQUE SEM REDE no app.js). Tocar tenta ligar outra vez. */
+#sb-copia,
+#sb-copia:hover,
+#sb-copia:active {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    top: calc(env(safe-area-inset-top, 0px) + 6px); z-index: 99990;
+    max-width: calc(100% - 32px); padding: 6px 13px; margin: 0;
+    border: none; border-radius: 999px;
+    background: #5B4A12; color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 12px; font-weight: 600; line-height: 1.25;
+    text-transform: none; letter-spacing: normal; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+    box-shadow: 0 8px 18px -8px rgba(0,0,0,.55);
+}
 
 /* ── A grelha ──
    Sem rodadas, as Ordens ficam com a linha de cima inteira (e aí cada ordem

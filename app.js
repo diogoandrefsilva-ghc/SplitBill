@@ -83,7 +83,12 @@ function init() {
     }
     if (migrated) {
         salvarHistoricoLocal();
-        salvarPagamentos();
+        // Só o localStorage: o `migrated` é verdadeiro em QUALQUER arranque com
+        // uma conta fechada (as `dividas` vêm sempre vazias do servidor), e o
+        // salvarPagamentos() agendava o auto-save — 2s depois de cada arranque,
+        // o evento aberto inteiro era regravado por cima do servidor com o que
+        // este telemóvel tinha (ver a guarda do fecho no sbGuardarEvento).
+        salvarPagamentosLocal();
     }
 
     ghLoadCfg();
@@ -524,7 +529,28 @@ function _atualizarUIInner() {
     });
 
     // ── Total da mesa ───────────────────────────────────────────────────────
-    document.getElementById('total-mesa').textContent = '€' + totalMesa.toFixed(2);
+    // Com a fatura fechada num valor diferente do que foi lançado, o que se
+    // paga é a FATURA: é ela que vai em grande, e o que a mesa somava na app
+    // fica rasurado ao lado. Mostrar só os €134 lançados com as pessoas a
+    // somarem os €131 da fatura (jogo de 25/11/2026: 2 artigos a menos na
+    // fatura, mais uma rodada) não se percebia.
+    const _elTot = document.getElementById('total-mesa');
+    const _elTotSub = document.getElementById('total-mesa-sub');
+    const _fat = estado.totalFatura;
+    const _acerto = (_fat && totalMesa > 0) ? Math.round((_fat - totalMesa) * 100) / 100 : 0;
+    if (_acerto !== 0) {
+        _elTot.innerHTML = '<s class="ev-mesa-vs">€' + totalMesa.toFixed(2) + '</s>€' + _fat.toFixed(2);
+        _elTot.title = 'Lançado na app €' + totalMesa.toFixed(2) + ' · fatura do Sá €' + _fat.toFixed(2);
+        if (_elTotSub) {
+            _elTotSub.textContent = 'fatura do Sá · ' + (_acerto < 0 ? '−' : '+') + '€' + Math.abs(_acerto).toFixed(2);
+            _elTotSub.classList.toggle('mais', _acerto > 0);
+            _elTotSub.hidden = false;
+        }
+    } else {
+        _elTot.textContent = '€' + (_fat || totalMesa).toFixed(2);
+        _elTot.title = '';
+        if (_elTotSub) _elTotSub.hidden = true;
+    }
 
     // Decide-se já aqui (antes de desenhar Ordens) porque, sem Ofertas, as
     // Ordens ficam com a linha toda — e nessa largura cabem quase todos os
@@ -2330,6 +2356,7 @@ async function limparTudo() {
         estado.amigosSelecionados.clear();
         estado.ofertaAmigos.clear();
         salvarNoLocalStorage();
+        sbGravarReabertura();
         atualizarReadOnly();
         atualizarUI();
         renderConfigAmigos();
@@ -2711,20 +2738,44 @@ async function fecharComFatura() {
     // evento reabre sozinho ao recarregar, porque o `total_fatura` nunca lá
     // chegou). Por isso grava-se aqui já, de imediato, e espera-se pela
     // confirmação antes de dar o fecho como concluído.
+    // O auto-save que o salvarNoLocalStorage() acabou de agendar repetia esta
+    // mesma gravação 2s depois: com a rede do estádio, é tráfego a dobrar.
+    if (_sbAutoSaveTimer) { clearTimeout(_sbAutoSaveTimer); _sbAutoSaveTimer = null; }
     const evAtual = historico.find(e => e.id === eventoAtualId);
-    let eventoGravado = true;
+    let eventoGravado = true, erroFecho = null;
     if (evAtual) {
-        try { await sbGuardarEvento(evAtual); } catch (e) { eventoGravado = false; }
+        try { await sbGuardarEvento(evAtual); } catch (e) { eventoGravado = false; erroFecho = e; }
     }
-    // sbGuardarEvento já mostra a sua própria mensagem de erro (com o
-    // "Definições → Diagnóstico da BD") quando falha — não duplicar aqui.
+    if (!eventoGravado) {
+        // A conta NÃO ficou fechada no servidor: o ecrã não pode dizer que sim,
+        // nem o grupo pode receber o "ficaste a dever" — era isso que levava a
+        // fechar duas vezes e a receber o aviso duas vezes. Volta a aberta, com
+        // o valor e o pagador nos campos, para bastar carregar em Fechar outra
+        // vez. (Se a gravação chegou ao servidor a meio, a guarda do fecho do
+        // sbGuardarEvento não deixa esta cópia reabri-la: o refresco traz a
+        // conta fechada.)
+        estado.totalFatura = null;
+        estado.dividas = {};
+        delete divisoes[eventoAtualId];
+        modoReadOnly = false;
+        salvarNoLocalStorage();
+        if (_sbAutoSaveTimer) { clearTimeout(_sbAutoSaveTimer); _sbAutoSaveTimer = null; }
+        document.getElementById('total-fatura').value = fatura;
+        document.getElementById('pagador-select').value = pagador;
+        atualizarReadOnly();
+        atualizarUI();
+        renderContas();
+        mostrarMensagem('⚠️ A conta NÃO ficou fechada (' + sbErroLegivel(erroFecho) + ') — ninguém foi avisado. Carrega em Fechar outra vez.', false);
+        return;
+    }
     const divisaoGravada = await sbGuardarDivisao(eventoAtualId, divisaoHamilton);
-    sbNotificarDividas(divisaoHamilton, estado.descricaoEvento, pagador);  // fire-and-forget — notificação é um extra
+    // Só com a conta e a divisão no servidor: fire-and-forget — a notificação é um extra.
+    if (divisaoGravada) sbNotificarDividas(divisaoHamilton, estado.descricaoEvento, pagador);
 
-    if (eventoGravado && divisaoGravada) {
+    if (divisaoGravada) {
         mostrarMensagem('✓ Conta fechada — €' + fatura.toFixed(2) + ' (paga por ' + pagador + ')', true);
-    } else if (eventoGravado && !divisaoGravada) {
-        mostrarMensagem('⚠️ Conta fechada, mas a divisão por pessoa não gravou no servidor — tenta "Fechar" outra vez ou usa Definições → Diagnóstico da BD', false);
+    } else {
+        mostrarMensagem('⚠️ Conta fechada, mas a divisão por pessoa não gravou no servidor e ninguém foi avisado — reabre e fecha outra vez, ou usa Definições → Diagnóstico da BD', false);
     }
 }
 
@@ -2813,7 +2864,21 @@ async function reabrirEvento() {
     atualizarReadOnly();
     atualizarUI();
     renderContas();
+    // O sbGuardarEvento já disse que não gravou: a conta continua fechada no servidor.
+    if (!(await sbGravarReabertura())) return;
     mostrarMensagem(manterPagamentos ? '🔓 Evento reaberto (pagamentos mantidos)' : '🔓 Evento reaberto', true);
+}
+
+// Reabrir (o "Reabrir" da Conta, o "Desbloquear" do banner, o "Limpar evento")
+// é o ÚNICO caminho que pode pôr a conta a NULL no servidor: as outras gravações
+// levam a guarda do fecho (ver sbGuardarEvento), e o auto-save que o
+// salvarNoLocalStorage() agenda seria recusado por ela. Grava-se já, sem guarda.
+async function sbGravarReabertura() {
+    if (_sbAutoSaveTimer) { clearTimeout(_sbAutoSaveTimer); _sbAutoSaveTimer = null; }
+    const ev = historico.find(e => e.id === eventoAtualId);
+    if (!ev || !_sbSession) return true;
+    try { await sbGuardarEvento(ev, { reabrir: true }); return true; }
+    catch (e) { return false; }
 }
 
 function confirmarFatura() { fecharComFatura(); }
@@ -3895,6 +3960,7 @@ async function desbloquearEvento() {
     atualizarReadOnly();
     atualizarUI();
     renderContas();
+    if (!(await sbGravarReabertura())) return;
     mostrarMensagem('🔓 Evento desbloqueado para edição', true);
 }
 
@@ -3944,8 +4010,11 @@ function carregarPagamentos() {
     if (saved) { try { pagamentos = JSON.parse(saved); } catch(e) { pagamentos = []; } }
 }
 
-function salvarPagamentos() {
+function salvarPagamentosLocal() {
     localStorage.setItem('splitbill_pagamentos', JSON.stringify(pagamentos));
+}
+function salvarPagamentos() {
+    salvarPagamentosLocal();
     sbScheduleAutoSave();
 }
 
@@ -8028,6 +8097,11 @@ async function sbEnsureFresh() {
 // elas: recarregar o evento a meio de uma gravação punha no ecrã a versão do
 // servidor de antes de ela chegar.
 let _sbEscritas = 0;
+// A app está a mostrar a CÓPIA deste telemóvel porque o servidor não respondeu
+// (sem rede, ou tão fraca que o arranque não chegou a tempo) — ver ARRANQUE SEM
+// REDE. Enquanto for true não se grava nada: a cópia pode ter horas, e
+// gravá-la por cima do servidor era desfazer o que os outros fizeram entretanto.
+let _sbCopiaLocal = false;
 // fetch para o REST: garante token fresco e, se ainda assim vier 401, faz refresh + 1 retry
 async function sbFetch(url, opt) {
     opt = opt || {};
@@ -8038,6 +8112,11 @@ async function sbFetch(url, opt) {
     if (typeof verComoAtivo === 'function' && verComoAtivo() && _metodo !== 'GET' && _metodo !== 'HEAD') {
         mostrarMensagem('👁️ Modo "ver como": nada é gravado. Sai do modo para editar.', false);
         return new Response('[]', { status: 403, headers: { 'Content-Type': 'application/json' } });
+    }
+    // Mesmo corte, pela mesma razão, enquanto se mostra a cópia local.
+    if (_sbCopiaLocal && _metodo !== 'GET' && _metodo !== 'HEAD') {
+        mostrarMensagem('📴 Sem ligação ao servidor — nada foi gravado. A app volta a ligar-se sozinha.', false);
+        return new Response('[]', { status: 503, headers: { 'Content-Type': 'application/json' } });
     }
     // Uma LEITURA nunca pode vir da cache do browser: os URLs do PostgREST são
     // sempre os mesmos e o Safari servia a resposta de há bocado — era isso que
@@ -8083,8 +8162,9 @@ function ehSubstitutoDe(ev) {
     const e = emailAtual();
     return !!(ev && ev.substituto && e && ev.substituto.toLowerCase() === e);
 }
-// Pode editar este evento (ordens, ofertas, fatura)?
-function podeEditarEvento(ev) { return isAdmin() || ehSubstitutoDe(ev); }
+// Pode editar este evento (ordens, ofertas, fatura)? A mostrar a cópia local
+// (sem rede) ninguém pode: a interface fica só de leitura até haver servidor.
+function podeEditarEvento(ev) { return !_sbCopiaLocal && (isAdmin() || ehSubstitutoDe(ev)); }
 function podeEditarEventoAtual() {
     return podeEditarEvento(historico.find(h => h.id === eventoAtualId));
 }
@@ -8093,7 +8173,7 @@ function podeEditarEventoAtual() {
 // db/ordens-proprias.sql já correu (senão o servidor recusa a escrita), e a
 // pessoa está na lista de convocados do evento.
 function podeAdicionarOrdemPropria(ev) {
-    if (!ev || ev.totalFatura || !ORDENS_CRIADO_POR_COL) return false;
+    if (_sbCopiaLocal || !ev || ev.totalFatura || !ORDENS_CRIADO_POR_COL) return false;
     const meus = meusAmigos();
     if (!meus.length) return false;
     return (ev.amigos || []).some(a => meus.includes(a));
@@ -8554,32 +8634,140 @@ function sbHeaders(extra = {}) {
     return Object.assign(h, extra);
 }
 
+/* ── ARRANQUE SEM REDE: mostrar a cópia deste telemóvel ──────────────────
+   No estádio a rede é fraca ou nenhuma, e a app abria vazia: o init() só corria
+   depois de a sessão ser validada e de TODOS os dados chegarem do servidor, e o
+   splash saía aos 6s por cima de uma página por desenhar. Sem rede nenhuma era
+   pior — o pedido de validação falhava, a sessão era APAGADA e aparecia o login.
+   Agora:
+   · sem rede, ou com o servidor a não responder em SB_ESPERA_ARRANQUE_MS, a app
+     arranca com o que ficou guardado neste telemóvel (`_sbCopiaLocal`), com um
+     aviso no topo;
+   · essa cópia é SÓ DE LEITURA (podeEditarEvento() falso e o sbFetch corta as
+     escritas): pode ter horas, e gravá-la por cima do servidor era desfazer o
+     que os outros fizeram — o mesmo erro que reabriu a conta do jogo de
+     25/11/2026;
+   · a sessão só se apaga quando o servidor diz que não presta (um 4xx), nunca
+     por falta de rede;
+   · volta a tentar sozinha (quando a rede volta, quando a app volta à frente,
+     de 20 em 20s e ao tocar no aviso), e quando os dados chegam redesenha tudo
+     e o aviso sai. */
+const SB_ESPERA_ARRANQUE_MS = 3500;
+const SB_AMIGO_USERS_KEY = 'sb_amigo_users';
+let _sbArrancou = false;          // o init() já correu (com a cópia ou com o servidor)
+let _sbTimerCopia = null;
+let _sbLigando = false;           // uma validação/carga a caminho
+let _sbPosArranqueFeito = false;
+
+// 'ok' | 'sem-rede' | 'invalida'. Só um 4xx diz que a sessão não presta: sem
+// resposta, ou um 5xx, é falta de rede/servidor — não é razão para pôr
+// ninguém fora da app.
+async function sbValidarSessao() {
+    if (!_sbSession || !_sbSession.access_token) return 'invalida';
+    try {
+        // Token expirado ou quase? Renovar com o refresh_token antes de validar
+        if (tokenQuaseExpirado()) await sbRefresh();
+        const pedir = () => fetch(`${SB_URL}/auth/v1/user`, {
+            headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${_sbSession.access_token}` }
+        });
+        let r = await pedir();
+        if (!r.ok && r.status < 500 && _sbSession.refresh_token) {
+            // Última tentativa: refresh + revalidar (sessões antigas sem expires_at caem aqui)
+            if (await sbRefresh()) r = await pedir();
+        }
+        if (r.ok) {
+            const u = await r.json();
+            sbSaveSession({ ..._sbSession, user: u });
+            return 'ok';
+        }
+        return (r.status >= 400 && r.status < 500 && r.status !== 408 && r.status !== 429) ? 'invalida' : 'sem-rede';
+    } catch (e) {
+        return 'sem-rede';
+    }
+}
+
+function sbArrancarComCopia() {
+    if (_sbTimerCopia) { clearTimeout(_sbTimerCopia); _sbTimerCopia = null; }
+    if (_sbArrancou || !_sbSession) return;
+    _sbArrancou = true;
+    _sbCopiaLocal = true;
+    try {
+        const au = JSON.parse(localStorage.getItem(SB_AMIGO_USERS_KEY) || 'null');
+        if (au && typeof au === 'object' && Object.keys(amigoUsers).length === 0) amigoUsers = au;
+    } catch (e) {}
+    document.getElementById('page-login').style.display = 'none';
+    init();
+    sbAvisoCopia(true);
+}
+
+function sbAvisoCopia(on) {
+    let el = document.getElementById('sb-copia');
+    if (!on) { if (el) el.remove(); return; }
+    if (el) return;
+    el = document.createElement('button');
+    el.id = 'sb-copia';
+    el.type = 'button';
+    el.textContent = '📴 Sem rede · cópia deste telemóvel, só leitura';
+    el.title = 'Toca para tentar ligar outra vez';
+    el.onclick = () => sbReligar();
+    document.body.appendChild(el);
+}
+
+// Redesenha o que o init() desenhou, agora com os dados do servidor. O ecrã do
+// evento já foi redesenhado pelo sbCarregarDados() (eventoAtualId != null).
+function sbRedesenharAposCarga() {
+    if (eventoAtualId == null && historico.length > 0) { carregarEvento(eventoPorDefeito()); evRedesenharTudo(); }
+    else if (eventoAtualId == null) evRedesenharTudo();
+    renderContas();
+    refrescarInicioSeVisivel();
+    if (typeof _jpRedesenhar === 'function' && typeof _jpId !== 'undefined' && _jpId != null) _jpRedesenhar(_jpId);
+}
+
+async function sbReligar() {
+    if (!_sbCopiaLocal || _sbLigando || !_sbSession) return;
+    if (navigator.onLine === false) return;
+    _sbLigando = true;
+    try {
+        const v = await sbValidarSessao();
+        if (v === 'sem-rede') return;
+        if (v === 'invalida') {
+            _sbSession = null;
+            localStorage.removeItem(SESSION_KEY);
+            sbAvisoCopia(false);
+            sbMostrarLogin();
+            return;
+        }
+        await sbAposLogin();
+    } finally {
+        _sbLigando = false;
+    }
+}
+setInterval(() => { if (_sbCopiaLocal) sbReligar(); }, 20000);
+window.addEventListener('online', () => { if (_sbCopiaLocal) sbReligar(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && _sbCopiaLocal) sbReligar(); });
+
 async function sbInit() {
     // Verificar sessão em localStorage
     const stored = localStorage.getItem(SESSION_KEY);
     if (stored) {
-        try {
-            const s = JSON.parse(stored);
+        let s = null;
+        try { s = JSON.parse(stored); } catch(e) {}
+        if (s && s.access_token) {
             _sbSession = s;
-            // Token expirado ou quase? Renovar com o refresh_token antes de validar
-            if (tokenQuaseExpirado()) await sbRefresh();
-            let r = await fetch(`${SB_URL}/auth/v1/user`, {
-                headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${_sbSession.access_token}` }
-            });
-            if (!r.ok && _sbSession.refresh_token) {
-                // Última tentativa: refresh + revalidar (sessões antigas sem expires_at caem aqui)
-                if (await sbRefresh())
-                    r = await fetch(`${SB_URL}/auth/v1/user`, {
-                        headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${_sbSession.access_token}` }
-                    });
+            // Rede fraca: se o servidor não responder a tempo, arranca-se com a
+            // cópia deste telemóvel em vez de deixar o ecrã vazio.
+            _sbTimerCopia = setTimeout(sbArrancarComCopia, SB_ESPERA_ARRANQUE_MS);
+            _sbLigando = true;
+            try {
+                const v = await sbValidarSessao();
+                if (v === 'ok') { await sbAposLogin(); return; }
+                if (v === 'sem-rede') { sbArrancarComCopia(); return; }
+            } finally {
+                _sbLigando = false;
             }
-            if (r.ok) {
-                const u = await r.json();
-                sbSaveSession({ ..._sbSession, user: u });
-                await sbAposLogin();
-                return;
-            }
-        } catch(e) {}
+            if (_sbTimerCopia) { clearTimeout(_sbTimerCopia); _sbTimerCopia = null; }
+            sbAvisoCopia(false);
+        }
         _sbSession = null;
         localStorage.removeItem(SESSION_KEY);
     }
@@ -8621,17 +8809,23 @@ async function sbAposLogin() {
     const email = _sbSession.user.email;
 
     // Verificar se tem acesso
-    let data, rawText = '', statusInfo = '';
+    let data, rawText = '', statusInfo = '', semRede = false;
     try {
         const r = await sbFetch(`${SB_URL}/rest/v1/allowed_users?email=eq.${encodeURIComponent(email)}&select=email`, {
             headers: sbHeaders({ 'Accept': 'application/json' })
         });
         statusInfo = `HTTP ${r.status}`;
+        if (r.status >= 500) semRede = true;
         rawText = await r.text();
         try { data = JSON.parse(rawText); } catch(e) { data = null; }
     } catch(e) {
         statusInfo = 'fetch falhou: ' + e.message;
+        semRede = true;
     }
+
+    // Sem resposta não é "esta conta não tem acesso" — é falta de rede. Abre
+    // com a cópia deste telemóvel e volta a tentar sozinha (ARRANQUE SEM REDE).
+    if (semRede) { sbArrancarComCopia(); return; }
 
     if (!Array.isArray(data) || data.length === 0) {
         // Sem acesso
@@ -8648,14 +8842,25 @@ async function sbAposLogin() {
     if (email === ADMIN_EMAIL) { sbVerificarPedidos(); }
 
     await sbCarregarConfigAcesso();
-    await sbCarregarDados();
+    if (!(await sbCarregarDados())) { sbArrancarComCopia(); return; }
+    if (_sbTimerCopia) { clearTimeout(_sbTimerCopia); _sbTimerCopia = null; }
     // Calendário do Goals (a ficha dos jogos) e os escudos. Sem `await`: não
     // podem atrasar o arranque, e cada um re-renderiza o ecrã inicial quando
     // chega. A sincronização dos eventos vai atrás da leitura, dentro do
     // carregarCalendarioGoals() — ver CALENDÁRIO DO SPORTING.
     carregarCalendarioGoals();
     carregarLogosAdversarios();
-    init();
+    if (_sbArrancou) {
+        // Já se estava a mostrar a cópia local: o init() já correu (e corrê-lo
+        // outra vez mudava a pessoa de página) — basta redesenhar.
+        sbAvisoCopia(false);
+        sbRedesenharAposCarga();
+    } else {
+        _sbArrancou = true;
+        init();
+    }
+    if (_sbPosArranqueFeito) return;
+    _sbPosArranqueFeito = true;
     verComoRestaurar();
     pushSugerirAtivacao();
 }
@@ -8931,6 +9136,22 @@ async function sbCarregarDados() {
         // Jogos marcados "Sem evento" (mesma tabela) — para a lista de repor.
         await carregarJogosSemEvento();
 
+        // Divisões fixadas. Lidas AQUI, antes de mexer no `historico` e nos
+        // `pagamentos`: daqui para baixo não pode haver nenhum `await`. Com a
+        // rede fraca a app pode arrancar com a cópia local enquanto isto corre
+        // (ver ARRANQUE SEM REDE), e o init() desse arranque relê o histórico e
+        // os pagamentos do localStorage — se corresse a meio da reconstrução,
+        // voltava a pôr a cópia velha por cima da que acabou de chegar.
+        const divRes = await sbFetch(`${SB_URL}/rest/v1/eventos_divisao?select=*&order=evento_id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const divRows = await divRes.json();
+        if (!Array.isArray(eventos) || !Array.isArray(ordens) || !Array.isArray(ofertas) || !Array.isArray(pags)) {
+            throw new Error('resposta do servidor ilegível');
+        }
+
+        // Daqui para baixo a memória tem o servidor e não a cópia deste
+        // telemóvel: as gravações voltam a poder sair.
+        _sbCopiaLocal = false;
+
         // Reconstruir historico no formato esperado pela app. O mapa linha→evento
         // é o `eventoDaBD()` (ver acima), partilhado com o refresco de um evento
         // só: dois sítios a reconstruir o mesmo evento davam dois eventos
@@ -8954,9 +9175,7 @@ async function sbCarregarDados() {
             declaradoPor: p.declarado_por || null
         }));
 
-        // Carregar divisões fixadas
-        const divRes = await sbFetch(`${SB_URL}/rest/v1/eventos_divisao?select=*&order=evento_id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
-        const divRows = await divRes.json();
+        // Divisões fixadas (lidas lá em cima)
         divisoes = {};
         if (Array.isArray(divRows)) {
             divRows.forEach(r => {
@@ -8975,7 +9194,13 @@ async function sbCarregarDados() {
         }
 
         salvarHistoricoLocal();
-        salvarPagamentos();
+        // Só o localStorage. O salvarPagamentos() agendava também o auto-save,
+        // que 2s depois gravava o evento aberto INTEIRO por cima do servidor —
+        // uma gravação de algo que se acabou de ler, que não servia para nada e
+        // abria uma janela para desfazer o que outro telemóvel gravasse nesses
+        // 2s (no iOS, com a app em segundo plano, o timer fica congelado e a
+        // janela passa a ser de minutos).
+        salvarPagamentosLocal();
         _refrescoUltimo = Date.now();
 
         // Re-sincronizar o ESTADO DE TRABALHO com o histórico acabado de
@@ -8997,9 +9222,12 @@ async function sbCarregarDados() {
             // entrar no evento (que é o que redesenha).
             evRedesenharTudo();
         }
+        return true;
     } catch(e) {
         console.error('Erro ao carregar dados do Supabase:', e);
-        mostrarMensagem('Erro ao carregar dados!', false);
+        // A mostrar a cópia local, a falta de rede já está dita no aviso de cima.
+        if (!_sbCopiaLocal) mostrarMensagem('Erro ao carregar dados!', false);
+        return false;
     }
 }
 
@@ -9084,9 +9312,13 @@ function _evAssinatura(ev) {
 // Relê do servidor SÓ o evento que está no ecrã. Devolve true se mudou alguma
 // coisa. Silencioso de propósito: o que mudou vê-se na lista, e um aviso a cada
 // meio minuto seria ruído.
-async function refrescarEventoAtual() {
-    if (eventoAtualId == null || !_sbSession) return false;
-    const id = eventoAtualId;
+// `opts.id`: outro evento que não o do ecrã (só se actualiza o histórico).
+// `opts.forcar`: redesenhar mesmo com uma folha aberta — é a conta que foi
+// fechada noutro lado, e o ecrã não pode continuar a mostrá-la aberta.
+async function refrescarEventoAtual(opts) {
+    const forcar = !!(opts && opts.forcar);
+    const id = (opts && opts.id != null) ? opts.id : eventoAtualId;
+    if (id == null || !_sbSession) return false;
     _refrescoACorrer = true;
     try {
         const h = sbHeaders({ 'Accept': 'application/json' });
@@ -9113,7 +9345,7 @@ async function refrescarEventoAtual() {
         salvarHistoricoLocal();
         // Entretanto pode ter-se trocado de evento (ou aberto uma folha): aí só
         // fica o histórico actualizado, e o ecrã é de outra coisa.
-        if (eventoAtualId !== id || !_refrescoLivre()) return true;
+        if (eventoAtualId != id || (!forcar && !_refrescoLivre())) return true;
         carregarEvento(novo);
         evRedesenharTudo();
         return true;
@@ -9190,6 +9422,8 @@ function sbErroLegivel(e) {
             return 'o evento ainda não existe na BD (chave estrangeira) — a gravação do evento falhou antes';
         case e.status === 409:
             return 'conflito de chaves na BD';
+        case e.status === 503 && _sbCopiaLocal:
+            return 'sem ligação — a app está a mostrar a cópia deste telemóvel';
         case e.status >= 500:
             return 'erro do servidor Supabase (' + e.status + ')';
         default:
@@ -9561,7 +9795,17 @@ async function sbGuardarEvento(ev, opts) {
                 body: JSON.stringify(Object.assign({ id: ev.id, substituto_email: ev.substituto ?? null }, campos))
             }), 'upsert eventos');
         } else {
-            const r = await sbOk(await sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${ev.id}`, {
+            // GUARDA DO FECHO: uma gravação do evento inteiro leva o
+            // `total_fatura` e o `pagador` que ESTE telemóvel tem. Se cá a conta
+            // está aberta, a gravação só passa se no servidor também estiver —
+            // senão uma cópia de antes do fecho (outro telemóvel, o auto-save, o
+            // puxar-para-atualizar) reabria a conta que alguém acabou de fechar,
+            // e quem a fechou tinha de a fechar outra vez (e o grupo recebia o
+            // aviso duas vezes). Só o "Reabrir" pode pôr a conta a NULL
+            // (`opts.reabrir`). As respostas da folha (`apenas`) não levam a
+            // fatura, por isso não precisam da guarda.
+            const guardaFecho = !apenas && !ev.totalFatura && !(opts && opts.reabrir);
+            const r = await sbOk(await sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${ev.id}${guardaFecho ? '&total_fatura=is.null' : ''}`, {
                 method: 'PATCH',
                 headers: sbHeaders({ 'Prefer': 'return=representation', 'Accept': 'application/json' }),
                 body: JSON.stringify(campos)
@@ -9569,7 +9813,10 @@ async function sbGuardarEvento(ev, opts) {
             // Zero linhas = a linha já não existe (apagada aqui ou noutro
             // dispositivo). Abortar: continuar para as ordens só daria erro de
             // chave estrangeira, e recriar o evento era exactamente o bug.
+            // Com a guarda, zero linhas também pode ser "a conta já foi fechada
+            // noutro lado" — e aí não se apaga nada: relê-se o evento.
             const linhas = await r.json().catch(() => null);
+            if (Array.isArray(linhas) && linhas.length === 0 && guardaFecho && await _sbContaJaFechada(ev)) return;
             if (Array.isArray(linhas) && linhas.length === 0) {
                 // Purgar a cópia local: sem isto ficava uma carta zombie para
                 // sempre (fechar/abrir a app não corrigia nada, porque o
@@ -9621,6 +9868,32 @@ async function sbGuardarEvento(ev, opts) {
             + ' · Definições → Diagnóstico da BD para detalhes.', false);
         throw e;
     }
+}
+
+// A gravação levou a guarda do fecho (cá a conta está aberta) e não apanhou
+// linha nenhuma. Ou o evento foi apagado, ou a conta foi fechada noutro lado.
+// Devolve true no segundo caso, depois de reler o evento para este telemóvel
+// passar a mostrar a conta fechada — e quem chamou não grava mais nada (nem as
+// ordens: o prune apagava as que esta cópia não conhece).
+async function _sbContaJaFechada(ev) {
+    const r = await sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${encodeURIComponent(ev.id)}&select=id,total_fatura,pagador`,
+        { headers: sbHeaders({ 'Accept': 'application/json' }) });
+    const linhas = r.ok ? await r.json().catch(() => null) : null;
+    // Sem uma resposta legível não se sabe qual dos dois foi, e o caminho do
+    // "apagado" deita fora a cópia local: na dúvida, erro e não se mexe em nada.
+    if (!Array.isArray(linhas)) {
+        const e = new Error('confirmar evento → HTTP ' + r.status);
+        e.ctx = 'confirmar evento'; e.status = r.status;
+        throw e;
+    }
+    if (linhas.length === 0) return false;   // apagado mesmo: segue o caminho de sempre
+    const l = linhas[0];
+    const tot = l.total_fatura != null ? parseFloat(l.total_fatura) : null;
+    if (!tot) return false;                  // aberta e mesmo assim 0 linhas: não é isto
+    await refrescarEventoAtual({ id: ev.id, forcar: true });
+    mostrarMensagem('🔒 Esta conta já foi fechada (€' + tot.toFixed(2) + (l.pagador ? ', paga por ' + l.pagador : '')
+        + ') — nada foi gravado por cima. Este telemóvel foi atualizado.', false);
+    return true;
 }
 
 /* Escrita DIRIGIDA de uma única ordem (não o evento inteiro) — usada por quem
@@ -9876,6 +10149,8 @@ async function sbCarregarConfigAcesso() {
             const data = await r.json();
             amigoUsers = {};
             if (Array.isArray(data)) data.forEach(row => { if (row.amigo) amigoUsers[row.amigo] = row.email; });
+            // Para o arranque sem rede saber quem é "tu" (ver sbArrancarComCopia).
+            try { localStorage.setItem(SB_AMIGO_USERS_KEY, JSON.stringify(amigoUsers)); } catch(e) {}
         }
     } catch(e) { console.error('Erro ao carregar equivalências:', e); }
     // Utilizadores autorizados — só o admin precisa (para os dropdowns).
@@ -9915,6 +10190,12 @@ function sbScheduleAutoSave() {
     if (!_sbSession) return;
     if (_sbAutoSaveTimer) clearTimeout(_sbAutoSaveTimer);
     _sbAutoSaveTimer = setTimeout(() => {
+        // Disparou: deixa de haver gravação pendente. Sem isto o id do timer
+        // ficava lá para sempre e o puxar-para-atualizar (index.html), que só
+        // devia "despejar" uma gravação por fazer, gravava SEMPRE a cópia deste
+        // telemóvel antes de ler o servidor — foi assim que uma cópia de antes
+        // do fecho reabriu a conta do jogo de 25/11/2026, 16s depois de fechada.
+        _sbAutoSaveTimer = null;
         const ev = historico.find(e => e.id === eventoAtualId);
         // Só quem pode editar o evento (admin/substituto) tem PATCH em
         // `eventos` — os outros callers de sbGuardarEvento já verificam

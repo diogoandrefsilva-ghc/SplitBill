@@ -18,7 +18,7 @@ App pessoal de divisão de contas ("dia de jogo").
 
 ## Como NÃO gastar tokens à toa (importante)
 - **Não leias o `app.js` inteiro.** Está dividido em secções com comentários `/* ── título ── */`. Para achar algo, faz `grep` pelo título e lê só esse troço. Secções:
-  Custom confirm modal · **Pagador & Contas (dívidas)** · Page switching · FAB · **Core: cálculo de saldos** (dívidas + pagamentos) · Render · **Ecrã do evento** (quadrantes, folhas, o + em dois passos) · Payment form · Edit Ordem inline · **Importar Fatura** (foto/PDF → Gemini → conferência artigo a artigo) · **Calendário do Sporting** (ler `goals.jogos`, guardar o mínimo cá) · **Jogo aberto & presenças** (abrir o jogo, vou/não vou, hora do Sá, saída de Alcochete e mesa) · **Rodadas oferecidas** (consulta por pessoa) · Configs · **Supabase** (+ Sessão/refresh do token, Permissões, **Refresco** do evento no ecrã, Agregação global, IDs únicos, Equivalências amigo↔conta)
+  Custom confirm modal · **Pagador & Contas (dívidas)** · Page switching · FAB · **Core: cálculo de saldos** (dívidas + pagamentos) · Render · **Ecrã do evento** (quadrantes, folhas, o + em dois passos) · Payment form · Edit Ordem inline · **Importar Fatura** (foto/PDF → Gemini → conferência artigo a artigo) · **Calendário do Sporting** (ler `goals.jogos`, guardar o mínimo cá) · **Jogo aberto & presenças** (abrir o jogo, vou/não vou, hora do Sá, saída de Alcochete e mesa) · **Rodadas oferecidas** (consulta por pessoa) · Configs · **Supabase** (+ Sessão/refresh do token, Permissões, **Arranque sem rede**, **Refresco** do evento no ecrã, Agregação global, IDs únicos, Equivalências amigo↔conta)
 - `fatura-restaurante.ts` — Edge Function (Deno) que lê a fatura com o Gemini. **Não corre no site**: vive no Supabase, faz-se deploy à parte (`supabase functions deploy fatura-restaurante`). É irmã da `fatura-ocr` da FestasBV — mesmo projeto Supabase, schema e prompt diferentes.
 - `push-notificar.ts` — a outra Edge Function, a das notificações Web Push. Também **não corre no site** (`supabase functions deploy push-notificar`): se mexeres nos `tipo` daqui, o texto novo só aparece depois desse deploy. O corpo da notificação é escolhido **lá**, nunca vem livre do cliente — só nomes, valores, as horas (a que cada um pode sair, a da mesa e a de cada carro, validadas `HH:MM` dos dois lados) e o nº de pessoas da mesa (validado inteiro 1–99 dos dois lados, opcional) são interpolados. **`tipo` novo = a app pergunta antes** (`_pushConhece`, um pedido `{tipo:'tipos'}` sem destinatários): a versão desta função anterior à saída de Alcochete mandava um tipo que não conhecesse para o texto da **dívida** — um aviso novo, chegado antes do deploy, aparecia ao grupo todo como "ficaste a dever €0.00". Agora um tipo desconhecido leva 400, e só a versão nova responde à pergunta com a lista; sem a lista, a app fica sem esse aviso em vez de o dar errado.
 - **Fatura guardada:** o detalhe lido fica em `estado.fatura` e persiste na coluna `eventos.fatura` (jsonb, `db/fatura-detalhe.sql`). A correspondência linha-da-fatura ↔ artigo do menu **não** se guarda — é recalculada a cada render (`faturaConferir()`), de propósito: se o menu do evento mudar, a conferência acompanha. Sem a migração, `FATURA_COL=false` e a fatura fica só no localStorage.
@@ -673,7 +673,13 @@ andava-se para baixo e para cima. Agora cabe tudo num ecrã.
   **Gerir**; a fatura na **Conta**; os dois PDFs em **Relatórios**.
 - **O cartão do total da mesa** é uma linha só, com o valor à direita: as
   contagens de pessoas e de registos que lá estavam já vivem nas pílulas de cada
-  quadrante, e o que se ganha em altura vai todo para a grelha.
+  quadrante, e o que se ganha em altura vai todo para a grelha. Com a conta
+  **fechada num valor diferente do lançado**, o que vai em grande é a **fatura**
+  e o lançado fica rasurado ao lado (`.ev-mesa-vs`); por baixo do rótulo,
+  `fatura do Sá · −€3.00` (`#total-mesa-sub`, verde a menos, vermelho a mais).
+  Só o lançado, com o Por pessoa a somar a fatura, não se percebia (25/11/2026:
+  €134 lançados, €131 na fatura). Os zooms de Ordens e Por item continuam a
+  somar o lançado — é a soma das linhas deles.
 - **O que NÃO mudou, e é o que segura isto tudo:** os formulários antigos
   continuam no DOM, dentro das folhas, com os **mesmos ids**
   (`section-adicionar`, `section-ofertas`, `#item`, `#quantidade`,
@@ -776,6 +782,68 @@ vir da cache.
   no evento mostrava o que havia de novo. Carregar o evento só mexe na memória:
   **quem carrega um evento fora do arranque redesenha a seguir**, senão fica
   outra vez o ecrã de antes.
+
+## Gravar por cima: a cópia velha de um telemóvel não pode desfazer o fecho
+**Caso que o pagou (25/11/2026):** o Mestre fechou a conta às 20:51:46 (divisão
+gravada, notificações enviadas) e 16s depois o telemóvel do admin regravou o
+evento inteiro com a cópia que tinha de antes do fecho — `total_fatura`,
+`pagador` e `fatura` voltaram a NULL. O telemóvel do Mestre refrescou, viu a
+conta aberta, e ele fechou outra vez: segundo aviso a toda a gente. O
+`sbGuardarEvento` sem `apenas` manda **tudo** o que este telemóvel tem, e quem o
+dispara não sabe se o servidor mudou entretanto.
+- **A guarda do fecho** (`sbGuardarEvento`): se cá a conta está aberta, o PATCH
+  leva `&total_fatura=is.null`. Fechada no servidor → zero linhas →
+  `_sbContaJaFechada()` confirma que o evento existe, relê-o
+  (`refrescarEventoAtual({id, forcar})`), avisa e **não grava mais nada** —
+  nem as ordens, cujo prune apagaria as que a cópia velha não conhece. Sem essa
+  confirmação, zero linhas era lido como "evento apagado" e a cópia local ia
+  para o lixo.
+- **Só reabrir pode pôr a conta a NULL**: `sbGravarReabertura()` (Reabrir,
+  Desbloquear, Limpar evento) grava já, com `{reabrir:true}`, sem guarda. Um
+  caminho novo que reabra a conta tem de passar por ela — o auto-save seria
+  recusado e a conta voltava fechada no refresco seguinte.
+- **O que disparava as gravações de cópias velhas** (e já não dispara):
+  o puxar-para-atualizar gravava **sempre** antes de ler (o `_sbAutoSaveTimer`
+  nunca voltava a null depois de disparar — foi este o de 25/11); e o
+  `salvarPagamentos()` no fim do `sbCarregarDados()` e na migração do `init()`
+  (que corre em qualquer arranque com uma conta fechada, porque as `dividas`
+  vêm vazias do servidor) agendava o auto-save do evento inteiro 2s depois de
+  cada carga. Esses dois passaram a `salvarPagamentosLocal()`: o auto-save nunca
+  gravou pagamentos, só o evento.
+- **O fecho só avisa quando ficou no servidor** (`fecharComFatura`): se o PATCH
+  falha, a conta volta a aberta no ecrã (valor e pagador nos campos, basta
+  carregar em Fechar outra vez) e **ninguém é notificado**; a notificação só sai
+  com o evento e a divisão gravados. Antes avisava sempre — com a rede do
+  estádio, "ficaste a dever" de uma conta que não tinha fechado.
+- **O que a guarda NÃO cobre:** uma cópia velha de uma conta aberta continua a
+  poder regravar as outras colunas e podar ordens de outros (é o mesmo `apenas`
+  que já protege as respostas da folha). O que se fez foi tirar os gatilhos;
+  uma versão por linha (`updated_at` + PATCH condicional) é o passo seguinte, se
+  voltar a morder.
+
+## Arranque sem rede: a cópia deste telemóvel, só de leitura
+No estádio a app abria **vazia** (o `init()` só corria depois de TODOS os dados
+chegarem, e o splash saía aos 6s por cima de uma página por desenhar) ou, sem
+rede nenhuma, **no login** — a validação da sessão falhava e a sessão era
+apagada. Secção `ARRANQUE SEM REDE` no `app.js`:
+- Sem rede, ou sem resposta em `SB_ESPERA_ARRANQUE_MS` (3,5s), arranca com o
+  localStorage (`sbArrancarComCopia` → `init()`), com a pílula `#sb-copia` no
+  topo. Com rede boa não se vê nada disto: a carga chega antes.
+- **`_sbCopiaLocal` = só leitura:** `podeEditarEvento()` e
+  `podeAdicionarOrdemPropria()` dão false e o `sbFetch` corta as escritas (como
+  no "ver como"). A cópia pode ter horas: gravá-la era o erro da secção acima.
+  Passa a false dentro do `sbCarregarDados()`, no instante em que a memória
+  deixa de ser a cópia — por isso **não pode haver `await` depois da
+  reconstrução do histórico** lá dentro (o `init()` da cópia relê o
+  localStorage e punha a cópia por cima do que acabou de chegar).
+- A sessão só se apaga com um **4xx** do servidor (`sbValidarSessao`); sem
+  resposta ou 5xx é falta de rede. O mesmo no `allowed_users`: sem resposta já
+  não mostra "esta conta não tem acesso".
+- Volta a tentar sozinha (`sbReligar`): rede de volta, app à frente, de 20 em
+  20s, tocar na pílula e puxar-para-atualizar. Quando a carga chega,
+  `sbRedesenharAposCarga()` — o `init()` não corre segunda vez (mudava a pessoa
+  de página).
+- `amigoUsers` fica em cache (`sb_amigo_users`) para a cópia saber quem é "tu".
 
 ## Armadilhas do CSS (já mordidas)
 - **`input, select { appearance: none }`** (para os campos de texto) apaga o
