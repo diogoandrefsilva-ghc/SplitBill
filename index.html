@@ -623,6 +623,15 @@ window.sbEsconderSplash = function(){
             </button>
         </div>
         <span class="ev-hint">Os dois abrem numa página nova, prontos a imprimir ou a guardar.</span>
+        <!-- A página do jogo, para este evento: depois do dia é aqui que se vê
+             quem foi ao jogo e em que carro (evAbrirJogoECarros no app.js). -->
+        <div class="ev-card" style="margin-top:12px;">
+            <button class="ev-lrow" onclick="evAbrirJogoECarros()">
+                <span class="ev-lrow-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16.5V12l2-5h10l2 5v4.5"/><path d="M3.5 12h17"/><path d="M5 16.5h14"/><circle cx="8" cy="16.5" r="1.8"/><circle cx="16" cy="16.5" r="1.8"/></svg></span>
+                <span class="ev-lrow-i"><b>Jogo e carros</b><span>quem foi ao jogo e em que carro</span></span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 5 16 12 9 19"/></svg>
+            </button>
+        </div>
     </div>
 </div>
 
@@ -1013,6 +1022,9 @@ if ('serviceWorker' in navigator) {
 /* A ficha "sem Sá" que o admin pode tocar (repor) é um botão: o cursor volta. */
 button.sbi-past.semsa{cursor:pointer;}
 .sbi-past.semsa:hover{background:#EEF0ED;}
+/* Sem Sá mas com evento: abre a página do jogo (quem foi, os carros). Menos
+   apagada do que a dos antigos, que não têm nada lá dentro. */
+.sbi-past.semsa.comev > *{opacity:.75;}
 
 /* Pedido de pagamento por confirmar (ecrã inicial, só admin) */
 .sbi-pedido{background:var(--card,#fff);border:1px solid #E7D9A8;border-left:3px solid #B8911F;border-radius:13px;padding:12px 14px;margin-bottom:9px;box-shadow:0 3px 12px -10px rgba(11,59,43,.4);}
@@ -1549,11 +1561,14 @@ button.sbi-past.semsa{cursor:pointer;}
     // tornava o cartão mais alto do que os vizinhos. À esquerda, para a coluna
     // ⚽/🍽 continuar alinhada com a dos cartões sem box.
     var pres = '';
+    var semSa = false;
+    try { semSa = (typeof eventoSemSa==='function') && eventoSemSa(ev); } catch(e){}
     if (cont) {
       var nBox = (cont.box || []).length;
+      // Sem Sá, o 🍽 dá lugar a "sem Sá": quem vai ao jogo continua a contar.
       pres = '<span class="sbj-pres">'
         + '<span class="sbi-pill sbi-calm">⚽ '+cont.jogo.length+'</span>'
-        + '<span class="sbi-pill sbi-calm">🍽 '+cont.sa.length+'</span>'
+        + (semSa ? '<span class="sbi-pill sbi-calm">sem Sá</span>' : '<span class="sbi-pill sbi-calm">🍽 '+cont.sa.length+'</span>')
         + '</span>';
       if (nBox) pres = '<span class="sbj-presw">'
         + '<span class="sbi-pill sbi-box" title="'+nBox+(nBox===1?' box disponível':' boxes disponíveis')+'">'+SBI_ICO_BILHETE+nBox+'</span>'
@@ -1573,9 +1588,24 @@ button.sbi-past.semsa{cursor:pointer;}
      são um <div> e não um botão, porque não há evento para abrir. */
   function cardHistorico(it){
     var f = it.ficha || { adversario: (it.ev && it.ev.descricao) || 'Sem nome', competicao:'', jornada:'', hora:'' };
+    if (it.semSa && it.ev){
+      // Sem Sá mas COM evento (é assim desde que a marca deixou de o apagar):
+      // a ficha abre a página do jogo, com quem foi e em que carro. Repor o Sá
+      // faz-se lá dentro (admin).
+      var nj = 0, nc = 0;
+      try { nj = contagemPresencas(it.ev).jogo.length; } catch(e){}
+      try { nc = carrosAtivos() ? carrosDoEvento(it.ev).carros.length : 0; } catch(e){}
+      return '<button class="sbi-tap sbi-past sbj semsa comev" onclick="abrirFolhaJogo(\''+esc(it.ev.id)+'\')" aria-label="'+esc(f.adversario)+' — não fomos ao Sá (ver quem foi ao jogo)">'
+        + fichaMeio(it.data, f)
+        + '<span class="sbj-pres">'
+        + (nc ? '<span class="sbi-pill sbi-calm">🚗 '+nc+'</span>' : (nj ? '<span class="sbi-pill sbi-calm">⚽ '+nj+'</span>' : ''))
+        + '<span class="sbi-pill sbi-calm">sem Sá</span></span>'
+        + fichaCico(f) + '</button>';
+    }
     if (it.semSa){
-      // Só o admin a pode repor (reporSemEventoConfirmar no app.js); para os
-      // outros é um <div>, não há nada para abrir.
+      // Os marcados antes de a marca deixar de apagar o evento: só o admin a
+      // pode repor (reporSemEventoConfirmar no app.js); para os outros é um
+      // <div>, não há nada para abrir.
       var meio = fichaMeio(it.data, f)
         + '<span class="sbj-pres"><span class="sbi-pill sbi-calm">sem Sá</span></span>'
         + fichaCico(f);
@@ -1757,7 +1787,12 @@ button.sbi-past.semsa{cursor:pointer;}
     var admin = ehAdmin();
     var abertos = eventosAbertos();
     var futuros = [], porFechar = [];
-    abertos.forEach(function(ev){ (ehJogoAberto(ev) ? porFechar : futuros).push(ev); });
+    abertos.forEach(function(ev){
+      if (ehJogoAberto(ev)) { porFechar.push(ev); return; }
+      // Sem Sá e já passado: não é agenda, é Histórico (ficha apagada lá).
+      try { if (typeof eventoSemSa==='function' && eventoSemSa(ev) && jogoJaPassou(ev)) return; } catch(e){}
+      futuros.push(ev);
+    });
     porFechar.sort(function(a,b){ return tsEvento(b) - tsEvento(a); });  // mais recente primeiro
     futuros.sort(function(a,b){ return tsEvento(a) - tsEvento(b); });    // mais perto primeiro
     var h = '';

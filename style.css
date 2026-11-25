@@ -655,6 +655,11 @@ html,body{touch-action:pan-x pan-y}
             justify-content: center; font-size: 11px; line-height: 1; cursor: pointer;
         }
         .jf-pencil:active { transform: scale(.94); }
+        /* "sem Sá" ao lado da data: o jogo em que o grupo não vai ao Sá. */
+        .jf-semsa {
+            background: #EEF1ED; color: #5B6661; border-radius: 999px; padding: 1px 8px;
+            font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+        }
         .jf-semev, .jf-semev:hover {
           display:block; width:100%; margin-top:10px; padding:8px; background:transparent;
           color:#8a8a8a; border:none; box-shadow:none; font-family:inherit; font-size:12px;
@@ -850,6 +855,9 @@ html,body{touch-action:pan-x pan-y}
            o nome, que é a única coisa que não se lê pelo símbolo. */
         .jf-tab.com-box .jf-tr { grid-template-columns: 1fr 26px 48px 30px 30px; gap: 6px; }
         .jf-tab.com-box.sem-horas .jf-tr { grid-template-columns: 1fr 26px 30px 30px; }
+        /* Jogo sem Sá: saem as colunas do Sá e da hora (ver _jfTabelaHTML). */
+        .jf-tab.sem-horas.sem-sa .jf-tr { grid-template-columns: 1fr 30px; }
+        .jf-tab.com-box.sem-horas.sem-sa .jf-tr { grid-template-columns: 1fr 30px 30px; }
         .jf-tr + .jf-tr { border-top: 1px solid #EFF2EE; }
         .jf-th {
             font-family: var(--mono, monospace); font-size: 9px; font-weight: 600; letter-spacing: .1em;
@@ -2785,11 +2793,13 @@ html.ev-lock, html.ev-lock body { overflow: hidden; overscroll-behavior: none; }
    Página inteira por cima do ecrã inicial, a entrar da direita como uma página
    nova: cabeçalho verde com "Voltar" e o nome do jogo, e o corpo a deslizar
    por dentro (a página por baixo fica trancada, html.jp-aberta). Os diálogos
-   das horas abrem por cima (o modal está a 99999, a página a 9990), e o aviso
+   das horas abrem por cima (o modal está a 99999, a página a 9997 — a mesma
+   dos painéis, e vem depois do do Histórico no DOM, para abrir por cima dele
+   quando se toca numa ficha sem Sá; estava a 9990 e ficava escondida), e o aviso
    flutuante (.ev-toast) subiu para 99998 para se ver por cima dela. O
    conteúdo é o de sempre (_jogoSheetHTML, as classes .jf-*), agora em fundo
    cinzento — daí os cartões passarem a branco aqui. */
-.jp { position: fixed; inset: 0; z-index: 9990; display: flex; flex-direction: column; background: #EFF1EC; animation: jpEntra .22s ease; }
+.jp { position: fixed; inset: 0; z-index: 9997; display: flex; flex-direction: column; background: #EFF1EC; animation: jpEntra .22s ease; }
 .jp[hidden] { display: none; }
 .jp.sai { animation: jpSai .18s ease forwards; }
 @keyframes jpEntra { from { transform: translateX(100%); } to { transform: none; } }

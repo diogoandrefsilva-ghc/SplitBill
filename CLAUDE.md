@@ -142,12 +142,14 @@ Com o calendário criado de uma vez, "eventos em aberto" passou a incluir meia
   (`.sbi-past`) — o creme/dourado é da agenda — e à direita levam o total da
   mesa e quantos comeram (🍽). Os jogos em Alvalade marcados **"Sem evento"**
   (o grupo não foi ao Sá) e já passados também entram, **apagados**
-  (`.sbi-past.semsa`, pílula "sem Sá"): não têm evento cá, a ficha vem do Goals.
-  É **aí, e só aí,** que se repõem — o admin toca na ficha
-  (`reporSemEventoConfirmar`); para os outros não se abre. A linha "Sem evento:
-  … repor" que havia por baixo dos Próximos Jogos saiu. Repor um jogo que **já
-  passou** cria o evento logo **aberto** (a sincronização nunca cria eventos com
-  data velha); um por acontecer volta pela sincronização, como antes.
+  (`.sbi-past.semsa`, pílula "sem Sá") — ver a secção **"Sem Sá"** abaixo:
+  desde que a marca deixou de apagar o evento, a ficha (`.semsa.comev`, com
+  🚗 N carros) abre a **página do jogo** para toda a gente, com quem foi e em
+  que carro, e o admin repõe lá dentro ("↩️ Afinal há Sá"). Só os marcados
+  **antes** disso (evento apagado, a ficha vem do Goals) continuam a repor-se
+  tocando na ficha (`reporSemEventoConfirmar`, só admin). Repor um jogo que
+  **já passou** abre-o (ou cria-o já **aberto**, se não houver evento); um por
+  acontecer só perde a marca.
   No **topo** do painel fica o atalho das **Rodadas oferecidas** (saiu do ecrã
   inicial, onde só ficam Histórico · Pagamentos); fechar as rodadas abertas daí
   volta ao Histórico (`_rodDoHistorico`). Como `GOALS_JOGOS` só traz hoje-45d em diante, ao abrir o
@@ -203,7 +205,9 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
   eram os botões do fundo do modal): **Abrir jogo** (só no primeiro, e só para
   admin/substituto) · **Preparar o evento** (abre a página do evento sem abrir
   o jogo) · **Sem evento** (admin). Os diálogos das horas continuam a ser
-  modais por cima da página (o modal a 99999, a página a 9990, o `.ev-toast`
+  modais por cima da página (o modal a 99999, a página a **9997** — a dos
+  painéis, e vem a seguir ao `#page-histjogos` no DOM para abrir por cima
+  dele; a 9990 ficava escondida atrás do Histórico —, o `.ev-toast`
   a 99998 para se ver), e quando fecham a página redesenha-se
   (`_jpRedesenhar`, que não faz nada se a página já não estiver aberta).
   Qualquer resposta (`jogoSheetPresenca` & cª) também só redesenha a página.
@@ -382,6 +386,40 @@ passa a aberto quando **o admin (ou o substituto do evento)** o abre.
 - O cartão do jogo por abrir tem cor própria (`.sbi-fut`, dourado/creme). O verde
   (`.sbi-open`) é do jogo em aberto: são coisas diferentes e não se podem
   confundir.
+
+## Sem Sá: o evento fica, com o jogo e os carros (`eventoSemSa`)
+"Sem evento" **apagava** o evento — e com ele quem ia ao jogo e em que carro,
+que interessa haja Sá ou não. Agora a marca (`splitbill.config`, chave
+`jogos_sem_evento`, pelo `jogo_id`, **sem migração**) só diz que **não há Sá**,
+e o evento fica. `eventoSemSa(ev)` é a regra; `jogoJaPassou(ev)` diz se o dia
+já passou (hoje não conta).
+- **Não há conta:** `jogoAberto()` é sempre false, `jogosPorAbrir()` deixa-o de
+  fora (senão travava a abertura do seguinte), `eventoPorDefeito()` só cai nele
+  se não houver mais nada, `mesaHoraEvento()` dá `''` e `podeMarcarMesa()` é
+  false (a mesa que lá estivesse volta com o repor).
+- **Página do jogo:** sem "Vais ao Sá?", sem a hora de sair, sem a mesa e sem
+  "Preparar"; fica o jogo, o carro, a hora do carro e a box. A tabela perde as
+  colunas Sá/Pode (`.jf-tab.sem-sa`) e o resumo conta os carros. O carro sem
+  hora escolhida fica "--:--" (sem mesa não há defeito).
+- **Ecrã inicial:** fica nos Próximos Jogos com "sem Sá" no lugar do 🍽 até ao
+  dia; depois sai de lá e vai para o Histórico (`jogosDoHistoricoLista`).
+- **Sincronização:** os marcados também se criam (nascem já sem Sá). Os que
+  foram marcados antes desta mudança e ainda estão por jogar voltam assim; os
+  já passados ficaram sem evento — nada a recuperar.
+
+## Depois do dia: a página do jogo como registo (Relatórios › Jogo e carros)
+A página do jogo (`abrirFolhaJogo`) serve também jogos abertos, fechados e
+passados — é onde se vê, no histórico de um evento, **os carros que foram**.
+Entra-se pelo **Relatórios › Jogo e carros** do evento (`evAbrirJogoECarros`)
+ou pela ficha sem Sá do Histórico.
+- Aberto o jogo, as perguntas do Sá calam-se (quem lá está é quem consome);
+  depois do dia as perguntas passam ao passado ("Foste ao jogo?", "Em que carro
+  foste?") para se poder **registar** quem foi e em que carro; com a conta
+  **fechada** não há perguntas (o servidor também recusa: `total_fatura IS
+  NULL` nas `marcar_*`). Os títulos passam a "Como foi o dia" e "Quem foi".
+- Nada de marcar mesa, mudar a data nem dar a box depois do dia, e os avisos
+  de carro (`sbNotificarLevaCarro`, `sbNotificarCarroHora`) **não saem** num
+  jogo que já passou — é só registo, não se acorda ninguém.
 
 ## Convocados por defeito (Definições › Convocados por defeito, só admin)
 Quem entra por omissão num evento novo. Antes era **adivinhado** (quem tivesse
