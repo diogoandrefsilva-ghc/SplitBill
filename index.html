@@ -1057,7 +1057,9 @@ button.sbi-past.semsa{cursor:pointer;}
 .sbi-calm{background:#EEF1ED;color:var(--ink-soft,#5B6661);}
 /* Boxes livres: cor própria (a do cartão de agenda) porque não é mais uma
    contagem de presenças — é a única das três em que há alguma coisa a fazer. */
-.sbi-box{background:#F6ECC9;color:#7A5E12;}
+.sbi-box{background:linear-gradient(180deg,#16A86F,var(--verde,#0E7A4F));color:#fff;box-shadow:0 3px 8px -4px rgba(14,122,79,.7);}
+.sbi-box .sbi-bilhete{width:15px;height:15px;color:var(--verde,#0E7A4F);}
+.sbj-presw{flex:0 0 auto;display:flex;align-items:center;gap:4px;}
 .sbi-pill-stack{display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex:0 0 auto;}
 
 /* Botão voltar ao início (páginas internas) */
@@ -1526,6 +1528,12 @@ button.sbi-past.semsa{cursor:pointer;}
     return '<span class="sbj-cico">'+(compSrc?'<img src="'+esc(compSrc)+'" alt="'+esc(f.competicao)+'" loading="lazy" onerror="this.style.display=\'none\'">':'')+'</span>';
   }
 
+  // Bilhete branco (a pílula da box é verde cheia): o emoji 🎟️ saía cor-de-rosa
+  // e diferente em cada sistema. O picotado leva a cor do fundo da pílula.
+  var SBI_ICO_BILHETE = '<svg class="sbi-bilhete" viewBox="0 0 24 24" aria-hidden="true">'
+    + '<path fill="#fff" d="M2.5 7.5a2 2 0 0 1 2-2h15a2 2 0 0 1 2 2v2.2a2.3 2.3 0 0 0 0 4.6v2.2a2 2 0 0 1-2 2h-15a2 2 0 0 1-2-2v-2.2a2.3 2.3 0 0 0 0-4.6z"/>'
+    + '<path d="M15.5 7v10" stroke="currentColor" stroke-width="1.4" stroke-dasharray="1.6 1.6" fill="none"/></svg>';
+
   function cardFuturo(ev, primeiro){
     var nome = esc(ev.descricao || 'Sem nome');
     var cont = null, f = null;
@@ -1537,14 +1545,19 @@ button.sbi-past.semsa{cursor:pointer;}
     // das três que é notícia — quem chega ao ecrã inicial e vê um 🎟️ sabe que
     // há lugar para pedir. Um "0" a cada jogo era ruído e uma linha a mais na
     // altura do cartão (.sbj-pres empilha).
+    // A pílula da box vai AO LADO das outras duas, e não por baixo: empilhada
+    // tornava o cartão mais alto do que os vizinhos. À esquerda, para a coluna
+    // ⚽/🍽 continuar alinhada com a dos cartões sem box.
     var pres = '';
     if (cont) {
       var nBox = (cont.box || []).length;
       pres = '<span class="sbj-pres">'
         + '<span class="sbi-pill sbi-calm">⚽ '+cont.jogo.length+'</span>'
         + '<span class="sbi-pill sbi-calm">🍽 '+cont.sa.length+'</span>'
-        + (nBox ? '<span class="sbi-pill sbi-box">🎟️ '+nBox+'</span>' : '')
         + '</span>';
+      if (nBox) pres = '<span class="sbj-presw">'
+        + '<span class="sbi-pill sbi-box" title="'+nBox+(nBox===1?' box disponível':' boxes disponíveis')+'">'+SBI_ICO_BILHETE+nBox+'</span>'
+        + pres + '</span>';
     }
 
     return '<button class="sbi-tap sbi-fut sbj'+(primeiro?' proximo':'')+'" onclick="abrirFolhaJogo(\''+esc(ev.id)+'\')" aria-label="'+nome+'">'
