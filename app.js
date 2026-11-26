@@ -83,7 +83,12 @@ function init() {
     }
     if (migrated) {
         salvarHistoricoLocal();
-        salvarPagamentos();
+        // Só o localStorage: o `migrated` é verdadeiro em QUALQUER arranque com
+        // uma conta fechada (as `dividas` vêm sempre vazias do servidor), e o
+        // salvarPagamentos() agendava o auto-save — 2s depois de cada arranque,
+        // o evento aberto inteiro era regravado por cima do servidor com o que
+        // este telemóvel tinha (ver a guarda do fecho no sbGuardarEvento).
+        salvarPagamentosLocal();
     }
 
     ghLoadCfg();
@@ -146,6 +151,7 @@ function limparEstadoEvento() {
     estado.descricaoEvento = '';
     estado.pagador = '';
     estado.dividas = {};
+    estado._srv = null;
     estado.amigosSelecionados.clear();
     estado.ofertaAmigos.clear();
     amigos = [];
@@ -166,6 +172,10 @@ function carregarEvento(ev) {
     estado.descricaoEvento = ev.descricao || '';
     estado.pagador = ev.pagador || '';
     estado.dividas = ev.dividas ? JSON.parse(JSON.stringify(ev.dividas)) : {};
+    // A fotografia do servidor de onde esta cópia saiu (GRAVAR SÓ O QUE MUDOU).
+    // A mesma referência, não uma cópia: o que uma gravação confirmar vale
+    // para os dois lados.
+    estado._srv = ev._srv || null;
     amigos = ev.amigos ? JSON.parse(JSON.stringify(ev.amigos)) : [];
     // Evento sem convocados e sem nada lançado: não há de onde os deduzir (é o
     // caso dos eventos criados antes de db/convocados-menu.sql). Usa-se a
@@ -524,7 +534,28 @@ function _atualizarUIInner() {
     });
 
     // ── Total da mesa ───────────────────────────────────────────────────────
-    document.getElementById('total-mesa').textContent = '€' + totalMesa.toFixed(2);
+    // Com a fatura fechada num valor diferente do que foi lançado, o que se
+    // paga é a FATURA: é ela que vai em grande, e o que a mesa somava na app
+    // fica rasurado ao lado. Mostrar só os €134 lançados com as pessoas a
+    // somarem os €131 da fatura (jogo de 25/11/2026: 2 artigos a menos na
+    // fatura, mais uma rodada) não se percebia.
+    const _elTot = document.getElementById('total-mesa');
+    const _elTotSub = document.getElementById('total-mesa-sub');
+    const _fat = estado.totalFatura;
+    const _acerto = (_fat && totalMesa > 0) ? Math.round((_fat - totalMesa) * 100) / 100 : 0;
+    if (_acerto !== 0) {
+        _elTot.innerHTML = '<s class="ev-mesa-vs">€' + totalMesa.toFixed(2) + '</s>€' + _fat.toFixed(2);
+        _elTot.title = 'Lançado na app €' + totalMesa.toFixed(2) + ' · fatura do Sá €' + _fat.toFixed(2);
+        if (_elTotSub) {
+            _elTotSub.textContent = 'fatura do Sá · ' + (_acerto < 0 ? '−' : '+') + '€' + Math.abs(_acerto).toFixed(2);
+            _elTotSub.classList.toggle('mais', _acerto > 0);
+            _elTotSub.hidden = false;
+        }
+    } else {
+        _elTot.textContent = '€' + (_fat || totalMesa).toFixed(2);
+        _elTot.title = '';
+        if (_elTotSub) _elTotSub.hidden = true;
+    }
 
     // Decide-se já aqui (antes de desenhar Ordens) porque, sem Ofertas, as
     // Ordens ficam com a linha toda — e nessa largura cabem quase todos os
@@ -1850,6 +1881,11 @@ function salvarNoLocalStorage() {
             historico[idx].dividas = JSON.parse(JSON.stringify(estado.dividas));
             historico[idx].amigos = JSON.parse(JSON.stringify(amigos));
             historico[idx].menu = JSON.parse(JSON.stringify(menu));
+            // A cópia volta ao histórico com a fotografia de onde saiu: se o
+            // refresco tiver trocado a linha entretanto (folha aberta), é com
+            // ESSA que se compara, senão o que os outros lançaram parecia
+            // apagado cá (GRAVAR SÓ O QUE MUDOU).
+            if (estado._srv) historico[idx]._srv = estado._srv;
             // Update data field from first order — exceto se a data foi escolhida
             // manualmente na criação do evento (dataManual).
             if (!historico[idx].dataManual) {
@@ -2330,6 +2366,7 @@ async function limparTudo() {
         estado.amigosSelecionados.clear();
         estado.ofertaAmigos.clear();
         salvarNoLocalStorage();
+        sbGravarReabertura();
         atualizarReadOnly();
         atualizarUI();
         renderConfigAmigos();
@@ -2711,20 +2748,57 @@ async function fecharComFatura() {
     // evento reabre sozinho ao recarregar, porque o `total_fatura` nunca lá
     // chegou). Por isso grava-se aqui já, de imediato, e espera-se pela
     // confirmação antes de dar o fecho como concluído.
+    // O auto-save que o salvarNoLocalStorage() acabou de agendar repetia esta
+    // mesma gravação 2s depois: com a rede do estádio, é tráfego a dobrar.
+    if (_sbAutoSaveTimer) { clearTimeout(_sbAutoSaveTimer); _sbAutoSaveTimer = null; }
     const evAtual = historico.find(e => e.id === eventoAtualId);
-    let eventoGravado = true;
+    const idFecho = eventoAtualId;
+    let eventoGravado = true, erroFecho = null, resFecho = 'ok';
     if (evAtual) {
-        try { await sbGuardarEvento(evAtual); } catch (e) { eventoGravado = false; }
+        try { resFecho = await sbGuardarEvento(evAtual); } catch (e) { eventoGravado = false; erroFecho = e; }
     }
-    // sbGuardarEvento já mostra a sua própria mensagem de erro (com o
-    // "Definições → Diagnóstico da BD") quando falha — não duplicar aqui.
+    if (resFecho === 'fechada' || resFecho === 'apagado') {
+        // Alguém fechou (ou apagou) primeiro. O evento já foi relido e o aviso
+        // já saiu (_sbSemLinha); a divisão que conta é a de quem fechou, e
+        // ninguém é notificado outra vez.
+        delete divisoes[idFecho];
+        await sbLerDivisao(idFecho);
+        atualizarReadOnly();
+        atualizarUI();
+        renderContas();
+        return;
+    }
+    if (!eventoGravado) {
+        // A conta NÃO ficou fechada no servidor: o ecrã não pode dizer que sim,
+        // nem o grupo pode receber o "ficaste a dever" — era isso que levava a
+        // fechar duas vezes e a receber o aviso duas vezes. Volta a aberta, com
+        // o valor e o pagador nos campos, para bastar carregar em Fechar outra
+        // vez. (O total vai em último no sbGuardarEvento: se a gravação falhou
+        // a meio, a conta continua aberta no servidor. Se o próprio total
+        // chegou e foi só a resposta que se perdeu, a guarda não deixa esta
+        // cópia reabri-la: o refresco traz a conta fechada.)
+        estado.totalFatura = null;
+        estado.dividas = {};
+        delete divisoes[eventoAtualId];
+        modoReadOnly = false;
+        salvarNoLocalStorage();
+        if (_sbAutoSaveTimer) { clearTimeout(_sbAutoSaveTimer); _sbAutoSaveTimer = null; }
+        document.getElementById('total-fatura').value = fatura;
+        document.getElementById('pagador-select').value = pagador;
+        atualizarReadOnly();
+        atualizarUI();
+        renderContas();
+        mostrarMensagem('⚠️ A conta NÃO ficou fechada (' + sbErroLegivel(erroFecho) + ') — ninguém foi avisado. Carrega em Fechar outra vez.', false);
+        return;
+    }
     const divisaoGravada = await sbGuardarDivisao(eventoAtualId, divisaoHamilton);
-    sbNotificarDividas(divisaoHamilton, estado.descricaoEvento, pagador);  // fire-and-forget — notificação é um extra
+    // Só com a conta e a divisão no servidor: fire-and-forget — a notificação é um extra.
+    if (divisaoGravada) sbNotificarDividas(divisaoHamilton, estado.descricaoEvento, pagador);
 
-    if (eventoGravado && divisaoGravada) {
+    if (divisaoGravada) {
         mostrarMensagem('✓ Conta fechada — €' + fatura.toFixed(2) + ' (paga por ' + pagador + ')', true);
-    } else if (eventoGravado && !divisaoGravada) {
-        mostrarMensagem('⚠️ Conta fechada, mas a divisão por pessoa não gravou no servidor — tenta "Fechar" outra vez ou usa Definições → Diagnóstico da BD', false);
+    } else {
+        mostrarMensagem('⚠️ Conta fechada, mas a divisão por pessoa não gravou no servidor e ninguém foi avisado — reabre e fecha outra vez, ou usa Definições → Diagnóstico da BD', false);
     }
 }
 
@@ -2813,7 +2887,21 @@ async function reabrirEvento() {
     atualizarReadOnly();
     atualizarUI();
     renderContas();
+    // O sbGuardarEvento já disse que não gravou: a conta continua fechada no servidor.
+    if (!(await sbGravarReabertura())) return;
     mostrarMensagem(manterPagamentos ? '🔓 Evento reaberto (pagamentos mantidos)' : '🔓 Evento reaberto', true);
+}
+
+// Reabrir (o "Reabrir" da Conta, o "Desbloquear" do banner, o "Limpar evento")
+// é o ÚNICO caminho que pode pôr a conta a NULL no servidor: as outras gravações
+// levam a guarda do fecho (ver sbGuardarEvento), e o auto-save que o
+// salvarNoLocalStorage() agenda seria recusado por ela. Grava-se já, sem guarda.
+async function sbGravarReabertura() {
+    if (_sbAutoSaveTimer) { clearTimeout(_sbAutoSaveTimer); _sbAutoSaveTimer = null; }
+    const ev = historico.find(e => e.id === eventoAtualId);
+    if (!ev || !_sbSession) return true;
+    try { return (await sbGuardarEvento(ev, { reabrir: true })) === 'ok'; }
+    catch (e) { return false; }
 }
 
 function confirmarFatura() { fecharComFatura(); }
@@ -3895,6 +3983,7 @@ async function desbloquearEvento() {
     atualizarReadOnly();
     atualizarUI();
     renderContas();
+    if (!(await sbGravarReabertura())) return;
     mostrarMensagem('🔓 Evento desbloqueado para edição', true);
 }
 
@@ -3944,8 +4033,11 @@ function carregarPagamentos() {
     if (saved) { try { pagamentos = JSON.parse(saved); } catch(e) { pagamentos = []; } }
 }
 
-function salvarPagamentos() {
+function salvarPagamentosLocal() {
     localStorage.setItem('splitbill_pagamentos', JSON.stringify(pagamentos));
+}
+function salvarPagamentos() {
+    salvarPagamentosLocal();
     sbScheduleAutoSave();
 }
 
@@ -6702,7 +6794,7 @@ async function marcarPresenca(id, vai) {
 
     let ok;
     if (podeEditarEvento(ev)) {
-        try { await sbGuardarEvento(ev, { apenas: ['amigos', 'saHora'] }); ok = true; } catch (e) { ok = false; }
+        try { ok = (await sbGuardarEvento(ev, { apenas: ['amigos', 'saHora'] })) === 'ok'; } catch (e) { ok = false; }
     } else {
         ok = await sbMarcarPresenca(ev.id, vai);
         // A lista e a hora vivem em colunas diferentes e a função do servidor
@@ -6771,7 +6863,7 @@ async function marcarPresencaJogo(id, vai) {
         // O carro só vai no PATCH quando mudou: escrever a coluna inteira sem
         // razão podia apagar o "levo carro" que outro acabou de gravar.
         const apenas = ['jogo', 'gamebox'].concat(largaCarro ? ['levaCarro'] : [], largaBoleia ? ['boleia'] : []);
-        try { await sbGuardarEvento(ev, { apenas }); ok = true; } catch (e) { ok = false; }
+        try { ok = (await sbGuardarEvento(ev, { apenas })) === 'ok'; } catch (e) { ok = false; }
     } else {
         ok = await sbMarcarPresencaJogo(ev.id, vai);
         // A resposta ao jogo e a box vivem em colunas diferentes e a função do
@@ -6818,7 +6910,7 @@ async function marcarGamebox(id, disp) {
 
     let ok;
     if (podeEditarEvento(ev)) {
-        try { await sbGuardarEvento(ev, { apenas: ['gamebox'] }); ok = true; } catch (e) { ok = false; }
+        try { ok = (await sbGuardarEvento(ev, { apenas: ['gamebox'] })) === 'ok'; } catch (e) { ok = false; }
     } else {
         ok = await sbMarcarGamebox(ev.id, !!disp);
     }
@@ -6859,7 +6951,7 @@ async function marcarCarro(id, leva) {
 
     let ok;
     if (podeEditarEvento(ev)) {
-        try { await sbGuardarEvento(ev, { apenas: ['levaCarro'] }); ok = true; } catch (e) { ok = false; }
+        try { ok = (await sbGuardarEvento(ev, { apenas: ['levaCarro'] })) === 'ok'; } catch (e) { ok = false; }
     } else {
         ok = await sbMarcarCarro(ev.id, !!leva);
     }
@@ -6894,7 +6986,7 @@ async function marcarBoleia(id, condutor) {
 
     let ok;
     if (podeEditarEvento(ev)) {
-        try { await sbGuardarEvento(ev, { apenas: ['boleia'] }); ok = true; } catch (e) { ok = false; }
+        try { ok = (await sbGuardarEvento(ev, { apenas: ['boleia'] })) === 'ok'; } catch (e) { ok = false; }
     } else {
         ok = await sbMarcarBoleia(ev.id, condutor || null);
     }
@@ -6927,7 +7019,7 @@ async function marcarCarroHora(id, hora) {
 
     let ok;
     if (podeEditarEvento(ev)) {
-        try { await sbGuardarEvento(ev, { apenas: ['carroHora'] }); ok = true; } catch (e) { ok = false; }
+        try { ok = (await sbGuardarEvento(ev, { apenas: ['carroHora'] })) === 'ok'; } catch (e) { ok = false; }
     } else {
         ok = await sbMarcarCarroHora(ev.id, limpa || null);
     }
@@ -7007,7 +7099,7 @@ async function marcarHorarios(id, novo) {
     let okSaida = true, okMesa = true;
     if (podeEditarEvento(ev)) {
         const apenas = (mudaSaida ? ['saidaHora'] : []).concat(mudaMesa ? ['mesaHora', 'mesaPessoas'] : []);
-        try { await sbGuardarEvento(ev, { apenas }); } catch (e) { okSaida = okMesa = false; }
+        try { if ((await sbGuardarEvento(ev, { apenas })) !== 'ok') okSaida = okMesa = false; } catch (e) { okSaida = okMesa = false; }
     } else {
         // Uma função do servidor por hora: se uma recusar, a outra fica gravada.
         if (mudaSaida) okSaida = await sbMarcarSaidaHora(ev.id, saida);
@@ -7047,7 +7139,7 @@ async function marcarHoraSa(id, hora) {
 
     let ok;
     if (podeEditarEvento(ev)) {
-        try { await sbGuardarEvento(ev, { apenas: ['saHora'] }); ok = true; } catch (e) { ok = false; }
+        try { ok = (await sbGuardarEvento(ev, { apenas: ['saHora'] })) === 'ok'; } catch (e) { ok = false; }
     } else {
         ok = await sbMarcarHoraSa(ev.id, limpa);
     }
@@ -8028,6 +8120,11 @@ async function sbEnsureFresh() {
 // elas: recarregar o evento a meio de uma gravação punha no ecrã a versão do
 // servidor de antes de ela chegar.
 let _sbEscritas = 0;
+// A app está a mostrar a CÓPIA deste telemóvel porque o servidor não respondeu
+// (sem rede, ou tão fraca que o arranque não chegou a tempo) — ver ARRANQUE SEM
+// REDE. Enquanto for true não se grava nada: a cópia pode ter horas, e
+// gravá-la por cima do servidor era desfazer o que os outros fizeram entretanto.
+let _sbCopiaLocal = false;
 // fetch para o REST: garante token fresco e, se ainda assim vier 401, faz refresh + 1 retry
 async function sbFetch(url, opt) {
     opt = opt || {};
@@ -8038,6 +8135,11 @@ async function sbFetch(url, opt) {
     if (typeof verComoAtivo === 'function' && verComoAtivo() && _metodo !== 'GET' && _metodo !== 'HEAD') {
         mostrarMensagem('👁️ Modo "ver como": nada é gravado. Sai do modo para editar.', false);
         return new Response('[]', { status: 403, headers: { 'Content-Type': 'application/json' } });
+    }
+    // Mesmo corte, pela mesma razão, enquanto se mostra a cópia local.
+    if (_sbCopiaLocal && _metodo !== 'GET' && _metodo !== 'HEAD') {
+        mostrarMensagem('📴 Sem ligação ao servidor — nada foi gravado. A app volta a ligar-se sozinha.', false);
+        return new Response('[]', { status: 503, headers: { 'Content-Type': 'application/json' } });
     }
     // Uma LEITURA nunca pode vir da cache do browser: os URLs do PostgREST são
     // sempre os mesmos e o Safari servia a resposta de há bocado — era isso que
@@ -8083,8 +8185,9 @@ function ehSubstitutoDe(ev) {
     const e = emailAtual();
     return !!(ev && ev.substituto && e && ev.substituto.toLowerCase() === e);
 }
-// Pode editar este evento (ordens, ofertas, fatura)?
-function podeEditarEvento(ev) { return isAdmin() || ehSubstitutoDe(ev); }
+// Pode editar este evento (ordens, ofertas, fatura)? A mostrar a cópia local
+// (sem rede) ninguém pode: a interface fica só de leitura até haver servidor.
+function podeEditarEvento(ev) { return !_sbCopiaLocal && (isAdmin() || ehSubstitutoDe(ev)); }
 function podeEditarEventoAtual() {
     return podeEditarEvento(historico.find(h => h.id === eventoAtualId));
 }
@@ -8093,7 +8196,7 @@ function podeEditarEventoAtual() {
 // db/ordens-proprias.sql já correu (senão o servidor recusa a escrita), e a
 // pessoa está na lista de convocados do evento.
 function podeAdicionarOrdemPropria(ev) {
-    if (!ev || ev.totalFatura || !ORDENS_CRIADO_POR_COL) return false;
+    if (_sbCopiaLocal || !ev || ev.totalFatura || !ORDENS_CRIADO_POR_COL) return false;
     const meus = meusAmigos();
     if (!meus.length) return false;
     return (ev.amigos || []).some(a => meus.includes(a));
@@ -8554,32 +8657,140 @@ function sbHeaders(extra = {}) {
     return Object.assign(h, extra);
 }
 
+/* ── ARRANQUE SEM REDE: mostrar a cópia deste telemóvel ──────────────────
+   No estádio a rede é fraca ou nenhuma, e a app abria vazia: o init() só corria
+   depois de a sessão ser validada e de TODOS os dados chegarem do servidor, e o
+   splash saía aos 6s por cima de uma página por desenhar. Sem rede nenhuma era
+   pior — o pedido de validação falhava, a sessão era APAGADA e aparecia o login.
+   Agora:
+   · sem rede, ou com o servidor a não responder em SB_ESPERA_ARRANQUE_MS, a app
+     arranca com o que ficou guardado neste telemóvel (`_sbCopiaLocal`), com um
+     aviso no topo;
+   · essa cópia é SÓ DE LEITURA (podeEditarEvento() falso e o sbFetch corta as
+     escritas): pode ter horas, e gravá-la por cima do servidor era desfazer o
+     que os outros fizeram — o mesmo erro que reabriu a conta do jogo de
+     25/11/2026;
+   · a sessão só se apaga quando o servidor diz que não presta (um 4xx), nunca
+     por falta de rede;
+   · volta a tentar sozinha (quando a rede volta, quando a app volta à frente,
+     de 20 em 20s e ao tocar no aviso), e quando os dados chegam redesenha tudo
+     e o aviso sai. */
+const SB_ESPERA_ARRANQUE_MS = 3500;
+const SB_AMIGO_USERS_KEY = 'sb_amigo_users';
+let _sbArrancou = false;          // o init() já correu (com a cópia ou com o servidor)
+let _sbTimerCopia = null;
+let _sbLigando = false;           // uma validação/carga a caminho
+let _sbPosArranqueFeito = false;
+
+// 'ok' | 'sem-rede' | 'invalida'. Só um 4xx diz que a sessão não presta: sem
+// resposta, ou um 5xx, é falta de rede/servidor — não é razão para pôr
+// ninguém fora da app.
+async function sbValidarSessao() {
+    if (!_sbSession || !_sbSession.access_token) return 'invalida';
+    try {
+        // Token expirado ou quase? Renovar com o refresh_token antes de validar
+        if (tokenQuaseExpirado()) await sbRefresh();
+        const pedir = () => fetch(`${SB_URL}/auth/v1/user`, {
+            headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${_sbSession.access_token}` }
+        });
+        let r = await pedir();
+        if (!r.ok && r.status < 500 && _sbSession.refresh_token) {
+            // Última tentativa: refresh + revalidar (sessões antigas sem expires_at caem aqui)
+            if (await sbRefresh()) r = await pedir();
+        }
+        if (r.ok) {
+            const u = await r.json();
+            sbSaveSession({ ..._sbSession, user: u });
+            return 'ok';
+        }
+        return (r.status >= 400 && r.status < 500 && r.status !== 408 && r.status !== 429) ? 'invalida' : 'sem-rede';
+    } catch (e) {
+        return 'sem-rede';
+    }
+}
+
+function sbArrancarComCopia() {
+    if (_sbTimerCopia) { clearTimeout(_sbTimerCopia); _sbTimerCopia = null; }
+    if (_sbArrancou || !_sbSession) return;
+    _sbArrancou = true;
+    _sbCopiaLocal = true;
+    try {
+        const au = JSON.parse(localStorage.getItem(SB_AMIGO_USERS_KEY) || 'null');
+        if (au && typeof au === 'object' && Object.keys(amigoUsers).length === 0) amigoUsers = au;
+    } catch (e) {}
+    document.getElementById('page-login').style.display = 'none';
+    init();
+    sbAvisoCopia(true);
+}
+
+function sbAvisoCopia(on) {
+    let el = document.getElementById('sb-copia');
+    if (!on) { if (el) el.remove(); return; }
+    if (el) return;
+    el = document.createElement('button');
+    el.id = 'sb-copia';
+    el.type = 'button';
+    el.textContent = '📴 Sem rede · cópia deste telemóvel, só leitura';
+    el.title = 'Toca para tentar ligar outra vez';
+    el.onclick = () => sbReligar();
+    document.body.appendChild(el);
+}
+
+// Redesenha o que o init() desenhou, agora com os dados do servidor. O ecrã do
+// evento já foi redesenhado pelo sbCarregarDados() (eventoAtualId != null).
+function sbRedesenharAposCarga() {
+    if (eventoAtualId == null && historico.length > 0) { carregarEvento(eventoPorDefeito()); evRedesenharTudo(); }
+    else if (eventoAtualId == null) evRedesenharTudo();
+    renderContas();
+    refrescarInicioSeVisivel();
+    if (typeof _jpRedesenhar === 'function' && typeof _jpId !== 'undefined' && _jpId != null) _jpRedesenhar(_jpId);
+}
+
+async function sbReligar() {
+    if (!_sbCopiaLocal || _sbLigando || !_sbSession) return;
+    if (navigator.onLine === false) return;
+    _sbLigando = true;
+    try {
+        const v = await sbValidarSessao();
+        if (v === 'sem-rede') return;
+        if (v === 'invalida') {
+            _sbSession = null;
+            localStorage.removeItem(SESSION_KEY);
+            sbAvisoCopia(false);
+            sbMostrarLogin();
+            return;
+        }
+        await sbAposLogin();
+    } finally {
+        _sbLigando = false;
+    }
+}
+setInterval(() => { if (_sbCopiaLocal) sbReligar(); }, 20000);
+window.addEventListener('online', () => { if (_sbCopiaLocal) sbReligar(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && _sbCopiaLocal) sbReligar(); });
+
 async function sbInit() {
     // Verificar sessão em localStorage
     const stored = localStorage.getItem(SESSION_KEY);
     if (stored) {
-        try {
-            const s = JSON.parse(stored);
+        let s = null;
+        try { s = JSON.parse(stored); } catch(e) {}
+        if (s && s.access_token) {
             _sbSession = s;
-            // Token expirado ou quase? Renovar com o refresh_token antes de validar
-            if (tokenQuaseExpirado()) await sbRefresh();
-            let r = await fetch(`${SB_URL}/auth/v1/user`, {
-                headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${_sbSession.access_token}` }
-            });
-            if (!r.ok && _sbSession.refresh_token) {
-                // Última tentativa: refresh + revalidar (sessões antigas sem expires_at caem aqui)
-                if (await sbRefresh())
-                    r = await fetch(`${SB_URL}/auth/v1/user`, {
-                        headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${_sbSession.access_token}` }
-                    });
+            // Rede fraca: se o servidor não responder a tempo, arranca-se com a
+            // cópia deste telemóvel em vez de deixar o ecrã vazio.
+            _sbTimerCopia = setTimeout(sbArrancarComCopia, SB_ESPERA_ARRANQUE_MS);
+            _sbLigando = true;
+            try {
+                const v = await sbValidarSessao();
+                if (v === 'ok') { await sbAposLogin(); return; }
+                if (v === 'sem-rede') { sbArrancarComCopia(); return; }
+            } finally {
+                _sbLigando = false;
             }
-            if (r.ok) {
-                const u = await r.json();
-                sbSaveSession({ ..._sbSession, user: u });
-                await sbAposLogin();
-                return;
-            }
-        } catch(e) {}
+            if (_sbTimerCopia) { clearTimeout(_sbTimerCopia); _sbTimerCopia = null; }
+            sbAvisoCopia(false);
+        }
         _sbSession = null;
         localStorage.removeItem(SESSION_KEY);
     }
@@ -8621,17 +8832,23 @@ async function sbAposLogin() {
     const email = _sbSession.user.email;
 
     // Verificar se tem acesso
-    let data, rawText = '', statusInfo = '';
+    let data, rawText = '', statusInfo = '', semRede = false;
     try {
         const r = await sbFetch(`${SB_URL}/rest/v1/allowed_users?email=eq.${encodeURIComponent(email)}&select=email`, {
             headers: sbHeaders({ 'Accept': 'application/json' })
         });
         statusInfo = `HTTP ${r.status}`;
+        if (r.status >= 500) semRede = true;
         rawText = await r.text();
         try { data = JSON.parse(rawText); } catch(e) { data = null; }
     } catch(e) {
         statusInfo = 'fetch falhou: ' + e.message;
+        semRede = true;
     }
+
+    // Sem resposta não é "esta conta não tem acesso" — é falta de rede. Abre
+    // com a cópia deste telemóvel e volta a tentar sozinha (ARRANQUE SEM REDE).
+    if (semRede) { sbArrancarComCopia(); return; }
 
     if (!Array.isArray(data) || data.length === 0) {
         // Sem acesso
@@ -8648,14 +8865,25 @@ async function sbAposLogin() {
     if (email === ADMIN_EMAIL) { sbVerificarPedidos(); }
 
     await sbCarregarConfigAcesso();
-    await sbCarregarDados();
+    if (!(await sbCarregarDados())) { sbArrancarComCopia(); return; }
+    if (_sbTimerCopia) { clearTimeout(_sbTimerCopia); _sbTimerCopia = null; }
     // Calendário do Goals (a ficha dos jogos) e os escudos. Sem `await`: não
     // podem atrasar o arranque, e cada um re-renderiza o ecrã inicial quando
     // chega. A sincronização dos eventos vai atrás da leitura, dentro do
     // carregarCalendarioGoals() — ver CALENDÁRIO DO SPORTING.
     carregarCalendarioGoals();
     carregarLogosAdversarios();
-    init();
+    if (_sbArrancou) {
+        // Já se estava a mostrar a cópia local: o init() já correu (e corrê-lo
+        // outra vez mudava a pessoa de página) — basta redesenhar.
+        sbAvisoCopia(false);
+        sbRedesenharAposCarga();
+    } else {
+        _sbArrancou = true;
+        init();
+    }
+    if (_sbPosArranqueFeito) return;
+    _sbPosArranqueFeito = true;
     verComoRestaurar();
     pushSugerirAtivacao();
 }
@@ -8821,7 +9049,7 @@ function eventoDaBD(ev, ordensDoEv, ofertasDoEv, loc) {
     }));
     const _loc = loc || {};
     const _temObj = v => v && typeof v === 'object' && Object.keys(v).length ? v : null;
-    return {
+    const novo = {
         id: ev.id,
         descricao: ev.descricao,
         data: ev.data,
@@ -8855,6 +9083,10 @@ function eventoDaBD(ev, ordensDoEv, ofertasDoEv, loc) {
         // nome+data (ver jogoGoalsDoEvento).
         jogoId: JOGO_ID_COL ? (ev.jogo_id ?? null) : null
     };
+    // O que se sabe estar no servidor — é contra isto que o sbGuardarEvento
+    // calcula o que mudou (GRAVAR SÓ O QUE MUDOU).
+    novo._srv = _sbFotografia(novo);
+    return novo;
 }
 
 async function sbCarregarDados() {
@@ -8931,6 +9163,22 @@ async function sbCarregarDados() {
         // Jogos marcados "Sem evento" (mesma tabela) — para a lista de repor.
         await carregarJogosSemEvento();
 
+        // Divisões fixadas. Lidas AQUI, antes de mexer no `historico` e nos
+        // `pagamentos`: daqui para baixo não pode haver nenhum `await`. Com a
+        // rede fraca a app pode arrancar com a cópia local enquanto isto corre
+        // (ver ARRANQUE SEM REDE), e o init() desse arranque relê o histórico e
+        // os pagamentos do localStorage — se corresse a meio da reconstrução,
+        // voltava a pôr a cópia velha por cima da que acabou de chegar.
+        const divRes = await sbFetch(`${SB_URL}/rest/v1/eventos_divisao?select=*&order=evento_id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const divRows = await divRes.json();
+        if (!Array.isArray(eventos) || !Array.isArray(ordens) || !Array.isArray(ofertas) || !Array.isArray(pags)) {
+            throw new Error('resposta do servidor ilegível');
+        }
+
+        // Daqui para baixo a memória tem o servidor e não a cópia deste
+        // telemóvel: as gravações voltam a poder sair.
+        _sbCopiaLocal = false;
+
         // Reconstruir historico no formato esperado pela app. O mapa linha→evento
         // é o `eventoDaBD()` (ver acima), partilhado com o refresco de um evento
         // só: dois sítios a reconstruir o mesmo evento davam dois eventos
@@ -8954,9 +9202,7 @@ async function sbCarregarDados() {
             declaradoPor: p.declarado_por || null
         }));
 
-        // Carregar divisões fixadas
-        const divRes = await sbFetch(`${SB_URL}/rest/v1/eventos_divisao?select=*&order=evento_id.asc`, { headers: sbHeaders({ 'Accept': 'application/json' }) });
-        const divRows = await divRes.json();
+        // Divisões fixadas (lidas lá em cima)
         divisoes = {};
         if (Array.isArray(divRows)) {
             divRows.forEach(r => {
@@ -8975,7 +9221,13 @@ async function sbCarregarDados() {
         }
 
         salvarHistoricoLocal();
-        salvarPagamentos();
+        // Só o localStorage. O salvarPagamentos() agendava também o auto-save,
+        // que 2s depois gravava o evento aberto INTEIRO por cima do servidor —
+        // uma gravação de algo que se acabou de ler, que não servia para nada e
+        // abria uma janela para desfazer o que outro telemóvel gravasse nesses
+        // 2s (no iOS, com a app em segundo plano, o timer fica congelado e a
+        // janela passa a ser de minutos).
+        salvarPagamentosLocal();
         _refrescoUltimo = Date.now();
 
         // Re-sincronizar o ESTADO DE TRABALHO com o histórico acabado de
@@ -8997,9 +9249,12 @@ async function sbCarregarDados() {
             // entrar no evento (que é o que redesenha).
             evRedesenharTudo();
         }
+        return true;
     } catch(e) {
         console.error('Erro ao carregar dados do Supabase:', e);
-        mostrarMensagem('Erro ao carregar dados!', false);
+        // A mostrar a cópia local, a falta de rede já está dita no aviso de cima.
+        if (!_sbCopiaLocal) mostrarMensagem('Erro ao carregar dados!', false);
+        return false;
     }
 }
 
@@ -9061,6 +9316,8 @@ function _refrescoLivre() {
     if (_evSheetAberta) return false;           // folha aberta = edição a meio
     if (_modalResolve) return false;            // pergunta à espera de resposta
     if (_sbEscritas > 0) return false;          // gravação a caminho do servidor
+    if (_sbGuardandoEvento > 0) return false;   // ...ou a meio (entre dois pedidos)
+    if (_sbAutoSaveTimer) return false;         // ...ou por sair (o auto-save de 2s)
     if (_refrescoOverlayAberto()) return false;
     const foco = document.activeElement;
     if (foco && /^(INPUT|SELECT|TEXTAREA)$/.test(foco.tagName)) return false;
@@ -9084,9 +9341,13 @@ function _evAssinatura(ev) {
 // Relê do servidor SÓ o evento que está no ecrã. Devolve true se mudou alguma
 // coisa. Silencioso de propósito: o que mudou vê-se na lista, e um aviso a cada
 // meio minuto seria ruído.
-async function refrescarEventoAtual() {
-    if (eventoAtualId == null || !_sbSession) return false;
-    const id = eventoAtualId;
+// `opts.id`: outro evento que não o do ecrã (só se actualiza o histórico).
+// `opts.forcar`: redesenhar mesmo com uma folha aberta — é a conta que foi
+// fechada noutro lado, e o ecrã não pode continuar a mostrá-la aberta.
+async function refrescarEventoAtual(opts) {
+    const forcar = !!(opts && opts.forcar);
+    const id = (opts && opts.id != null) ? opts.id : eventoAtualId;
+    if (id == null || !_sbSession) return false;
     _refrescoACorrer = true;
     try {
         const h = sbHeaders({ 'Accept': 'application/json' });
@@ -9105,6 +9366,10 @@ async function refrescarEventoAtual() {
         const novo = eventoDaBD(linhas[0], Array.isArray(ordens) ? ordens : [],
             Array.isArray(ofertas) ? ofertas : [], historico[idx]);
         if (_evAssinatura(novo) === _evAssinatura(historico[idx])) return false;
+        // Começou-se a gravar uma edição enquanto esta leitura ia a caminho: a
+        // resposta é de antes dela. Trocar a linha agora punha o auto-save a
+        // comparar o servidor consigo próprio, e a edição perdia-se.
+        if (!forcar && (_sbAutoSaveTimer || _sbGuardandoEvento > 0 || _sbEscritas > 0)) return false;
         // As dívidas do evento são deste lado (init() enche-as nos eventos
         // antigos): reconstruir o evento não as pode deitar fora.
         novo.dividas = historico[idx].dividas || {};
@@ -9113,7 +9378,7 @@ async function refrescarEventoAtual() {
         salvarHistoricoLocal();
         // Entretanto pode ter-se trocado de evento (ou aberto uma folha): aí só
         // fica o histórico actualizado, e o ecrã é de outra coisa.
-        if (eventoAtualId !== id || !_refrescoLivre()) return true;
+        if (eventoAtualId != id || (!forcar && !_refrescoLivre())) return true;
         carregarEvento(novo);
         evRedesenharTudo();
         return true;
@@ -9190,6 +9455,8 @@ function sbErroLegivel(e) {
             return 'o evento ainda não existe na BD (chave estrangeira) — a gravação do evento falhou antes';
         case e.status === 409:
             return 'conflito de chaves na BD';
+        case e.status === 503 && _sbCopiaLocal:
+            return 'sem ligação — a app está a mostrar a cópia deste telemóvel';
         case e.status >= 500:
             return 'erro do servidor Supabase (' + e.status + ')';
         default:
@@ -9484,6 +9751,110 @@ async function sbSyncFilhos(tabelaPai, tabelaFilho, fkFilho, eventoId, itens, pr
     }
 }
 
+/* ── GRAVAR SÓ O QUE MUDOU ───────────────────────────────────────────────
+   O evento era gravado INTEIRO a cada alteração: todas as colunas com o que
+   este telemóvel tinha, todas as ordens e ofertas, e um "prune" que apagava no
+   servidor as que esta cópia não conhecesse. Com duas pessoas a editar (o
+   admin e o substituto), bastava uma cópia com segundos de atraso para apagar
+   a ordem que o outro acabou de lançar — ou para reabrir a conta que o outro
+   acabou de fechar, que foi o que aconteceu a 25/11/2026.
+   Agora cada evento leva a FOTOGRAFIA do que se sabe estar no servidor
+   (`_srv`: tirada no eventoDaBD, posta em dia a cada gravação bem sucedida), e
+   gravar é mandar só a diferença entre ela e a cópia local:
+   · colunas do evento: só as que mudaram;
+   · ordens/ofertas: as novas ou alteradas (upsert) e as que ESTA cópia apagou
+     (DELETE pelo id). O que outro telemóvel lançou e esta cópia nunca viu não
+     está na fotografia nem na cópia — não se lhe toca;
+   · nada mudou = nenhum pedido.
+   A fotografia anda com a cópia de trabalho (`estado._srv`, posta no
+   carregarEvento e devolvida ao histórico no salvarNoLocalStorage): se o
+   refresco trocar a linha do histórico com uma folha aberta, a edição que sair
+   dessa folha compara-se com a fotografia de onde veio, e não com a nova —
+   senão as ordens que os outros lançaram entretanto pareciam "apagadas cá".
+   CONTA FECHADA = EVENTO PARADO. Com a conta fechada não se manda nada, a não
+   ser a reabertura (`opts.reabrir`, só pelo sbGravarReabertura):
+   · fechada na fotografia → nem se tenta (o que mudou cá, p.ex. ler a fatura
+     para consulta, fica só neste telemóvel);
+   · aberta cá mas fechada no servidor → cada gravação leva
+     `total_fatura=is.null`, e se for recusada não se grava mais nada e o
+     evento é relido (_sbSemLinha);
+   · fechar vai em ÚLTIMO: primeiro o resto (o pagador, as ordens corrigidas
+     pela fatura), por fim o total — que também só passa se ninguém a tiver
+     fechado entretanto.
+   Devolve 'ok', 'fechada' (não gravou: a conta está fechada) ou 'apagado' (o
+   evento já não existe; a cópia local foi deitada fora). Erros de rede/BD
+   lançam, como sempre. */
+function _sbHash(str) {
+    // cyrb53: só para comparar versões da mesma coisa, não é segurança.
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < str.length; i++) {
+        const ch = str.charCodeAt(i);
+        h1 = Math.imul(h1 ^ ch, 2654435761);
+        h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+// Texto canónico para comparar: chaves ordenadas (o jsonb devolve-as noutra
+// ordem), números sem o ruído do vírgula flutuante (3 × 4.10 = 12.2999…).
+function _sbCanon(v) {
+    if (v === undefined || v === null) return 'null';
+    if (Array.isArray(v)) return '[' + v.map(_sbCanon).join(',') + ']';
+    if (typeof v === 'object') return '{' + Object.keys(v).sort().filter(k => v[k] !== undefined)
+        .map(k => JSON.stringify(k) + ':' + _sbCanon(v[k])).join(',') + '}';
+    if (typeof v === 'number') return !isFinite(v) ? 'null' : (Number.isInteger(v) ? String(v) : String(Math.round(v * 10000) / 10000));
+    return JSON.stringify(v);
+}
+const _sbVersao = v => _sbHash(_sbCanon(v));
+
+// A linha do evento tal como vai para o servidor — só as colunas que existem,
+// senão o PostgREST rejeitava o pedido inteiro (PGRST204).
+function _sbCamposEvento(ev) {
+    const campos = { descricao: ev.descricao || '', data: ev.data, total_fatura: ev.totalFatura || null, pagador: ev.pagador || '' };
+    if (FATURA_COL) campos.fatura = ev.fatura ?? null;
+    if (AMIGOS_COL) campos.amigos = ev.amigos || [];
+    if (MENU_COL) campos.menu = ev.menu || {};
+    if (VAI_JOGO_COL) campos.vai_jogo = ev.jogo || {};
+    if (GAMEBOX_COL) campos.gamebox = ev.gamebox || {};
+    if (SA_HORA_COL) campos.sa_hora = ev.saHora || {};
+    // As horas aceitam NULL (por marcar) mas não '': o CHECK do formato recusava.
+    if (MESA_HORA_COL) campos.mesa_hora = mesaHoraEvento(ev) || null;
+    if (MESA_PESSOAS_COL) campos.mesa_pessoas = mesaPessoasEvento(ev) || null;
+    if (SAIDA_HORA_COL) campos.saida_hora = saidaHoraEvento(ev) || null;
+    if (LEVA_CARRO_COL) campos.leva_carro = ev.levaCarro || {};
+    if (BOLEIA_COL) campos.boleia = ev.boleia || {};
+    if (CARRO_HORA_COL) campos.carro_hora = ev.carroHora || {};
+    // `aberto` só vai se souber o valor: um evento anterior à migração tem
+    // isto a undefined e escrever false punha-o de volta em agenda.
+    if (ABERTO_COL && ev.aberto != null) campos.aberto = !!ev.aberto;
+    // A ligação ao jogo do Goals só se escreve quando se sabe qual é: um
+    // PATCH com null apagava-a nos eventos que o retroactivo já ligou.
+    if (JOGO_ID_COL && ev.jogoId != null) campos.jogo_id = ev.jogoId;
+    return campos;
+}
+function _sbLinhaOrdem(o, evId) {
+    return { id: o.id, evento_id: evId, item: o.item, quantidade: o.quantidade, preco_unitario: o.precoUnitario, preco_total: o.precoTotal, hora: o.hora };
+}
+function _sbLinhaOferta(o, evId) {
+    return { id: o.id, evento_id: evId, quem: o.quem, item: o.item, quantidade: o.quantidade, preco_unitario: o.precoUnitario, preco_total: o.precoTotal, hora: o.hora };
+}
+// Os nomes de uma ordem não têm ordem: Diogo+Mestre é o mesmo que Mestre+Diogo.
+const _sbVersaoLinha = (linha, nomes) => _sbVersao(Object.assign({}, linha, { _nomes: (nomes || []).slice().sort() }));
+
+function _sbFotografia(ev) {
+    const campos = _sbCamposEvento(ev);
+    const c = {}, o = {}, f = {};
+    Object.keys(campos).forEach(k => { c[k] = _sbVersao(campos[k]); });
+    (ev.ordens || []).forEach(x => { o[x.id] = _sbVersaoLinha(_sbLinhaOrdem(x, ev.id), x.amigos); });
+    (ev.ofertas || []).forEach(x => { f[x.id] = _sbVersaoLinha(_sbLinhaOferta(x, ev.id), x.para); });
+    return { c, o, f, fechada: !!ev.totalFatura };
+}
+
+// Quantas gravações de eventos vão a meio. O refresco espera por elas: trocar o
+// evento a meio de uma gravação deixava a fotografia de um lado e a cópia do outro.
+let _sbGuardandoEvento = 0;
+
 // `opts.criar` só vem a true do criarEvento(). Sem ele isto faz PATCH, que não
 // cria linhas: era esta a origem dos eventos-zombie. O upsert (POST +
 // merge-duplicates) RECRIA a linha pelo id, portanto qualquer gravação de um
@@ -9496,131 +9867,215 @@ async function sbGuardarEvento(ev, opts) {
     // `opts.apenas`: PATCH só estes campos (nomes locais, ex.: ['amigos','saHora']).
     // Usado por quem responde a UMA pergunta da folha do jogo (vou ao Sá, vou
     // ao jogo, gamebox, horas) e PODE editar o evento — os outros usam a via
-    // RPC (sbMarcarPresenca & cª), que já só mexe na coluna própria. Sem isto,
-    // cada resposta arrastava consigo TODOS os campos do `ev` local, incluindo
-    // os que têm essa via paralela — e podia reverter uma resposta de outra
-    // pessoa que tivesse chegado ao servidor depois da última vez que este
-    // `ev` local foi actualizado (o mesmo bug do prune das ordens, mas em
-    // colunas jsonb em vez de linhas). `criar` nunca vem com `apenas`.
+    // RPC (sbMarcarPresenca & cª), que já só mexe na coluna própria.
+    // `criar` nunca vem com `apenas`.
     const apenas = opts && opts.apenas;
+    const reabrir = !!(opts && opts.reabrir);
+    _sbGuardandoEvento++;
     try {
-        // Upsert evento — admin cria/atualiza; substituto apenas atualiza (nunca cria
-        // nem mexe no campo substituto_email, protegido também por RLS/trigger).
-        // `fatura` só entra no corpo se a coluna existir — senão o PostgREST
-        // rejeitava o pedido inteiro (PGRST204) e o evento não se gravava.
-        let campos;
-        if (apenas) {
-            campos = {};
-            const camposDisponiveis = {
-                amigos: () => { if (AMIGOS_COL) campos.amigos = ev.amigos || []; },
-                menu: () => { if (MENU_COL) campos.menu = ev.menu || {}; },
-                jogo: () => { if (VAI_JOGO_COL) campos.vai_jogo = ev.jogo || {}; },
-                gamebox: () => { if (GAMEBOX_COL) campos.gamebox = ev.gamebox || {}; },
-                saHora: () => { if (SA_HORA_COL) campos.sa_hora = ev.saHora || {}; },
-                // A coluna aceita NULL (mesa por marcar) mas não '' — o CHECK do
-                // formato rejeitava a string vazia (ver db/mesa-hora.sql).
-                mesaHora: () => { if (MESA_HORA_COL) campos.mesa_hora = mesaHoraEvento(ev) || null; },
-                mesaPessoas: () => { if (MESA_PESSOAS_COL) campos.mesa_pessoas = mesaPessoasEvento(ev) || null; },
-                // Mesma razão da mesaHora: NULL é "por definir", '' o CHECK recusava.
-                saidaHora: () => { if (SAIDA_HORA_COL) campos.saida_hora = saidaHoraEvento(ev) || null; },
-                levaCarro: () => { if (LEVA_CARRO_COL) campos.leva_carro = ev.levaCarro || {}; },
-                boleia: () => { if (BOLEIA_COL) campos.boleia = ev.boleia || {}; },
-                carroHora: () => { if (CARRO_HORA_COL) campos.carro_hora = ev.carroHora || {}; }
-            };
-            apenas.forEach(campo => { if (camposDisponiveis[campo]) camposDisponiveis[campo](); });
-        } else {
-            campos = { descricao: ev.descricao, data: ev.data, total_fatura: ev.totalFatura, pagador: ev.pagador };
-            if (FATURA_COL) campos.fatura = ev.fatura ?? null;
-            // Convocados e menu: idem — só entram se as colunas existirem, senão o
-            // PostgREST rejeitava o pedido inteiro (PGRST204) e o evento não gravava.
-            if (AMIGOS_COL) campos.amigos = ev.amigos || [];
-            if (MENU_COL) campos.menu = ev.menu || {};
-            if (VAI_JOGO_COL) campos.vai_jogo = ev.jogo || {};
-            if (GAMEBOX_COL) campos.gamebox = ev.gamebox || {};
-            if (SA_HORA_COL) campos.sa_hora = ev.saHora || {};
-            if (MESA_HORA_COL) campos.mesa_hora = mesaHoraEvento(ev) || null;
-            if (MESA_PESSOAS_COL) campos.mesa_pessoas = mesaPessoasEvento(ev) || null;
-            if (SAIDA_HORA_COL) campos.saida_hora = saidaHoraEvento(ev) || null;
-            if (LEVA_CARRO_COL) campos.leva_carro = ev.levaCarro || {};
-            if (BOLEIA_COL) campos.boleia = ev.boleia || {};
-            if (CARRO_HORA_COL) campos.carro_hora = ev.carroHora || {};
-            // `aberto` só vai se souber o valor: um evento anterior à migração tem
-            // isto a undefined e escrever false punha-o de volta em agenda.
-            if (ABERTO_COL && ev.aberto != null) campos.aberto = !!ev.aberto;
-            // A ligação ao jogo do Goals só se escreve quando se sabe qual é: um
-            // PATCH com null apagava-a nos eventos que o retroactivo já ligou.
-            if (JOGO_ID_COL && ev.jogoId != null) campos.jogo_id = ev.jogoId;
-        }
-        // sbOk: se a linha-pai não gravar, as ordens seguintes rebentam na chave
-        // estrangeira. Sem esta verificação a causa real ficava escondida e só
-        // se via o erro derivado (ou nada).
+        if (apenas) return await _sbGravarApenas(ev, apenas);
+
+        if (!ev._srv || criar) ev._srv = { c: {}, o: {}, f: {}, fechada: false };
+        const base = ev._srv;
+        if (ev.id == eventoAtualId && !estado._srv) estado._srv = base;
+        if (!reabrir && !criar && base.fechada && ev.totalFatura) return 'fechada';
+
+        const campos = _sbCamposEvento(ev);
+        const atual = _sbFotografia(ev);
+        const mudou = {};
+        Object.keys(atual.c).forEach(k => { if (atual.c[k] !== base.c[k]) mudou[k] = campos[k]; });
+        const ordMud = (ev.ordens || []).filter(o => atual.o[o.id] !== base.o[o.id]);
+        const ordApag = Object.keys(base.o).filter(id => !(id in atual.o));
+        const ofMud = (ev.ofertas || []).filter(o => atual.f[o.id] !== base.f[o.id]);
+        const ofApag = Object.keys(base.f).filter(id => !(id in atual.f));
+        if (!Object.keys(mudou).length && !ordMud.length && !ordApag.length && !ofMud.length && !ofApag.length) return 'ok';
+
+        const guarda = reabrir ? '' : '&total_fatura=is.null';
+        const fecha = !criar && !reabrir && ('total_fatura' in mudou) && !!ev.totalFatura;
+        const corpo = Object.assign({}, mudou);
+        if (fecha) delete corpo.total_fatura;
+        const confirmar = ks => ks.forEach(k => { base.c[k] = atual.c[k]; });
+
+        // 1) A linha do evento — ou, se nela nada mudou, só confirmar que a conta
+        //    continua aberta antes de mexer nas ordens. sbOk: se a linha-pai não
+        //    gravar, as ordens seguintes rebentam na chave estrangeira.
         if (isAdmin() && criar) {
             await sbOk(await sbFetch(`${SB_URL}/rest/v1/eventos`, {
                 method: 'POST',
                 headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
                 body: JSON.stringify(Object.assign({ id: ev.id, substituto_email: ev.substituto ?? null }, campos))
             }), 'upsert eventos');
-        } else {
-            const r = await sbOk(await sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${ev.id}`, {
-                method: 'PATCH',
-                headers: sbHeaders({ 'Prefer': 'return=representation', 'Accept': 'application/json' }),
-                body: JSON.stringify(campos)
-            }), 'patch eventos');
-            // Zero linhas = a linha já não existe (apagada aqui ou noutro
-            // dispositivo). Abortar: continuar para as ordens só daria erro de
-            // chave estrangeira, e recriar o evento era exactamente o bug.
-            const linhas = await r.json().catch(() => null);
-            if (Array.isArray(linhas) && linhas.length === 0) {
-                // Purgar a cópia local: sem isto ficava uma carta zombie para
-                // sempre (fechar/abrir a app não corrigia nada, porque o
-                // init() a seguir relia no `historico`/`pagamentos` que já
-                // estavam em localStorage) — e um "Já paguei?" pendente deste
-                // evento ficava sem hipótese de confirmar/rejeitar, porque a
-                // RLS que deixa isso exige o evento existir.
-                historico = historico.filter(e => e.id != ev.id);
-                pagamentos = pagamentos.filter(p => p.eventoId != ev.id);
-                salvarHistoricoLocal();
-                salvarPagamentos();
-                if (eventoAtualId == ev.id) {
-                    if (historico.length > 0) carregarEvento(eventoPorDefeito());
-                    else limparEstadoEvento();
-                    atualizarReadOnly();
-                }
-                renderContas();
-                renderHistoricoDropdown();
-                refrescarInicioSeVisivel();
-                mostrarMensagem('⚠️ Este evento já não existe no servidor (apagado noutro dispositivo?) — removido deste aparelho.', false);
-                return;
-            }
+            confirmar(Object.keys(campos));
+            base.fechada = !!ev.totalFatura;
+        } else if (Object.keys(corpo).length) {
+            const res = await _sbPatchEvento(ev, corpo, guarda);
+            if (res !== 'ok') return res;
+            confirmar(Object.keys(corpo));
+            if ('total_fatura' in corpo) base.fechada = !!ev.totalFatura;
+        } else if (guarda) {
+            const res = await _sbContaAberta(ev);
+            if (res !== 'ok') return res;
         }
 
-        // Resposta a uma pergunta só (apenas): não mexe em ordens/ofertas, que
-        // não têm nada a ver com isto e só ficariam por reenviar à toa.
-        if (apenas) return;
+        // 2) Ordens e ofertas: só as que mudaram, e apagar só as que ESTA cópia
+        //    apagou. Uma ordem com `criado_por` (de um convocado) entra aqui como
+        //    as outras quando é esta cópia que lhe mexe — e só nesse caso.
+        await _sbGravarFilhos('ordens', 'ordem_amigos', 'ordem_id',
+            ordMud.map(o => ({ row: _sbLinhaOrdem(o, ev.id), filhos: (o.amigos || []).map(a => ({ ordem_id: o.id, amigo: a })) })),
+            ordApag);
+        ordMud.forEach(o => { base.o[o.id] = atual.o[o.id]; });
+        ordApag.forEach(id => { delete base.o[id]; });
+        await _sbGravarFilhos('ofertas', 'oferta_para', 'oferta_id',
+            ofMud.map(o => ({ row: _sbLinhaOferta(o, ev.id), filhos: (o.para || []).map(a => ({ oferta_id: o.id, amigo: a })) })),
+            ofApag);
+        ofMud.forEach(o => { base.f[o.id] = atual.f[o.id]; });
+        ofApag.forEach(id => { delete base.f[id]; });
 
-        // Sincronizar ordens e ofertas com UPSERT+PRUNE (nunca apaga antes de inserir).
-        // Ordens: o prune nunca toca numa linha com `criado_por` — essas são de
-        // um convocado que gravou a própria ordem por fora desta lista (ver
-        // sbSyncFilhos) e apagam-se só pelo DELETE dirigido em removerOrdem().
-        await sbSyncFilhos('ordens', 'ordem_amigos', 'ordem_id', ev.id,
-            (ev.ordens || []).map(o => ({
-                row: { id: o.id, evento_id: ev.id, item: o.item, quantidade: o.quantidade, preco_unitario: o.precoUnitario, preco_total: o.precoTotal, hora: o.hora },
-                filhos: (o.amigos || []).map(a => ({ ordem_id: o.id, amigo: a }))
-            })),
-            '&criado_por=is.null'
-        );
-        await sbSyncFilhos('ofertas', 'oferta_para', 'oferta_id', ev.id,
-            (ev.ofertas || []).map(o => ({
-                row: { id: o.id, evento_id: ev.id, quem: o.quem, item: o.item, quantidade: o.quantidade, preco_unitario: o.precoUnitario, preco_total: o.precoTotal, hora: o.hora },
-                filhos: (o.para || []).map(a => ({ oferta_id: o.id, amigo: a }))
-            }))
-        );
+        // 3) Fechar a conta, em último — e só se ninguém a fechou entretanto.
+        if (fecha) {
+            const res = await _sbPatchEvento(ev, { total_fatura: campos.total_fatura }, guarda);
+            if (res !== 'ok') return res;
+            confirmar(['total_fatura']);
+            base.fechada = true;
+        }
+        return 'ok';
     } catch(e) {
         console.error('Erro ao guardar evento no Supabase:', e);
         mostrarMensagem('⚠️ Não gravado no servidor [' + (e.ctx || 'rede') + ']: ' + sbErroLegivel(e)
             + ' · Definições → Diagnóstico da BD para detalhes.', false);
         throw e;
+    } finally {
+        _sbGuardandoEvento--;
+        // A fotografia posta em dia tem de sobreviver a fechar a app.
+        try { salvarHistoricoLocal(); } catch (_) {}
     }
+}
+
+async function _sbGravarApenas(ev, apenas) {
+    const campos = {};
+    const todos = _sbCamposEvento(ev);
+    const coluna = { amigos: 'amigos', menu: 'menu', jogo: 'vai_jogo', gamebox: 'gamebox', saHora: 'sa_hora',
+        mesaHora: 'mesa_hora', mesaPessoas: 'mesa_pessoas', saidaHora: 'saida_hora', levaCarro: 'leva_carro',
+        boleia: 'boleia', carroHora: 'carro_hora' };
+    apenas.forEach(campo => { const k = coluna[campo]; if (k && k in todos) campos[k] = todos[k]; });
+    if (!Object.keys(campos).length) return 'ok';
+    const res = await _sbPatchEvento(ev, campos, '&total_fatura=is.null');
+    if (res === 'ok' && ev._srv) Object.keys(campos).forEach(k => { ev._srv.c[k] = _sbVersao(campos[k]); });
+    return res;
+}
+
+// PATCH à linha do evento. 'ok', ou o que _sbSemLinha disser se não apanhar linha nenhuma.
+async function _sbPatchEvento(ev, corpo, guarda) {
+    const r = await sbOk(await sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${ev.id}${guarda}`, {
+        method: 'PATCH',
+        headers: sbHeaders({ 'Prefer': 'return=representation', 'Accept': 'application/json' }),
+        body: JSON.stringify(corpo)
+    }), 'patch eventos');
+    const linhas = await r.json().catch(() => null);
+    if (Array.isArray(linhas) && linhas.length === 0) return await _sbSemLinha(ev, guarda);
+    return 'ok';
+}
+
+// Nada mudou na linha do evento mas vão mudar ordens: a conta tem de estar aberta.
+async function _sbContaAberta(ev) {
+    const r = await sbOk(await sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${encodeURIComponent(ev.id)}&select=id,total_fatura`,
+        { headers: sbHeaders({ 'Accept': 'application/json' }) }), 'confirmar evento');
+    const linhas = await r.json().catch(() => null);
+    if (Array.isArray(linhas) && linhas.length && linhas[0].total_fatura == null) return 'ok';
+    return await _sbSemLinha(ev, '&total_fatura=is.null');
+}
+
+// A gravação não apanhou linha nenhuma. Pode ser: a conta já foi fechada noutro
+// lado (com a guarda) — relê-se o evento para este telemóvel a mostrar fechada,
+// e quem chamou não grava mais nada; o evento foi apagado — deita-se fora a
+// cópia local; ou a RLS não deixou — erro, e não se mexe em nada.
+async function _sbSemLinha(ev, guarda) {
+    const r = await sbFetch(`${SB_URL}/rest/v1/eventos?id=eq.${encodeURIComponent(ev.id)}&select=id,total_fatura,pagador`,
+        { headers: sbHeaders({ 'Accept': 'application/json' }) });
+    const linhas = r.ok ? await r.json().catch(() => null) : null;
+    // Sem uma resposta legível não se sabe qual foi, e o caminho do "apagado"
+    // deita fora a cópia local: na dúvida, erro e não se mexe em nada.
+    if (!Array.isArray(linhas)) {
+        const e = new Error('confirmar evento → HTTP ' + r.status);
+        e.ctx = 'confirmar evento'; e.status = r.status;
+        throw e;
+    }
+    if (linhas.length === 0) { _sbEventoDesapareceu(ev); return 'apagado'; }
+    const l = linhas[0];
+    const tot = l.total_fatura != null ? parseFloat(l.total_fatura) : null;
+    if (tot && guarda) {
+        await refrescarEventoAtual({ id: ev.id, forcar: true });
+        mostrarMensagem('🔒 Esta conta já foi fechada (€' + tot.toFixed(2) + (l.pagador ? ', paga por ' + l.pagador : '')
+            + ') — nada foi gravado por cima. Este telemóvel foi atualizado.', false);
+        return 'fechada';
+    }
+    const e = new Error('patch eventos → 0 linhas (RLS)');
+    e.ctx = 'patch eventos'; e.status = 403;
+    throw e;
+}
+
+// O evento já não existe no servidor (apagado aqui ou noutro dispositivo).
+// Purgar a cópia local: sem isto ficava uma carta zombie para sempre
+// (fechar/abrir a app não corrigia nada, porque o init() a seguir relia no
+// `historico`/`pagamentos` que já estavam em localStorage) — e um "Já paguei?"
+// pendente deste evento ficava sem hipótese de confirmar/rejeitar, porque a RLS
+// que deixa isso exige o evento existir. Recriá-lo era exactamente o bug.
+function _sbEventoDesapareceu(ev) {
+    historico = historico.filter(e => e.id != ev.id);
+    pagamentos = pagamentos.filter(p => p.eventoId != ev.id);
+    salvarHistoricoLocal();
+    salvarPagamentosLocal();
+    if (eventoAtualId == ev.id) {
+        if (historico.length > 0) carregarEvento(eventoPorDefeito());
+        else limparEstadoEvento();
+        atualizarReadOnly();
+    }
+    renderContas();
+    renderHistoricoDropdown();
+    refrescarInicioSeVisivel();
+    mostrarMensagem('⚠️ Este evento já não existe no servidor (apagado noutro dispositivo?) — removido deste aparelho.', false);
+}
+
+// Ordens/ofertas: upsert das que mudaram (e os nomes delas, apagados e
+// repostos), e DELETE pelo id das que esta cópia apagou. Nunca apaga por
+// ausência — isso era o prune do sbSyncFilhos, que fica só para o diagnóstico.
+async function _sbGravarFilhos(tabelaPai, tabelaFilho, fkFilho, itens, apagar) {
+    if (itens.length) {
+        const ids = itens.map(i => i.row.id);
+        await sbOk(await sbFetch(`${SB_URL}/rest/v1/${tabelaPai}`, {
+            method: 'POST',
+            headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+            body: JSON.stringify(itens.map(i => i.row))
+        }), `upsert ${tabelaPai}`);
+        await sbOk(await sbFetch(`${SB_URL}/rest/v1/${tabelaFilho}?${fkFilho}=in.(${ids.join(',')})`, {
+            method: 'DELETE', headers: sbHeaders()
+        }), `limpar ${tabelaFilho}`);
+        const filhos = itens.flatMap(i => i.filhos);
+        if (filhos.length) {
+            await sbOk(await sbFetch(`${SB_URL}/rest/v1/${tabelaFilho}`, {
+                method: 'POST', headers: sbHeaders({ 'Prefer': 'return=minimal' }),
+                body: JSON.stringify(filhos)
+            }), `inserir ${tabelaFilho}`);
+        }
+    }
+    if (apagar.length) {
+        await sbOk(await sbFetch(`${SB_URL}/rest/v1/${tabelaPai}?id=in.(${apagar.join(',')})`, {
+            method: 'DELETE', headers: sbHeaders()
+        }), `apagar ${tabelaPai}`);
+    }
+}
+
+// A divisão fixada de um evento, relida do servidor (a de quem fechou a conta).
+async function sbLerDivisao(eventoId) {
+    try {
+        const r = await sbFetch(`${SB_URL}/rest/v1/eventos_divisao?evento_id=eq.${encodeURIComponent(eventoId)}&select=pessoa,quota`,
+            { headers: sbHeaders({ 'Accept': 'application/json' }) });
+        const linhas = r.ok ? await r.json().catch(() => null) : null;
+        if (!Array.isArray(linhas)) return;
+        if (!linhas.length) { delete divisoes[eventoId]; return; }
+        divisoes[eventoId] = {};
+        linhas.forEach(l => { divisoes[eventoId][l.pessoa] = parseFloat(l.quota); });
+    } catch (e) { console.warn('[SplitBill] não consegui reler a divisão:', e); }
 }
 
 /* Escrita DIRIGIDA de uma única ordem (não o evento inteiro) — usada por quem
@@ -9876,6 +10331,8 @@ async function sbCarregarConfigAcesso() {
             const data = await r.json();
             amigoUsers = {};
             if (Array.isArray(data)) data.forEach(row => { if (row.amigo) amigoUsers[row.amigo] = row.email; });
+            // Para o arranque sem rede saber quem é "tu" (ver sbArrancarComCopia).
+            try { localStorage.setItem(SB_AMIGO_USERS_KEY, JSON.stringify(amigoUsers)); } catch(e) {}
         }
     } catch(e) { console.error('Erro ao carregar equivalências:', e); }
     // Utilizadores autorizados — só o admin precisa (para os dropdowns).
@@ -9915,6 +10372,12 @@ function sbScheduleAutoSave() {
     if (!_sbSession) return;
     if (_sbAutoSaveTimer) clearTimeout(_sbAutoSaveTimer);
     _sbAutoSaveTimer = setTimeout(() => {
+        // Disparou: deixa de haver gravação pendente. Sem isto o id do timer
+        // ficava lá para sempre e o puxar-para-atualizar (index.html), que só
+        // devia "despejar" uma gravação por fazer, gravava SEMPRE a cópia deste
+        // telemóvel antes de ler o servidor — foi assim que uma cópia de antes
+        // do fecho reabriu a conta do jogo de 25/11/2026, 16s depois de fechada.
+        _sbAutoSaveTimer = null;
         const ev = historico.find(e => e.id === eventoAtualId);
         // Só quem pode editar o evento (admin/substituto) tem PATCH em
         // `eventos` — os outros callers de sbGuardarEvento já verificam

@@ -350,7 +350,7 @@ window.sbEsconderSplash = function(){
 
 <!-- ═══ TOTAL DA MESA ═══ -->
 <div class="ev-mesa">
-    <span class="ev-mesa-lab">Total da mesa</span>
+    <span class="ev-mesa-lab">Total da mesa<span class="ev-mesa-sub" id="total-mesa-sub" hidden></span></span>
     <span class="ev-mesa-val" id="total-mesa">€0.00</span>
 </div>
 
@@ -755,21 +755,28 @@ async function apagarEventoAtual() {
 /* ── Pull-to-refresh v2 (só DADOS, só standalone): badge + dim + spinner central ── */
 async function __ptrDoRefresh(){
   if (!_sbSession) return;
+  // A mostrar a cópia deste telemóvel (sem rede): puxar é "tenta ligar outra vez".
+  if (_sbCopiaLocal) { await sbReligar(); return; }
   // flush do auto-save pendente (debounce de 2s) antes de ler — evita perder a última edição.
   // Mesma guarda que o sbScheduleAutoSave() do app.js: só quem pode editar o
   // evento (admin/substituto) tem PATCH em `eventos` — para os outros isto
   // falhava sempre por RLS (0 linhas), e sbGuardarEvento lia isso como "evento
   // apagado".
+  // O `_sbAutoSaveTimer` volta a null quando dispara (sbScheduleAutoSave): só
+  // há flush se houver MESMO uma edição por gravar. Antes ficava sempre
+  // preenchido e cada puxão gravava a cópia deste telemóvel por cima do
+  // servidor antes de o ler — foi o que reabriu a conta do jogo de 25/11/2026.
   if (_sbAutoSaveTimer){
     clearTimeout(_sbAutoSaveTimer); _sbAutoSaveTimer = null;
     const ev = historico.find(e => e.id === eventoAtualId);
     if (ev && podeEditarEvento(ev)) { try { await sbGuardarEvento(ev); } catch(_){} }
   }
   await sbEnsureFresh();
-  await sbCarregarDados();
+  const ok = await sbCarregarDados();
   renderHistoricoDropdown();
   renderContas();
-  mostrarMensagem('✓ Dados sincronizados do Supabase', true);
+  refrescarInicioSeVisivel();
+  if (ok) mostrarMensagem('✓ Dados sincronizados do Supabase', true);
 }
 (function(){
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
